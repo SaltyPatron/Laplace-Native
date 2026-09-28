@@ -564,8 +564,10 @@ int main(int argc, char **argv){
     Copy c = { pg, malloc(1 << 22), 0, 1 << 22, 0, 0 };
     uint8_t geo[64 * 1024]; lp_id *ids = NULL; uint32_t *runs = NULL; size_t idc = 0;
 
-    /* ---- deduplication against what is recorded: trunk to leaf, one set-based query per tier per round.
-     * A node found means its whole subtree is recorded, so nothing below it is checked or sent. */
+    /* ---- deduplication against what is recorded: trunk to leaf, by ID alone.
+     * Tier is not content. A node stored when tiers were capped has the same ID at the tier this run assigns, and a
+     * lookup that also demands the new tier misses it and writes it again. A node found means its whole subtree is
+     * recorded, so nothing below it is checked or sent. */
     t = now();
     uint8_t *keep = calloc(LP_NCP + ncomp, 1);                       /* 1: new, to be written */
     uint8_t *seen = calloc(LP_NCP + ncomp, 1);
@@ -577,35 +579,30 @@ int main(int argc, char **argv){
     printf("\n== deduplication, trunk to leaf\n");
     while (nf) {
         rounds++; nn = 0;
-        for (int tier = NT - 1; tier >= 1; tier--) {
-            uint64_t cnt = 0; for (uint64_t i = 0; i < nf; i++) cnt += comps[front[i] - LP_NCP].tier == tier;
-            if (!cnt) continue;
-            double tq = now(); uint64_t hit = 0;
-            for (uint64_t i0 = 0; i0 < nf; ) {                       /* chunks of up to 200k IDs as one binary uuid[] */
-                size_t need = 20 + 20 * 200000; if (need > abcap) { abcap = need; ab = xrealloc(ab, abcap); }
-                uint8_t *q = ab + 20; uint32_t n = 0; uint64_t i = i0;
-                for (; i < nf && n < 200000; i++) {
-                    const Comp *cm = &comps[front[i] - LP_NCP]; if (cm->tier != tier) continue;
-                    uint32_t l = htonl(16); memcpy(q, &l, 4); memcpy(q + 4, cm->id.b, 16); q += 20; n++;
-                }
-                i0 = i; if (!n) continue;
-                uint32_t hdr[5] = { htonl(1), htonl(0), htonl(2950), htonl(n), htonl(1) }; memcpy(ab, hdr, 20);
-                char tb[8]; snprintf(tb, sizeof tb, "%d", tier);
-                const char *vals[2] = { (const char *)ab, tb }; int lens[2] = { (int)(q - ab), 0 }, fmts[2] = { 1, 0 };
-                PGresult *qr = PQexecParams(pg, "SELECT id FROM entity WHERE tier = $2::smallint AND id = ANY($1::uuid[])", 2, NULL, vals, lens, fmts, 1);
-                if (PQresultStatus(qr) != PGRES_TUPLES_OK) { fprintf(stderr, "dedup: %s", PQerrorMessage(pg)); return 1; }
-                for (int rr = 0; rr < PQntuples(qr); rr++) {           /* found: mark by looking the ID up in the table */
-                    lp_id fid; memcpy(fid.b, PQgetvalue(qr, rr, 0), 16);
-                    uint64_t sidx = hkey(&fid) & (tcap - 1);
-                    while (table[sidx] && memcmp(&comps[table[sidx] - 1].id, &fid, 16)) sidx = (sidx + 1) & (tcap - 1);
-                    if (table[sidx]) { keep[LP_NCP + table[sidx] - 1] = 2; hit++; }
-                }
-                PQclear(qr); checked += n;
+        double tq = now(); uint64_t hit = 0, cnt = nf;
+        for (uint64_t i0 = 0; i0 < nf; ) {                           /* chunks of up to 200k IDs as one binary uuid[] */
+            size_t need = 20 + 20 * 200000; if (need > abcap) { abcap = need; ab = xrealloc(ab, abcap); }
+            uint8_t *q = ab + 20; uint32_t n = 0; uint64_t i = i0;
+            for (; i < nf && n < 200000; i++, n++) {
+                const Comp *cm = &comps[front[i] - LP_NCP];
+                uint32_t l = htonl(16); memcpy(q, &l, 4); memcpy(q + 4, cm->id.b, 16); q += 20;
             }
-            found += hit;
-            printf("  round %d  tier %d  %'10llu candidates  %'10llu recorded  %'10llu new   %8.1f ms\n", rounds, tier,
-                   (unsigned long long)cnt, (unsigned long long)hit, (unsigned long long)(cnt - hit), (now() - tq) * 1000);
+            i0 = i;
+            uint32_t hdr[5] = { htonl(1), htonl(0), htonl(2950), htonl(n), htonl(1) }; memcpy(ab, hdr, 20);
+            const char *vals[1] = { (const char *)ab }; int lens[1] = { (int)(q - ab) }, fmts[1] = { 1 };
+            PGresult *qr = PQexecParams(pg, "SELECT id FROM entity WHERE id = ANY($1::uuid[])", 1, NULL, vals, lens, fmts, 1);
+            if (PQresultStatus(qr) != PGRES_TUPLES_OK) { fprintf(stderr, "dedup: %s", PQerrorMessage(pg)); return 1; }
+            for (int rr = 0; rr < PQntuples(qr); rr++) {               /* found: mark by looking the ID up in the table */
+                lp_id fid; memcpy(fid.b, PQgetvalue(qr, rr, 0), 16);
+                uint64_t sidx = hkey(&fid) & (tcap - 1);
+                while (table[sidx] && memcmp(&comps[table[sidx] - 1].id, &fid, 16)) sidx = (sidx + 1) & (tcap - 1);
+                if (table[sidx]) { keep[LP_NCP + table[sidx] - 1] = 2; hit++; }
+            }
+            PQclear(qr); checked += n;
         }
+        found += hit;
+        printf("  round %d  %'10llu candidates  %'10llu recorded  %'10llu new   %8.1f ms\n", rounds,
+               (unsigned long long)cnt, (unsigned long long)hit, (unsigned long long)(cnt - hit), (now() - tq) * 1000);
         for (uint64_t i = 0; i < nf; i++) {                          /* new nodes: descend into their children */
             uint64_t r = front[i];
             if (keep[r] == 2) { keep[r] = 0; continue; }

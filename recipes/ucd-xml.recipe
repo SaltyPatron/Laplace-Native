@@ -1,0 +1,7 @@
+# The Unicode Character Database in XML (UAX #42), flat form. Every property on a codepoint element attests that
+# codepoint: [codepoint, property, value], with the database as witness. Ranges attest each codepoint in them.
+element char reserved noncharacter surrogate
+subject cp
+range first-cp last-cp
+# The standard that defines these properties: MANDATE.
+trust 1.0
