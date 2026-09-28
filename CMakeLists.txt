@@ -68,3 +68,17 @@ if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h" AND EXISTS "${LAPLACE_PG_D
                                                   INSTALL_RPATH "${LAPLACE_ICU_DIR}/lib;${LAPLACE_PG_DIR}/lib")
   install(TARGETS laplace-ingest RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+# laplace_model: the model-decomposition kernels, which need MKL and OpenMP; kept out of the core library so the
+# PostgreSQL extension does not depend on them.
+find_package(OpenMP)
+if(DEFINED ENV{MKLROOT} AND OpenMP_C_FOUND)
+  add_library(laplace_model STATIC src/rowsig.c)
+  target_include_directories(laplace_model PUBLIC $ENV{MKLROOT}/include ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_compile_options(laplace_model PRIVATE ${LP_C_FLAGS})
+  target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/libmkl_rt.so OpenMP::OpenMP_C m)
+  add_executable(laplace-model tools/laplace_model.c)
+  target_compile_options(laplace-model PRIVATE ${LP_C_FLAGS} -mf16c)
+  target_link_libraries(laplace-model PRIVATE laplace_model laplace_static BLAKE3::blake3)
+  set_target_properties(laplace-model PROPERTIES BUILD_RPATH "$ENV{MKLROOT}/lib")
+endif()

@@ -89,6 +89,14 @@ LP_API double lp_frechet4(const double *a, size_t na, const double *b, size_t nb
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
+/* ---------------------------------------------------------------- b beats c given a */
+typedef struct { uint32_t row, col; float score, z; } lp_rowsig_hit;
+typedef struct { uint64_t rows, candidates, above[3], rows_without; double flops; } lp_rowsig_stats;   /* above z = zmin, 4, 5 */
+/* For each row a of A (m x r): scores against every row of B (n x r), scaled; the row's mean and spread over all n; and
+ * the candidates above mean + zmin * sd (at most cap per row, highest first). Returns the hits written. Needs MKL. */
+LP_API size_t lp_rowsig(const float *A, size_t m, const float *B, size_t n, size_t r, float scale, float zmin, uint32_t cap,
+                        lp_rowsig_hit *out, size_t out_cap, lp_rowsig_stats *stats);
+
 /* ---------------------------------------------------------------- consensus: Glicko-2 */
 typedef struct { double rating, deviation, volatility; } lp_rating;
 

@@ -17,6 +17,7 @@
  */
 #include "laplace/laplace.h"
 #include "blake3.h"
+#include "json_min.h"
 #include <libpq-fe.h>
 #include <unicode/ubrk.h>
 #include <unicode/utext.h>
@@ -37,7 +38,7 @@ static Comp *comps; static uint64_t ncomp, capcomp;
 static Vtx *verts; static uint64_t nvert, capvert;
 static uint64_t *table; static uint64_t tcap;
 static uint64_t st_new[NT], st_hit[NT], st_mismatch;
-static double T0;
+static double T0; static uint64_t bytes_in;
 
 static double now(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec * 1e-9; }
 static void *xrealloc(void *p, size_t n){ p = realloc(p, n); if (!p) { perror("realloc"); exit(1); } return p; }
@@ -90,6 +91,8 @@ static uint64_t node(const uint64_t *ch, uint32_t n, uint8_t tier){
 }
 
 /* ---- UTF-8 */
+static int utf8_next(const uint8_t *s, size_t n, size_t *i, uint32_t *cp);
+static int utf8_valid(const uint8_t *s, size_t n){ size_t i = 0; uint32_t c; while (i < n) if (!utf8_next(s, n, &i, &c)) return 0; return 1; }
 static int utf8_next(const uint8_t *s, size_t n, size_t *i, uint32_t *cp){
     uint8_t b = s[*i];
     if (b < 0x80) { *cp = b; *i += 1; return 1; }
@@ -107,24 +110,150 @@ static size_t utf8_put(uint32_t cp, uint8_t *o){
 }
 
 typedef struct { int32_t *b; size_t n, cap; } Bounds;
+static UBreakIterator *brk[3];                                  /* sentence, word, character: opened once, reused */
 static void bounds_of(UBreakIteratorType ty, UText *ut, Bounds *out){
-    UErrorCode e = U_ZERO_ERROR; UBreakIterator *bi = ubrk_open(ty, "", NULL, 0, &e);
-    ubrk_setUText(bi, ut, &e); if (U_FAILURE(e)) { fprintf(stderr, "ICU: %s\n", u_errorName(e)); exit(1); }
+    int k = ty == UBRK_SENTENCE ? 0 : ty == UBRK_WORD ? 1 : 2; UErrorCode e = U_ZERO_ERROR;
+    if (!brk[k]) { brk[k] = ubrk_open(ty, "", NULL, 0, &e); if (U_FAILURE(e)) { fprintf(stderr, "ICU: %s\n", u_errorName(e)); exit(1); } }
+    UBreakIterator *bi = brk[k]; ubrk_setUText(bi, ut, &e); if (U_FAILURE(e)) { fprintf(stderr, "ICU: %s\n", u_errorName(e)); exit(1); }
     out->n = 0;
     for (int32_t p = ubrk_first(bi); p != UBRK_DONE; p = ubrk_next(bi)) {
         if (out->n == out->cap) { out->cap = out->cap ? out->cap * 2 : 4096; out->b = xrealloc(out->b, out->cap * 4); }
         out->b[out->n++] = p;
     }
-    ubrk_close(bi);
 }
 typedef struct { uint64_t *v; size_t n, cap; } Refs;
 static void push(Refs *r, uint64_t x){ if (r->n == r->cap) { r->cap = r->cap ? r->cap * 2 : 256; r->v = xrealloc(r->v, r->cap * 8); } r->v[r->n++] = x; }
+static int utf8_next(const uint8_t *s, size_t n, size_t *i, uint32_t *cp);
+/* Text into the DAG: paragraphs (blank lines), sentences and word segments (UAX #29), graphemes. Hard-wrapped lines are
+ * seen by ICU as spaces through the copy cpy; boundaries apply to the original bytes. Returns the trunk. */
+static Bounds sb, wb, gb; static Refs segs, sents, paras, g, cps;
+static uint64_t node(const uint64_t *ch, uint32_t n, uint8_t tier);
+static uint64_t decompose(const uint8_t *src, uint8_t *cpy, size_t n){
+    memcpy(cpy, src, n);
+    for (size_t i = 0; i < n; ) {
+        if (src[i] != '\n' && src[i] != '\r') { i++; continue; }
+        size_t s0 = i, e0 = i + ((src[i] == '\r' && i + 1 < n && src[i + 1] == '\n') ? 2 : 1), j = e0;
+        while (j < n && (src[j] == ' ' || src[j] == '\t')) j++;
+        int next_blank = (j < n && (src[j] == '\n' || src[j] == '\r'));
+        size_t k = s0; while (k > 0 && (src[k - 1] == ' ' || src[k - 1] == '\t')) k--;
+        int prev_blank = (k == 0 || src[k - 1] == '\n' || src[k - 1] == '\r');
+        if (!next_blank && !prev_blank) for (size_t z = s0; z < e0; z++) cpy[z] = ' ';
+        i = e0;
+    }
+    UErrorCode e = U_ZERO_ERROR; UText *ut = utext_openUTF8(NULL, (const char *)cpy, n, &e);
+    bounds_of(UBRK_SENTENCE, ut, &sb); bounds_of(UBRK_WORD, ut, &wb); bounds_of(UBRK_CHARACTER, ut, &gb);
+    paras.n = 0; sents.n = 0; size_t wi = 0, gi = 0;
+    for (size_t si = 0; si + 1 < sb.n; si++) {
+        int32_t s0 = sb.b[si], s1 = sb.b[si + 1], w0 = s0; segs.n = 0;
+        while (w0 < s1) {
+        while (wi < wb.n && wb.b[wi] <= w0) wi++;
+        int32_t w1 = (wi < wb.n && wb.b[wi] < s1) ? wb.b[wi] : s1, g0 = w0; g.n = 0;
+        while (g0 < w1) {
+            while (gi < gb.n && gb.b[gi] <= g0) gi++;
+            int32_t g1 = (gi < gb.n && gb.b[gi] < w1) ? gb.b[gi] : w1; size_t i = g0; uint32_t cp; cps.n = 0;
+            while (i < (size_t)g1) { utf8_next(src, n, &i, &cp); push(&cps, cp); }
+            push(&g, node(cps.v, cps.n, 1)); g0 = g1;
+        }
+        push(&segs, node(g.v, g.n, 2)); w0 = w1;
+        }
+        push(&sents, node(segs.v, segs.n, 3));
+        int end_para = (si + 2 == sb.n);
+        for (int32_t z = s1 - 1; z >= s0 && !end_para; z--) {
+        if (src[z] != '\n' && src[z] != '\r' && src[z] != ' ' && src[z] != '\t') break;
+        if ((src[z] == '\n' || src[z] == '\r') && cpy[z] != ' ') end_para = 1;
+        }
+        if (end_para) { push(&paras, node(sents.v, sents.n, 4)); sents.n = 0; }
+    }
+    if (sents.n) push(&paras, node(sents.v, sents.n, 4));
+    utext_close(ut);
+    return node(paras.v, paras.n, 5);
+}
+
 
 static uint8_t *rbuf; static size_t rlen, rcap;
 static void expand(uint64_t r){
     if (r < LP_NCP) { if (rlen + 4 > rcap) { rcap = rcap ? rcap * 2 : (1u << 24); rbuf = xrealloc(rbuf, rcap); } rlen += utf8_put((uint32_t)r, rbuf + rlen); return; }
     const Comp *c = &comps[r - LP_NCP];
     for (uint32_t v = 0; v < c->vcount; v++) for (uint32_t k = 0; k < verts[c->vstart + v].run; k++) expand(verts[c->vstart + v].ref);
+}
+
+/* ---- tokenizer vocabularies: each token is text, decomposed like any other; the vocabulary is the path of its tokens in
+ * index order. Byte-level BPE characters map back to bytes (GPT-2's table); SentencePiece's U+2581 is a space; a byte
+ * token, or a byte-level token that is not valid UTF-8 by itself, is the notation <0xAB> of each byte. */
+static uint64_t decompose(const uint8_t *src, uint8_t *cpy, size_t n);
+static uint8_t gpt2_byte[0x180]; static int gpt2_ready;
+static void gpt2_table(void){
+    int bs[256], nb = 0, n = 0;
+    for (int b = '!'; b <= '~'; b++) bs[nb++] = b;
+    for (int b = 0xA1; b <= 0xAC; b++) bs[nb++] = b;
+    for (int b = 0xAE; b <= 0xFF; b++) bs[nb++] = b;
+    int is[256] = { 0 }; for (int i = 0; i < nb; i++) is[bs[i]] = 1;
+    for (int i = 0; i < nb; i++) gpt2_byte[bs[i]] = (uint8_t)bs[i];
+    for (int b = 0; b < 256; b++) if (!is[b]) gpt2_byte[256 + n++] = (uint8_t)b;
+    gpt2_ready = 1;
+}
+static int utf8_valid(const uint8_t *s, size_t n);
+static uint64_t text_ref(const uint8_t *t, size_t n){
+    uint8_t *c = malloc(n + 1); uint64_t r = decompose(t, c, n); free(c); return r;
+}
+static uint64_t bytes_ref(const uint8_t *b, size_t n){         /* notation of each byte, composed */
+    uint64_t *r = malloc(8 * n); char tmp[8];
+    for (size_t i = 0; i < n; i++) { snprintf(tmp, sizeof tmp, "<0x%02X>", b[i]); r[i] = text_ref((const uint8_t *)tmp, 6); }
+    uint64_t out = node(r, (uint32_t)n, 3); free(r); return out;
+}
+static const char *vocab_map_dir;
+static uint64_t vocabulary(const char *path, size_t *ntok, size_t *nbyte){
+    size_t len; FILE *f = fopen(path, "rb"); if (!f) return 0;
+    fseek(f, 0, SEEK_END); len = ftell(f); rewind(f); char *buf = malloc(len + 1);
+    if (fread(buf, 1, len, f) != len) { fclose(f); free(buf); return 0; } fclose(f); buf[len] = 0; bytes_in += len;
+    jdoc d = j_parse(buf, len);
+    int64_t model = j_get(&d, 0, "model"), voc = model >= 0 ? j_get(&d, model, "vocab") : -1;
+    if (voc < 0 || d.v[voc].t != J_OBJ) { free(buf); return 0; }
+    int64_t mt = j_get(&d, model, "type"); const char *mtype = mt >= 0 && d.v[mt].t == J_STR ? d.v[mt].str : "";
+    int wordpiece = !strcmp(mtype, "WordPiece"), bytelevel = strstr(buf, "\"ByteLevel\"") != NULL && !wordpiece;
+    if (bytelevel && !gpt2_ready) gpt2_table();
+    size_t maxid = 0; const jnode *vo = &d.v[voc];
+    for (uint32_t i = 0; i < vo->n; i += 2) { size_t id = (size_t)d.v[d.kids[vo->first + i + 1]].num; if (id > maxid) maxid = id; }
+    int64_t added = j_get(&d, 0, "added_tokens");
+    if (added >= 0) for (uint32_t i = 0; i < d.v[added].n; i++) { uint32_t o = d.kids[d.v[added].first + i]; size_t id = (size_t)j_num(&d, o, "id", 0); if (id > maxid) maxid = id; }
+    const char **tok = calloc(maxid + 1, sizeof(char *));
+    for (uint32_t i = 0; i < vo->n; i += 2) tok[(size_t)d.v[d.kids[vo->first + i + 1]].num] = d.v[d.kids[vo->first + i]].str;
+    if (added >= 0) for (uint32_t i = 0; i < d.v[added].n; i++) { uint32_t o = d.kids[d.v[added].first + i]; int64_t c = j_get(&d, o, "content");
+        if (c >= 0) tok[(size_t)j_num(&d, o, "id", 0)] = d.v[c].str; }
+    Refs refs = { 0 }; uint8_t *b = malloc(1024); *ntok = 0; *nbyte = 0;
+    FILE *mf = NULL;                                              /* token index -> entity ID, for attaching testimony */
+    if (vocab_map_dir) { char mp[4096]; const char *m0 = strstr(path, "/models/"); char nm[1024]; snprintf(nm, sizeof nm, "%s", m0 ? m0 + 8 : path);
+        for (char *c = nm; *c; c++) if (*c == '/') *c = '_';
+        snprintf(mp, sizeof mp, "%s/%s.vocabmap", vocab_map_dir, nm); mf = fopen(mp, "wb"); }
+    for (size_t id = 0; id <= maxid; id++) {
+        const char *s = tok[id]; if (!s || !*s) continue;
+        size_t L = strlen(s), n = 0; uint64_t r;
+        if (L == 6 && s[0] == '<' && s[1] == '0' && s[2] == 'x' && s[5] == '>') {     /* SentencePiece byte token */
+            uint8_t v = (uint8_t)strtol(s + 3, NULL, 16); r = bytes_ref(&v, 1); (*nbyte)++;
+        } else if (bytelevel) {
+            int ok = 1; size_t i = 0;
+            while (i < L && n < 1000) {                                                   /* characters back to bytes */
+                size_t i0 = i; uint32_t c; if (!utf8_next((const uint8_t *)s, L, &i, &c)) { ok = 0; break; }
+                if (c < 0x180 && (c >= 256 || gpt2_byte[c] == c) && (c >= 256 ? 1 : (c >= '!' && c <= '~') || (c >= 0xA1 && c <= 0xAC) || (c >= 0xAE && c <= 0xFF)))
+                    b[n++] = gpt2_byte[c];
+                else { memcpy(b + n, s + i0, i - i0); n += i - i0; }                       /* added tokens: literal text */
+            }
+            if (!ok) continue;
+            if (utf8_valid(b, n)) r = text_ref(b, n); else { r = bytes_ref(b, n); (*nbyte)++; }
+        } else {
+            for (size_t i = 0; i < L && n < 1000; ) {
+                if ((unsigned char)s[i] == 0xE2 && (unsigned char)s[i + 1] == 0x96 && (unsigned char)s[i + 2] == 0x81) { b[n++] = ' '; i += 3; }
+                else b[n++] = (uint8_t)s[i++];
+            }
+            if (wordpiece && n > 2 && b[0] == '#' && b[1] == '#') { memmove(b, b + 2, n - 2); n -= 2; }
+            r = text_ref(b, n);
+        }
+        push(&refs, r); (*ntok)++;
+        if (mf) { uint32_t i32 = (uint32_t)id; fwrite(&i32, 4, 1, mf); fwrite(ref_id(r)->b, 16, 1, mf); }
+    }
+    if (mf) fclose(mf);
+    uint64_t trunk = node(refs.v, (uint32_t)refs.n, 5);
+    free(refs.v); free(b); free(tok); free(buf); return trunk;
 }
 
 /* ---- binary COPY */
@@ -155,7 +284,7 @@ static void copy_end(Copy *c){
 static int64_t hkey_signed(uint64_t h){ return (int64_t)(h ^ 0x8000000000000000ull); }   /* bigint order = Hilbert order */
 
 /* ---- observability */
-static uint64_t bytes_in; static double last_tick;
+static double last_tick;
 static void tick(int fi, int nfiles, int force){
     double t = now(); if (!force && t - last_tick < 1.0) return; last_tick = t;
     double el = t - T0; uint64_t nw = 0, hw = 0; for (int k = 1; k < NT; k++) { nw += st_new[k]; hw += st_hit[k]; }
@@ -175,6 +304,7 @@ int main(int argc, char **argv){
         if (!strcmp(argv[a], "-d") && a + 1 < argc) conninfo = argv[++a];
         else if (!strcmp(argv[a], "-t") && a + 1 < argc) t0path = argv[++a];
         else if (!strcmp(argv[a], "--no-load")) load = 0;
+        else if (!strcmp(argv[a], "--vocab-map") && a + 1 < argc) vocab_map_dir = argv[++a];
         else { fprintf(stderr, "usage: laplace-ingest [-d conninfo] [-t tier0.bin] [--no-load] file...\n"); return 2; }
     }
     int nfiles = argc - a; if (nfiles <= 0) { fprintf(stderr, "no files\n"); return 2; }
@@ -214,11 +344,19 @@ int main(int argc, char **argv){
 
     /* ---- decompose */
     t = now();
-    int exact = 0, mism = 0, skipped = 0;
-    Bounds sb = {0}, wb = {0}, gb = {0}; Refs segs = {0}, sents = {0}, paras = {0}, g = {0}, cps = {0};
+    int exact = 0, mism = 0, skipped = 0, vocabs = 0; size_t vtokens = 0, vbytes = 0;
     for (int fi = 0; fi < nfiles; fi++) {
         const char *fn = argv[a + fi];
         if (known[fi]) { tick(fi + 1, nfiles, 0); continue; }
+        size_t fl = strlen(fn);
+        if (fl >= 14 && !strcmp(fn + fl - 14, "tokenizer.json")) {                  /* a vocabulary, not a document */
+            size_t nt, nb; uint64_t before = bytes_in; trunks[fi] = vocabulary(fn, &nt, &nb); fbytes[fi] = bytes_in - before;
+            if (trunks[fi]) { exact++; vocabs++; vtokens += nt; vbytes += nb; } else skipped++;
+            if (!load) { FILE *hf = fopen(fn, "rb"); size_t hn; uint8_t *hb; fseek(hf, 0, SEEK_END); hn = ftell(hf); rewind(hf); hb = malloc(hn);
+                         if (fread(hb, 1, hn, hf) == hn) { blake3_hasher h; blake3_hasher_init(&h); blake3_hasher_update(&h, hb, hn); blake3_hasher_finalize(&h, fsha[fi], 32); }
+                         free(hb); fclose(hf); }
+            tick(fi + 1, nfiles, 0); continue;
+        }
         FILE *f = fopen(fn, "rb");
         if (!f) { perror(fn); skipped++; continue; }
         fseek(f, 0, SEEK_END); size_t n = ftell(f); rewind(f);
@@ -227,47 +365,11 @@ int main(int argc, char **argv){
         fclose(f); bytes_in += n; fbytes[fi] = n;
         int ok = 1; for (size_t i = 0; i < n && ok; ) { uint32_t cp; ok = utf8_next(src, n, &i, &cp); }
         if (!ok) { fprintf(stderr, "\n  %s: invalid UTF-8, skipped\n", fn); skipped++; free(src); free(cpy); continue; }
-        memcpy(cpy, src, n);
-        for (size_t i = 0; i < n; ) {
-            if (src[i] != '\n' && src[i] != '\r') { i++; continue; }
-            size_t s0 = i, e0 = i + ((src[i] == '\r' && i + 1 < n && src[i + 1] == '\n') ? 2 : 1), j = e0;
-            while (j < n && (src[j] == ' ' || src[j] == '\t')) j++;
-            int next_blank = (j < n && (src[j] == '\n' || src[j] == '\r'));
-            size_t k = s0; while (k > 0 && (src[k - 1] == ' ' || src[k - 1] == '\t')) k--;
-            int prev_blank = (k == 0 || src[k - 1] == '\n' || src[k - 1] == '\r');
-            if (!next_blank && !prev_blank) for (size_t z = s0; z < e0; z++) cpy[z] = ' ';
-            i = e0;
-        }
-        UErrorCode e = U_ZERO_ERROR; UText *ut = utext_openUTF8(NULL, (const char *)cpy, n, &e);
-        bounds_of(UBRK_SENTENCE, ut, &sb); bounds_of(UBRK_WORD, ut, &wb); bounds_of(UBRK_CHARACTER, ut, &gb);
-        paras.n = 0; sents.n = 0; size_t wi = 0, gi = 0;
-        for (size_t si = 0; si + 1 < sb.n; si++) {
-            int32_t s0 = sb.b[si], s1 = sb.b[si + 1], w0 = s0; segs.n = 0;
-            while (w0 < s1) {
-                while (wi < wb.n && wb.b[wi] <= w0) wi++;
-                int32_t w1 = (wi < wb.n && wb.b[wi] < s1) ? wb.b[wi] : s1, g0 = w0; g.n = 0;
-                while (g0 < w1) {
-                    while (gi < gb.n && gb.b[gi] <= g0) gi++;
-                    int32_t g1 = (gi < gb.n && gb.b[gi] < w1) ? gb.b[gi] : w1; size_t i = g0; uint32_t cp; cps.n = 0;
-                    while (i < (size_t)g1) { utf8_next(src, n, &i, &cp); push(&cps, cp); }
-                    push(&g, node(cps.v, cps.n, 1)); g0 = g1;
-                }
-                push(&segs, node(g.v, g.n, 2)); w0 = w1;
-            }
-            push(&sents, node(segs.v, segs.n, 3));
-            int end_para = (si + 2 == sb.n);
-            for (int32_t z = s1 - 1; z >= s0 && !end_para; z--) {
-                if (src[z] != '\n' && src[z] != '\r' && src[z] != ' ' && src[z] != '\t') break;
-                if ((src[z] == '\n' || src[z] == '\r') && cpy[z] != ' ') end_para = 1;
-            }
-            if (end_para) { push(&paras, node(sents.v, sents.n, 4)); sents.n = 0; }
-        }
-        if (sents.n) push(&paras, node(sents.v, sents.n, 4));
-        trunks[fi] = node(paras.v, paras.n, 5);
+        trunks[fi] = decompose(src, cpy, n);
         rlen = 0; expand(trunks[fi]);
         if (rlen == n && !memcmp(rbuf, src, n)) exact++; else mism++;
         if (!load) { blake3_hasher h; blake3_hasher_init(&h); blake3_hasher_update(&h, src, n); blake3_hasher_finalize(&h, fsha[fi], 32); }
-        utext_close(ut); free(src); free(cpy);
+        free(src); free(cpy);
         tick(fi + 1, nfiles, 0);
     }
     tick(nfiles, nfiles, 1); fputc('\n', stderr);
@@ -289,6 +391,7 @@ int main(int argc, char **argv){
     free(stamp);
     double t_occ = now() - t;
 
+    if (vocabs) printf("\n== vocabularies: %d, %'zu tokens (%'zu written as byte notation)", vocabs, vtokens, vbytes);
     printf("\n== decomposition: %d files, %.1f MB, recomposed byte for byte %d, mismatched %d, skipped %d, ID collisions %llu\n",
            nfiles, bytes_in / 1e6, exact, mism, skipped, (unsigned long long)st_mismatch);
     static const char *tn[NT] = { "codepoint", "grapheme", "word segment", "sentence", "paragraph", "file" };
@@ -413,7 +516,7 @@ int main(int argc, char **argv){
     t = now(); copy_begin(&c, "COPY source (trunk, origin, format, bytes, content) FROM STDIN (FORMAT binary)");
     for (int fi = 0; fi < nfiles; fi++) {
         if (known[fi] || (!fbytes[fi] && !trunks[fi])) continue;
-        const char *fn = argv[a + fi], *fmt = "text/plain; charset=utf-8";
+        const char *fn = argv[a + fi], *fmt = strlen(fn) >= 14 && !strcmp(fn + strlen(fn) - 14, "tokenizer.json") ? "tokenizer vocabulary" : "text/plain; charset=utf-8";
         cbe16(&c, 5); cfield(&c, ref_id(trunks[fi])->b, 16); cfield(&c, fn, (uint32_t)strlen(fn)); cfield(&c, fmt, (uint32_t)strlen(fmt));
         cf_i64(&c, (int64_t)fbytes[fi]); cfield(&c, fsha[fi], 32);
     }
