@@ -55,14 +55,35 @@ target_link_libraries(laplace-bench PRIVATE laplace_static BLAKE3::blake3 m)
 target_compile_options(laplace-bench PRIVATE ${LP_C_FLAGS})
 install(TARGETS laplace-bench RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# Correctly rounded sin and cos (CORE-MATH): one right answer on every CPU and compiler, which vendor libms
+# (Intel's libimf dispatches by CPU) do not give.
+set(LAPLACE_COREMATH "/repos/src/core-math" CACHE PATH "CORE-MATH sources")
+add_library(lp_crmath STATIC ${LAPLACE_COREMATH}/src/binary64/sin/sin.c ${LAPLACE_COREMATH}/src/binary64/cos/cos.c)
+target_compile_options(lp_crmath PRIVATE -w ${LP_C_FLAGS})
+
+# laplace-tier0: tier 0 generated natively from the Unicode data.
+add_executable(laplace-tier0 tools/laplace_tier0.c)
+target_link_libraries(laplace-tier0 PRIVATE laplace_static lp_crmath BLAKE3::blake3 m)
+target_compile_options(laplace-tier0 PRIVATE ${LP_C_FLAGS})
+install(TARGETS laplace-tier0 RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # laplace-ingest: text into the DAG, streamed into PostgreSQL by binary COPY. Needs ICU (Unicode 17) and libpq.
 set(LAPLACE_ICU_DIR "/repos/src/Laplace-Prototype/lib/icu78" CACHE PATH "ICU 78 install (Unicode 17)")
 set(LAPLACE_PG_DIR "/usr/local/pgsql" CACHE PATH "PostgreSQL install with libpq")
 if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h" AND EXISTS "${LAPLACE_PG_DIR}/include/libpq-fe.h")
+  set(LAPLACE_TREESITTER "/repos/src/tree-sitter" CACHE PATH "tree-sitter runtime")
+  set(LAPLACE_TS_JSON "/vault/Data/TreeSitter/tree-sitter-json" CACHE PATH "tree-sitter JSON grammar")
+  add_library(ts_json STATIC ${LAPLACE_TREESITTER}/lib/src/lib.c ${LAPLACE_TS_JSON}/src/parser.c)
+  target_include_directories(ts_json PUBLIC ${LAPLACE_TREESITTER}/lib/include PRIVATE ${LAPLACE_TREESITTER}/lib/src ${LAPLACE_TREESITTER}/lib/src/wasm ${LAPLACE_TS_JSON}/src)
+  target_compile_options(ts_json PRIVATE -w)
+  set(LAPLACE_TS_XML "/vault/Data/TreeSitter/tree-sitter-xml" CACHE PATH "tree-sitter XML grammar")
+  add_library(ts_xml STATIC ${LAPLACE_TS_XML}/xml/src/parser.c ${LAPLACE_TS_XML}/xml/src/scanner.c)
+  target_include_directories(ts_xml PRIVATE ${LAPLACE_TREESITTER}/lib/include ${LAPLACE_TS_XML}/xml/src)
+  target_compile_options(ts_xml PRIVATE -w)
   add_executable(laplace-ingest tools/laplace_ingest.c)
   target_include_directories(laplace-ingest PRIVATE ${LAPLACE_ICU_DIR}/include ${LAPLACE_PG_DIR}/include)
   target_link_directories(laplace-ingest PRIVATE ${LAPLACE_ICU_DIR}/lib ${LAPLACE_PG_DIR}/lib)
-  target_link_libraries(laplace-ingest PRIVATE laplace_static BLAKE3::blake3 icui18n icuuc icudata pq m)
+  target_link_libraries(laplace-ingest PRIVATE laplace_static BLAKE3::blake3 ts_json ts_xml icui18n icuuc icudata pq m)
   target_compile_options(laplace-ingest PRIVATE ${LP_C_FLAGS})
   set_target_properties(laplace-ingest PROPERTIES BUILD_RPATH "${LAPLACE_ICU_DIR}/lib;${LAPLACE_PG_DIR}/lib"
                                                   INSTALL_RPATH "${LAPLACE_ICU_DIR}/lib;${LAPLACE_PG_DIR}/lib")
