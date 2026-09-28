@@ -68,6 +68,10 @@ LP_API void lp_xyz_to_id(const double xyz[3], lp_id *out);
 /* EWKB for a physicality path: a POINT ZM when there is one run, else a LINESTRING ZM, one vertex per run of
  * identical children with the run length in M. Returns the bytes written, or the bytes needed if cap is too small. */
 LP_API size_t lp_ewkb_path(const lp_id *children, size_t n, uint8_t *out, size_t cap);
+/* The same path from runs already collapsed: vertex i is ids[i] repeated runs[i] times. */
+LP_API size_t lp_ewkb_runs(const lp_id *ids, const uint32_t *runs, size_t nv, uint8_t *out, size_t cap);
+/* A POINT ZM of real 4D coordinates, as EWKB (37 bytes). */
+LP_API size_t lp_ewkb_point4(const double xyzm[4], uint8_t *out, size_t cap);
 /* Parse a POINT ZM / LINESTRING ZM path (little-endian EWKB, optional SRID). Returns the vertex count and points
  * *vertices at the first vertex (32 bytes each: X, Y, Z, M), or 0 on malformed input. */
 LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **vertices);
@@ -77,6 +81,13 @@ LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **
  * that follows it. Matching compares raw vertex bytes; only continuations are decoded. Returns the number of
  * continuations found; at most cap are written. */
 LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
+
+/* ---------------------------------------------------------------- 4D geometry on real coordinates */
+LP_API double lp_distance4(const double a[4], const double b[4]);
+/* Discrete Fréchet distance between 4D vertex sequences (n x 4 doubles each). */
+LP_API double lp_frechet4(const double *a, size_t na, const double *b, size_t nb);
+/* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
+LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
 /* ---------------------------------------------------------------- consensus: Glicko-2 */
 typedef struct { double rating, deviation, volatility; } lp_rating;

@@ -53,3 +53,23 @@ size_t lp_ewkb_vertices(const uint8_t *e, size_t len, const uint8_t **vertices){
     if (len < off + n * LP_VERTEX_BYTES) return 0;
     *vertices = e + off; return n;
 }
+
+size_t lp_ewkb_runs(const lp_id *ids, const uint32_t *runs, size_t nv, uint8_t *out, size_t cap){
+    size_t need = nv == 1 ? 5 + 32 : 9 + 32 * nv;
+    if (!out || cap < need || nv == 0) return nv == 0 ? 0 : need;
+    uint8_t *p = out; *p++ = 1;
+    p = put32(p, (nv == 1 ? 1u : 2u) | EWKB_Z | EWKB_M);
+    if (nv != 1) p = put32(p, (uint32_t)nv);
+    for (size_t i = 0; i < nv; i++) {
+        double xyz[3]; lp_id_to_xyz(&ids[i], xyz);
+        p = putd(p, xyz[0]); p = putd(p, xyz[1]); p = putd(p, xyz[2]); p = putd(p, (double)runs[i]);
+    }
+    return need;
+}
+
+size_t lp_ewkb_point4(const double c[4], uint8_t *out, size_t cap){
+    if (!out || cap < 37) return 37;
+    uint8_t *p = out; *p++ = 1; p = put32(p, 1u | EWKB_Z | EWKB_M);
+    for (int d = 0; d < 4; d++) p = putd(p, c[d]);
+    return 37;
+}

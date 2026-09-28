@@ -19,9 +19,9 @@ if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")            # BLAKE3's CMake knows g
 endif()
 add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3 EXCLUDE_FROM_ALL)
 
-set(LP_SOURCES src/cpu.c src/identity.c src/coord.c src/geometry.c src/follows.c src/consensus.c src/tier0.c)
-set(LP_ISA_SOURCES src/isa/scan_avx2.c src/isa/scan_avx512.c)
-set_source_files_properties(src/isa/scan_avx2.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
+set(LP_SOURCES src/cpu.c src/identity.c src/coord.c src/geometry.c src/follows.c src/consensus.c src/tier0.c src/geom4d.c)
+set(LP_ISA_SOURCES src/isa/scan_avx2.c src/isa/scan_avx512.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c)
+set_source_files_properties(src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
 set_source_files_properties(src/isa/scan_avx512.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4}")
 
 foreach(kind static shared)
@@ -47,3 +47,24 @@ add_subdirectory(tests)
 include(GNUInstallDirs)
 install(TARGETS laplace laplace_static LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/laplace DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Observability: laplace-bench measures every operation, each SIMD kernel next to its scalar form.
+add_executable(laplace-bench tools/laplace_bench.c)
+target_include_directories(laplace-bench PRIVATE src)
+target_link_libraries(laplace-bench PRIVATE laplace_static BLAKE3::blake3 m)
+target_compile_options(laplace-bench PRIVATE ${LP_C_FLAGS})
+install(TARGETS laplace-bench RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# laplace-ingest: text into the DAG, streamed into PostgreSQL by binary COPY. Needs ICU (Unicode 17) and libpq.
+set(LAPLACE_ICU_DIR "/repos/src/Laplace-Prototype/lib/icu78" CACHE PATH "ICU 78 install (Unicode 17)")
+set(LAPLACE_PG_DIR "/usr/local/pgsql" CACHE PATH "PostgreSQL install with libpq")
+if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h" AND EXISTS "${LAPLACE_PG_DIR}/include/libpq-fe.h")
+  add_executable(laplace-ingest tools/laplace_ingest.c)
+  target_include_directories(laplace-ingest PRIVATE ${LAPLACE_ICU_DIR}/include ${LAPLACE_PG_DIR}/include)
+  target_link_directories(laplace-ingest PRIVATE ${LAPLACE_ICU_DIR}/lib ${LAPLACE_PG_DIR}/lib)
+  target_link_libraries(laplace-ingest PRIVATE laplace_static BLAKE3::blake3 icui18n icuuc icudata pq m)
+  target_compile_options(laplace-ingest PRIVATE ${LP_C_FLAGS})
+  set_target_properties(laplace-ingest PROPERTIES BUILD_RPATH "${LAPLACE_ICU_DIR}/lib;${LAPLACE_PG_DIR}/lib"
+                                                  INSTALL_RPATH "${LAPLACE_ICU_DIR}/lib;${LAPLACE_PG_DIR}/lib")
+  install(TARGETS laplace-ingest RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

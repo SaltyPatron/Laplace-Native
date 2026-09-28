@@ -1,5 +1,6 @@
 /* Fixed-point coordinates: exact integer centroids, the wall, and 4D Hilbert order. */
 #include "laplace/laplace.h"
+#include "internal.h"
 
 void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out){
     __int128 s[4] = { 0, 0, 0, 0 };
@@ -13,23 +14,41 @@ bool lp_coord_inside(const lp_coord *c){
     return s <= ((unsigned __int128)1 << 106);
 }
 
-/* Skilling's transpose-to-axes inverse: axes to Hilbert index, 4 dimensions of 16 bits. */
-uint64_t lp_hilbert4_grid(const uint32_t g[4]){
-    uint64_t X[4] = { g[0], g[1], g[2], g[3] };
+/* Skilling's axes-to-transpose, 4 dimensions of 16 bits, without branches: each conditional exchange is a mask. */
+static inline void hilbert_transpose(uint64_t X[4]){
     for (uint64_t Q = 1u << 15; Q > 1; Q >>= 1) {
         uint64_t P = Q - 1;
         for (int i = 0; i < 4; i++) {
-            if (X[i] & Q) X[0] ^= P;
-            else { uint64_t t = (X[0] ^ X[i]) & P; X[0] ^= t; X[i] ^= t; }
+            uint64_t bit = 0 - ((X[i] & Q) != 0);                         /* all ones when the bit is set */
+            uint64_t t = (X[0] ^ X[i]) & P & ~bit;                        /* exchange low bits when it is clear */
+            X[0] ^= (P & bit) | t; X[i] ^= t & (uint64_t)(i != 0 ? ~0ull : 0);
         }
     }
     for (int i = 1; i < 4; i++) X[i] ^= X[i - 1];
     uint64_t t = 0;
-    for (uint64_t Q = 1u << 15; Q > 1; Q >>= 1) if (X[3] & Q) t ^= Q - 1;
+    for (uint64_t Q = 1u << 15; Q > 1; Q >>= 1) t ^= (Q - 1) & (0 - ((X[3] & Q) != 0));
     for (int i = 0; i < 4; i++) X[i] ^= t;
+}
+
+uint64_t lp_hilbert4_interleave_scalar(const uint64_t X[4]){
     uint64_t h = 0;
     for (int b = 15; b >= 0; b--) for (int i = 0; i < 4; i++) h = (h << 1) | ((X[i] >> b) & 1);
     return h;
+}
+
+typedef uint64_t (*interleave_fn)(const uint64_t[4]);
+static interleave_fn pick_interleave(void){
+#if defined(LP_HAVE_AVX2)
+    if (lp_cpu_active() & LP_CPU_AVX2) return lp_hilbert4_interleave_bmi2;            /* x86-64-v3 includes BMI2 */
+#endif
+    return lp_hilbert4_interleave_scalar;
+}
+
+uint64_t lp_hilbert4_grid(const uint32_t g[4]){
+    static interleave_fn inter; if (!inter) inter = pick_interleave();
+    uint64_t X[4] = { g[0], g[1], g[2], g[3] };
+    hilbert_transpose(X);
+    return inter(X);
 }
 
 /* The grid is taken in IEEE double exactly as tier 0 was generated: floor((x + 1) / 2 * 65536), clamped to
