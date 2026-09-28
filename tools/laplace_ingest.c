@@ -18,6 +18,9 @@
 #include "laplace/laplace.h"
 #include "blake3.h"
 #include "json_min.h"
+#include <tree_sitter/api.h>
+const TSLanguage *tree_sitter_json(void);
+const TSLanguage *tree_sitter_xml(void);
 #include <libpq-fe.h>
 #include <unicode/ubrk.h>
 #include <unicode/utext.h>
@@ -29,7 +32,7 @@
 #include <string.h>
 #include <time.h>
 
-#define NT 6
+#define NT 256
 typedef struct { uint64_t ref; uint32_t run; } Vtx;                 /* ref < NCP: codepoint; else NCP + composition */
 typedef struct { lp_id id; int64_t m[4]; uint64_t vstart; uint32_t vcount, len; uint8_t tier; } Comp;
 
@@ -256,6 +259,148 @@ static uint64_t vocabulary(const char *path, size_t *ntok, size_t *nbyte){
     free(refs.v); free(b); free(tok); free(buf); return trunk;
 }
 
+/* ---- syntax-tree recipes (JSON, XML): the tree-sitter syntax tree, each node the composition of its children, with the bytes between
+ * children kept as text, so the file recomposes byte for byte. Leaves are text, decomposed like any other. */
+static uint64_t ast_node(TSNode nd, const uint8_t *src, uint32_t lo, uint32_t hi, int depth){
+    uint32_t nc = ts_node_child_count(nd);
+    if (nc == 0 || depth > 200) return text_ref(src + lo, hi - lo);
+    Refs kids = { 0 }; uint32_t at = lo; uint8_t tmax = 0;
+    for (uint32_t i = 0; i < nc; i++) {
+        TSNode c = ts_node_child(nd, i); uint32_t cs = ts_node_start_byte(c), ce = ts_node_end_byte(c);
+        if (cs > at) push(&kids, text_ref(src + at, cs - at));
+        if (ce > cs) push(&kids, ast_node(c, src, cs, ce, depth + 1));
+        at = ce;
+    }
+    if (hi > at) push(&kids, text_ref(src + at, hi - at));
+    for (size_t i = 0; i < kids.n; i++) { uint8_t t = kids.v[i] < LP_NCP ? 0 : comps[kids.v[i] - LP_NCP].tier; if (t > tmax) tmax = t; }
+    uint64_t r = node(kids.v, (uint32_t)kids.n, (uint8_t)(tmax + 1)); free(kids.v); return r;
+}
+/* A syntax-tree recipe: the grammar's tree of the file, recorded as content. */
+static uint64_t ast_ref(TSParser **p, const TSLanguage *(*lang)(void), const uint8_t *src, size_t n){
+    if (!*p) { *p = ts_parser_new(); ts_parser_set_language(*p, lang()); }
+    TSTree *t = ts_parser_parse_string(*p, NULL, (const char *)src, (uint32_t)n);
+    uint64_t r = ast_node(ts_tree_root_node(t), src, 0, (uint32_t)n, 0); ts_tree_delete(t); return r;
+}
+static TSParser *json_parser, *xml_parser;
+static uint64_t json_ref(const uint8_t *src, size_t n){ return ast_ref(&json_parser, tree_sitter_json, src, n); }
+static uint64_t xml_ref(const uint8_t *src, size_t n){ return ast_ref(&xml_parser, tree_sitter_xml, src, n); }
+
+/* ---- attestations: a recipe names which parts of a source's syntax tree state something about which entity. Each
+ * statement becomes a claim, a composition of entities hashed like any path, and plays a Glicko-2 matchup as it is
+ * read, with the source as witness. Recipe lines (one file per source format):
+ *   element NAME...            elements whose attributes attest
+ *   subject ATTR codepoint     the attribute naming the subject, a codepoint in hex
+ *   range ATTR ATTR codepoint  attributes naming a first..last range of codepoint subjects
+ *   trust T                    the witness's trust, -1 .. 1 */
+typedef struct { char el[16][48]; int nel; char subj[48], lo[48], hi[48]; double trust; int on; } Recipe;
+static Recipe recipe;
+static int recipe_load(const char *path){
+    FILE *f = fopen(path, "r"); if (!f) { perror(path); return 0; }
+    char line[1024]; recipe.trust = 0; recipe.on = 1;
+    while (fgets(line, sizeof line, f)) {
+        char *h = strchr(line, '#'); if (h) *h = 0;
+        char *tok = strtok(line, " \t\r\n"); if (!tok) continue;
+        if (!strcmp(tok, "element")) while ((tok = strtok(NULL, " \t\r\n")) && recipe.nel < 16) snprintf(recipe.el[recipe.nel++], 48, "%s", tok);
+        else if (!strcmp(tok, "subject")) { tok = strtok(NULL, " \t\r\n"); if (tok) snprintf(recipe.subj, 48, "%s", tok); }
+        else if (!strcmp(tok, "range")) { char *a = strtok(NULL, " \t\r\n"), *b = strtok(NULL, " \t\r\n"); if (a && b) { snprintf(recipe.lo, 48, "%s", a); snprintf(recipe.hi, 48, "%s", b); } }
+        else if (!strcmp(tok, "trust")) { tok = strtok(NULL, " \t\r\n"); if (tok) recipe.trust = atof(tok); }
+    }
+    fclose(f); return 1;
+}
+/* Strings to their decomposed entity, each decomposed once. */
+typedef struct { uint64_t h, ref; uint32_t off, len; } SEnt;
+static SEnt *stab; static uint64_t scap, sn; static char *spool; static size_t spn, spcap;
+static uint64_t fnv(const uint8_t *s, size_t n){ uint64_t h = 1469598103934665603ull; for (size_t i = 0; i < n; i++) { h ^= s[i]; h *= 1099511628211ull; } return h ? h : 1; }
+static uint64_t string_ref(const uint8_t *s, size_t n){
+    if ((sn + 1) * 2 > scap) {
+        uint64_t oc = scap; SEnt *old = stab; scap = scap ? scap * 2 : (1u << 16); stab = calloc(scap, sizeof *stab);
+        for (uint64_t i = 0; i < oc; i++) if (old[i].h) { uint64_t k = old[i].h & (scap - 1); while (stab[k].h) k = (k + 1) & (scap - 1); stab[k] = old[i]; }
+        free(old);
+    }
+    uint64_t h = fnv(s, n), k = h & (scap - 1);
+    while (stab[k].h) { if (stab[k].h == h && stab[k].len == n && !memcmp(spool + stab[k].off, s, n)) return stab[k].ref; k = (k + 1) & (scap - 1); }
+    if (spn + n > spcap) { spcap = (spn + n) * 2; spool = xrealloc(spool, spcap); }
+    memcpy(spool + spn, s, n); stab[k] = (SEnt){ h, text_ref(s, n), (uint32_t)spn, (uint32_t)n }; spn += n; sn++;
+    return stab[k].ref;
+}
+/* XML attribute values with their references resolved (the predefined entities and numeric references). */
+static size_t xml_unescape(const uint8_t *s, size_t n, uint8_t *o){
+    size_t k = 0;
+    for (size_t i = 0; i < n; ) {
+        if (s[i] != '&') { o[k++] = s[i++]; continue; }
+        size_t j = i + 1; while (j < n && s[j] != ';' && j - i < 12) j++;
+        if (j >= n || s[j] != ';') { o[k++] = s[i++]; continue; }
+        const char *e = (const char *)s + i + 1; size_t el = j - i - 1; uint32_t cp = 0; int ok = 1;
+        if (el == 2 && !memcmp(e, "lt", 2)) cp = '<'; else if (el == 2 && !memcmp(e, "gt", 2)) cp = '>';
+        else if (el == 3 && !memcmp(e, "amp", 3)) cp = '&'; else if (el == 4 && !memcmp(e, "apos", 4)) cp = '\''; else if (el == 4 && !memcmp(e, "quot", 4)) cp = '"';
+        else if (el > 1 && e[0] == '#') cp = (uint32_t)(e[1] == 'x' ? strtoul(e + 2, NULL, 16) : strtoul(e + 1, NULL, 10));
+        else ok = 0;
+        if (!ok) { o[k++] = s[i++]; continue; }
+        k += utf8_put(cp, o + k); i = j + 1;
+    }
+    return k;
+}
+/* Attestation events in the order they were read: claim, witness file, outcome. */
+typedef struct { uint64_t claim; int32_t file; float score; } Event;
+static Event *ev; static uint64_t nev, cev;
+static uint64_t *claim_roots; static uint64_t nclaim_roots, cclaim_roots;
+static void attest(uint64_t claim, int file, float score){
+    if (nev == cev) { cev = cev ? cev * 2 : (1u << 20); ev = xrealloc(ev, cev * sizeof *ev); }
+    ev[nev++] = (Event){ claim, file, score };
+    if (nclaim_roots == cclaim_roots) { cclaim_roots = cclaim_roots ? cclaim_roots * 2 : (1u << 20); claim_roots = xrealloc(claim_roots, cclaim_roots * 8); }
+    claim_roots[nclaim_roots++] = claim;
+}
+static uint64_t claim3(uint64_t a, uint64_t b, uint64_t c){
+    uint64_t ch[3] = { a, b, c }; uint8_t t = 0;
+    for (int i = 0; i < 3; i++) { uint8_t x = ch[i] < LP_NCP ? 0 : comps[ch[i] - LP_NCP].tier; if (x > t) t = x; }
+    return node(ch, 3, (uint8_t)(t + 1));
+}
+static int node_text(TSNode nd, const uint8_t *src, const uint8_t **p, size_t *n){
+    if (ts_node_is_null(nd)) return 0;
+    *p = src + ts_node_start_byte(nd); *n = ts_node_end_byte(nd) - ts_node_start_byte(nd); return 1;
+}
+static uint64_t n_claims_attr;
+static void xml_attest(TSNode nd, const uint8_t *src, int file, uint8_t *ub){
+    const char *ty = ts_node_type(nd);
+    if (!strcmp(ty, "element")) {
+        TSNode tag = ts_node_named_child(nd, 0); const char *tt = ts_node_type(tag);
+        if (!strcmp(tt, "STag") || !strcmp(tt, "EmptyElemTag")) {
+            const uint8_t *np; size_t nl; int hit = 0;
+            TSNode name = ts_node_named_child(tag, 0);
+            if (node_text(name, src, &np, &nl)) for (int i = 0; i < recipe.nel && !hit; i++) hit = strlen(recipe.el[i]) == nl && !memcmp(recipe.el[i], np, nl);
+            if (hit) {
+                uint32_t na = ts_node_named_child_count(tag); int64_t lo = -1, hi = -1;
+                for (uint32_t i = 1; i < na; i++) {                          /* the subject */
+                    TSNode at = ts_node_named_child(tag, i); const uint8_t *ap, *vp; size_t al, vl;
+                    if (!node_text(ts_node_named_child(at, 0), src, &ap, &al) || !node_text(ts_node_named_child(at, 1), src, &vp, &vl) || vl < 2) continue;
+                    long v = strtol((const char *)vp + 1, NULL, 16);
+                    if (strlen(recipe.subj) == al && !memcmp(recipe.subj, ap, al)) lo = hi = v;
+                    else if (strlen(recipe.lo) == al && !memcmp(recipe.lo, ap, al)) lo = v;
+                    else if (strlen(recipe.hi) == al && !memcmp(recipe.hi, ap, al)) hi = v;
+                }
+                if (lo >= 0 && hi >= lo && hi < (int64_t)LP_NCP)
+                    for (uint32_t i = 1; i < na; i++) {                      /* every other attribute: a claim per subject */
+                        TSNode at = ts_node_named_child(tag, i); const uint8_t *ap, *vp; size_t al, vl;
+                        if (!node_text(ts_node_named_child(at, 0), src, &ap, &al) || !node_text(ts_node_named_child(at, 1), src, &vp, &vl) || vl < 2) continue;
+                        if ((strlen(recipe.subj) == al && !memcmp(recipe.subj, ap, al)) || (strlen(recipe.lo) == al && !memcmp(recipe.lo, ap, al)) ||
+                            (strlen(recipe.hi) == al && !memcmp(recipe.hi, ap, al))) continue;
+                        size_t ul = xml_unescape(vp + 1, vl - 2, ub);
+                        if (!ul) continue;                                   /* an empty value is no content */
+                        uint64_t pr = string_ref(ap, al), vr = string_ref(ub, ul);
+                        for (int64_t cp = lo; cp <= hi; cp++) { attest(claim3((uint64_t)cp, pr, vr), file, 1.0f); n_claims_attr++; }
+                    }
+            }
+        }
+    }
+    uint32_t nc = ts_node_named_child_count(nd);
+    for (uint32_t i = 0; i < nc; i++) xml_attest(ts_node_named_child(nd, i), src, file, ub);
+}
+static void xml_attest_file(const uint8_t *src, size_t n, int file){
+    if (!xml_parser) { xml_parser = ts_parser_new(); ts_parser_set_language(xml_parser, tree_sitter_xml()); }
+    TSTree *t = ts_parser_parse_string(xml_parser, NULL, (const char *)src, (uint32_t)n);
+    uint8_t *ub = malloc(n + 4); xml_attest(ts_tree_root_node(t), src, file, ub); free(ub); ts_tree_delete(t);
+}
+
 /* ---- binary COPY */
 typedef struct { PGconn *pg; uint8_t *b; size_t n, cap; uint64_t rows, bytes; } Copy;
 static void cflush(Copy *c){ if (c->n && PQputCopyData(c->pg, (const char *)c->b, (int)c->n) != 1) { fprintf(stderr, "COPY: %s", PQerrorMessage(c->pg)); exit(1); } c->bytes += c->n; c->n = 0; }
@@ -305,6 +450,7 @@ int main(int argc, char **argv){
         else if (!strcmp(argv[a], "-t") && a + 1 < argc) t0path = argv[++a];
         else if (!strcmp(argv[a], "--no-load")) load = 0;
         else if (!strcmp(argv[a], "--vocab-map") && a + 1 < argc) vocab_map_dir = argv[++a];
+        else if (!strcmp(argv[a], "--recipe") && a + 1 < argc) { if (!recipe_load(argv[++a])) return 2; }
         else { fprintf(stderr, "usage: laplace-ingest [-d conninfo] [-t tier0.bin] [--no-load] file...\n"); return 2; }
     }
     int nfiles = argc - a; if (nfiles <= 0) { fprintf(stderr, "no files\n"); return 2; }
@@ -344,7 +490,7 @@ int main(int argc, char **argv){
 
     /* ---- decompose */
     t = now();
-    int exact = 0, mism = 0, skipped = 0, vocabs = 0; size_t vtokens = 0, vbytes = 0;
+    int exact = 0, mism = 0, skipped = 0, vocabs = 0, jsons = 0; size_t vtokens = 0, vbytes = 0;
     for (int fi = 0; fi < nfiles; fi++) {
         const char *fn = argv[a + fi];
         if (known[fi]) { tick(fi + 1, nfiles, 0); continue; }
@@ -365,7 +511,9 @@ int main(int argc, char **argv){
         fclose(f); bytes_in += n; fbytes[fi] = n;
         int ok = 1; for (size_t i = 0; i < n && ok; ) { uint32_t cp; ok = utf8_next(src, n, &i, &cp); }
         if (!ok) { fprintf(stderr, "\n  %s: invalid UTF-8, skipped\n", fn); skipped++; free(src); free(cpy); continue; }
-        trunks[fi] = decompose(src, cpy, n);
+        if (fl >= 5 && !strcmp(fn + fl - 5, ".json")) { trunks[fi] = json_ref(src, n); jsons++; }   /* recipe: the syntax tree */
+        else if (fl >= 4 && !strcmp(fn + fl - 4, ".xml")) { trunks[fi] = xml_ref(src, n); jsons++; if (recipe.on) xml_attest_file(src, n, fi); }
+        else trunks[fi] = decompose(src, cpy, n);
         rlen = 0; expand(trunks[fi]);
         if (rlen == n && !memcmp(rbuf, src, n)) exact++; else mism++;
         if (!load) { blake3_hasher h; blake3_hasher_init(&h); blake3_hasher_update(&h, src, n); blake3_hasher_finalize(&h, fsha[fi], 32); }
@@ -391,12 +539,17 @@ int main(int argc, char **argv){
     free(stamp);
     double t_occ = now() - t;
 
+    if (jsons) printf("\n== files decomposed by their syntax tree (JSON, XML): %d", jsons);
     if (vocabs) printf("\n== vocabularies: %d, %'zu tokens (%'zu written as byte notation)", vocabs, vtokens, vbytes);
     printf("\n== decomposition: %d files, %.1f MB, recomposed byte for byte %d, mismatched %d, skipped %d, ID collisions %llu\n",
            nfiles, bytes_in / 1e6, exact, mism, skipped, (unsigned long long)st_mismatch);
     static const char *tn[NT] = { "codepoint", "grapheme", "word segment", "sentence", "paragraph", "file" };
     printf("   %-13s %14s %16s\n", "tier", "distinct", "reused");
-    for (int k = 1; k < NT; k++) printf("   %-13s %'14llu %'16llu\n", tn[k], (unsigned long long)st_new[k], (unsigned long long)st_hit[k]);
+    for (int k = 1; k < NT; k++) {
+        if (!st_new[k] && !st_hit[k]) continue;
+        char nm[16]; if (!tn[k]) snprintf(nm, sizeof nm, "tier %d", k);
+        printf("   %-13s %'14llu %'16llu\n", tn[k] ? tn[k] : nm, (unsigned long long)st_new[k], (unsigned long long)st_hit[k]);
+    }
     printf("   compositions %'llu, path vertices %'llu after run-length encoding\n", (unsigned long long)ncomp, (unsigned long long)nvert);
 
     printf("\n== phases\n");
@@ -419,6 +572,7 @@ int main(int argc, char **argv){
     uint64_t *front = malloc(8 * (ncomp + 1)), *nextf = malloc(8 * (ncomp + 1)), nf = 0, nn;
     uint64_t checked = 0, found = 0; int rounds = 0;
     for (int fi = 0; fi < nfiles; fi++) { if (known[fi]) continue; uint64_t tr = trunks[fi]; if (tr >= LP_NCP && !seen[tr]) { seen[tr] = 1; front[nf++] = tr; } }
+    for (uint64_t i = 0; i < nclaim_roots; i++) { uint64_t cr = claim_roots[i]; if (cr >= LP_NCP && !seen[cr]) { seen[cr] = 1; front[nf++] = cr; } }   /* claims are roots too */
     size_t abcap = 0; uint8_t *ab = NULL;
     printf("\n== deduplication, trunk to leaf\n");
     while (nf) {
@@ -522,12 +676,96 @@ int main(int argc, char **argv){
     }
     copy_end(&c); double t_src = now() - t;
 
+    /* ---- semantics: the witness, the ledger in reading order, and each claim's standing after its matchups */
+    double t_sem = now(); uint64_t n_led = 0, n_std_new = 0, n_std_upd = 0;
+    if (nev) {
+        uint32_t *slot = calloc(ncomp, 4); uint64_t nst = 0;
+        for (uint64_t i = 0; i < nev; i++) { uint64_t k = ev[i].claim - LP_NCP; if (!slot[k]) slot[k] = (uint32_t)++nst; }
+        lp_rating *st = malloc(sizeof(lp_rating) * (nst + 1)); uint32_t *matches = calloc(nst + 1, 4); uint8_t *had = calloc(nst + 1, 1);
+        for (uint64_t k = 1; k <= nst; k++) st[k] = (lp_rating){ 1500.0, 350.0, 0.06 };
+        /* claims already recorded start from their recorded standing: one set-based query per chunk */
+        uint64_t *old = malloc(8 * (nst + 1)), nold = 0;
+        for (uint64_t k = 0; k < ncomp; k++) if (slot[k] && keep[LP_NCP + k] != 1) old[nold++] = k;
+        for (uint64_t i0 = 0; i0 < nold; i0 += 200000) {
+            uint32_t n = (uint32_t)(nold - i0 < 200000 ? nold - i0 : 200000); size_t need = 20 + 20 * (size_t)n;
+            if (need > abcap) { abcap = need; ab = xrealloc(ab, abcap); } uint8_t *q = ab + 20;
+            for (uint32_t j = 0; j < n; j++) { uint32_t l = htonl(16); memcpy(q, &l, 4); memcpy(q + 4, comps[old[i0 + j]].id.b, 16); q += 20; }
+            uint32_t hdr[5] = { htonl(1), htonl(0), htonl(2950), htonl(n), htonl(1) }; memcpy(ab, hdr, 20);
+            const char *vals[1] = { (const char *)ab }; int lens[1] = { (int)(q - ab) }, fmts[1] = { 1 };
+            PGresult *qr = PQexecParams(pg, "SELECT claim, rating, deviation, volatility, matches FROM standing WHERE claim = ANY($1::uuid[])", 1, NULL, vals, lens, fmts, 0);
+            if (PQresultStatus(qr) != PGRES_TUPLES_OK) { fprintf(stderr, "standing: %s", PQerrorMessage(pg)); return 1; }
+            for (int rr = 0; rr < PQntuples(qr); rr++) {
+                lp_id fid; const char *u = PQgetvalue(qr, rr, 0); for (int b = 0, h = 0; b < 16; h++) { if (u[h] == '-') continue; unsigned x; sscanf(u + h, "%2x", &x); fid.b[b++] = (uint8_t)x; h++; }
+                uint64_t sidx = hkey(&fid) & (tcap - 1);
+                while (table[sidx] && memcmp(&comps[table[sidx] - 1].id, &fid, 16)) sidx = (sidx + 1) & (tcap - 1);
+                if (!table[sidx]) continue;
+                uint32_t sl = slot[table[sidx] - 1]; st[sl] = (lp_rating){ atof(PQgetvalue(qr, rr, 1)), atof(PQgetvalue(qr, rr, 2)), atof(PQgetvalue(qr, rr, 3)) };
+                matches[sl] = (uint32_t)atoi(PQgetvalue(qr, rr, 4)); had[sl] = 1;
+            }
+            PQclear(qr);
+        }
+        /* the matchups, first in, first out */
+        for (uint64_t i = 0; i < nev; i++) { uint32_t sl = slot[ev[i].claim - LP_NCP]; lp_attest(&st[sl], recipe.trust, ev[i].score, 1500.0, 0.5, 0.0); matches[sl]++; }
+
+        copy_begin(&c, "COPY witness (id, lineage, trust) FROM STDIN (FORMAT binary)");
+        for (int fi = 0; fi < nfiles; fi++) {
+            if (known[fi] || !trunks[fi]) continue; int used = 0; for (uint64_t i = 0; i < nev && !used; i++) used = ev[i].file == fi;
+            if (!used) continue;
+            cbe16(&c, 3); cfield(&c, ref_id(trunks[fi])->b, 16); cbe32(&c, 0xFFFFFFFFu); cf_f64(&c, recipe.trust);
+        }
+        copy_end(&c);
+        copy_begin(&c, "COPY attestation (claim, witness, score) FROM STDIN (FORMAT binary)");
+        for (uint64_t i = 0; i < nev; i++) {
+            float sc = ev[i].score; uint32_t u; memcpy(&u, &sc, 4);
+            cbe16(&c, 3); cfield(&c, ref_id(ev[i].claim)->b, 16); cfield(&c, ref_id(trunks[ev[i].file])->b, 16); cbe32(&c, 4); cbe32(&c, u); n_led++;
+        }
+        copy_end(&c);
+        copy_begin(&c, "COPY standing (claim, rating, deviation, volatility, matches) FROM STDIN (FORMAT binary)");
+        for (uint64_t k = 0; k < ncomp; k++) {
+            uint32_t sl = slot[k]; if (!sl || had[sl]) continue;
+            cbe16(&c, 5); cfield(&c, comps[k].id.b, 16); cf_f64(&c, st[sl].rating); cf_f64(&c, st[sl].deviation); cf_f64(&c, st[sl].volatility);
+            cbe32(&c, 4); cbe32(&c, matches[sl]); n_std_new++;
+        }
+        copy_end(&c);
+        /* recorded standings: updated in place, one set-based statement per chunk of binary arrays */
+        uint64_t *upd = malloc(8 * (nst + 1)), nupd = 0;
+        for (uint64_t k = 0; k < ncomp; k++) if (slot[k] && had[slot[k]]) upd[nupd++] = k;
+        for (uint64_t i0 = 0; i0 < nupd; i0 += 100000) {
+            uint32_t n = (uint32_t)(nupd - i0 < 100000 ? nupd - i0 : 100000);
+            static const uint32_t oid[5] = { 2950, 701, 701, 701, 23 }; static const int w[5] = { 16, 8, 8, 8, 4 };
+            uint8_t *arr[5]; int alen[5];
+            for (int f = 0; f < 5; f++) {
+                arr[f] = malloc(20 + (size_t)n * (4 + w[f])); uint8_t *q = arr[f] + 20;
+                uint32_t hdr[5] = { htonl(1), htonl(0), htonl(oid[f]), htonl(n), htonl(1) }; memcpy(arr[f], hdr, 20);
+                for (uint32_t j = 0; j < n; j++) {
+                    uint64_t k = upd[i0 + j]; uint32_t sl = slot[k], l = htonl((uint32_t)w[f]); memcpy(q, &l, 4); q += 4;
+                    if (f == 0) memcpy(q, comps[k].id.b, 16);
+                    else if (f < 4) { double d = f == 1 ? st[sl].rating : f == 2 ? st[sl].deviation : st[sl].volatility; uint64_t u; memcpy(&u, &d, 8); for (int y = 0; y < 8; y++) q[y] = (uint8_t)(u >> (56 - 8 * y)); }
+                    else { uint32_t m = htonl(matches[sl]); memcpy(q, &m, 4); }
+                    q += w[f];
+                }
+                alen[f] = (int)(q - arr[f]);
+            }
+            const char *vals[5] = { (char *)arr[0], (char *)arr[1], (char *)arr[2], (char *)arr[3], (char *)arr[4] }; int fmts[5] = { 1, 1, 1, 1, 1 };
+            PGresult *ur = PQexecParams(pg, "UPDATE standing s SET rating = u.r, deviation = u.d, volatility = u.v, matches = u.m "
+                "FROM unnest($1::uuid[], $2::float8[], $3::float8[], $4::float8[], $5::int[]) AS u(c, r, d, v, m) WHERE s.claim = u.c", 5, NULL, vals, alen, fmts, 0);
+            if (PQresultStatus(ur) != PGRES_COMMAND_OK) { fprintf(stderr, "standing update: %s", PQerrorMessage(pg)); return 1; }
+            PQclear(ur); for (int f = 0; f < 5; f++) free(arr[f]); n_std_upd += n;
+        }
+        free(upd);
+        free(slot); free(st); free(matches); free(had); free(old);
+    }
+    t_sem = now() - t_sem;
+
     printf("\n== load (binary COPY into partitioned tables)\n");
     phase("deduplication against the database", t_dedup, (double)checked, "IDs");
     phase("entity", t_ent, (double)ent_rows, "rows"); printf("  %-44s %'8.1f MB sent\n", "", ent_bytes / 1e6);
     phase("physicality", t_phy, (double)phy_rows, "rows"); printf("  %-44s %'8.1f MB sent\n", "", phy_bytes / 1e6);
     phase("entity_stats", t_sta, (double)sta_rows, "rows");
     phase("source", t_src, 0, "");
+    if (nev) { phase("attestations, matchups, standings", t_sem, (double)n_led, "attestations");
+               printf("  %'llu claims attested from %'llu statements; standings %'llu new, %'llu updated\n", (unsigned long long)(n_std_new + n_std_upd),
+                      (unsigned long long)n_claims_attr, (unsigned long long)n_std_new, (unsigned long long)n_std_upd); }
     PQfinish(pg);
     printf("\n== total %.1f s\n", now() - T0);
     return mism ? 1 : 0;
