@@ -182,6 +182,7 @@ typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; } lp_ref;    
  * it; or it is a tuple. */
 #define LP_SAID_CLAIM  1u
 #define LP_SAID_RECORD 2u
+#define LP_SAID_METADATA 4u    /* the vertex is the metadata of what the path is: a file's, beside its content */
 #define LP_SAID_TUPLE  3u      /* the vertex is a path of things that together name one thing: not text, and not a claim */
 #define LP_M_RUN_BITS  30
 static inline uint32_t lp_m_bits(double m){ return m < 1 ? 1u : (uint32_t)m; }
