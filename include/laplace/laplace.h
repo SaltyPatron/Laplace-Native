@@ -178,9 +178,11 @@ LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
 typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; } lp_ref;       /* said: what it is within the path it is put in (LP_SAID_*); never part of its ID */
 
 /* M of a path's vertex is that vertex's metadata, as bits. The low 30 are how many times the vertex is repeated. Above
- * them: the vertex is a claim, witnessed in what the path belongs to; or it is a record, holding claims witnessed in it. */
+ * them: the vertex is a claim, witnessed in what the path belongs to; or it is a record, holding claims witnessed in
+ * it; or it is a tuple. */
 #define LP_SAID_CLAIM  1u
 #define LP_SAID_RECORD 2u
+#define LP_SAID_TUPLE  3u      /* the vertex is a path of things that together name one thing: not text, and not a claim */
 #define LP_M_RUN_BITS  30
 static inline uint32_t lp_m_bits(double m){ return m < 1 ? 1u : (uint32_t)m; }
 static inline uint32_t lp_m_run(double m){ uint32_t r = lp_m_bits(m) & ((1u << LP_M_RUN_BITS) - 1); return r ? r : 1u; }
