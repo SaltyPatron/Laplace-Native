@@ -126,6 +126,9 @@ LP_API double lp_trust_deviation(double trust);
 /* One attestation as one matchup: the witness plays at rating opponent_rating with the deviation its trust gives;
  * a negative trust flips the outcome; trust 0 changes nothing. The deviation never falls below floor. */
 LP_API void lp_attest(lp_rating *r, double trust, double score, double opponent_rating, double tau, double floor);
+/* One matchup, played as it arrives. There are no rating periods: no time passes between matchups, so a standing's
+ * deviation is never widened for a period gone by; it changes only by what the matchup tells. */
+LP_API void lp_matchup(lp_rating *r, const lp_rating *opponent, double score, double tau);
 
 /* How hard a strand tugs back: the chance its claim beats the anchor (rating 1500), taken k deviations below its
  * rating, so a claim few have witnessed counts for less than its rating alone says. */
@@ -172,7 +175,16 @@ LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
 
 /* ---------------------------------------------------------------- composition */
 /* An entity as it is composed: its ID, its real coordinate, and its tier. */
-typedef struct { lp_id id; lp_coord c; uint8_t tier; } lp_ref;
+typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; } lp_ref;       /* said: what it is within the path it is put in (LP_SAID_*); never part of its ID */
+
+/* M of a path's vertex is that vertex's metadata, as bits. The low 30 are how many times the vertex is repeated. Above
+ * them: the vertex is a claim, witnessed in what the path belongs to; or it is a record, holding claims witnessed in it. */
+#define LP_SAID_CLAIM  1u
+#define LP_SAID_RECORD 2u
+#define LP_M_RUN_BITS  30
+static inline uint32_t lp_m_bits(double m){ return m < 1 ? 1u : (uint32_t)m; }
+static inline uint32_t lp_m_run(double m){ uint32_t r = lp_m_bits(m) & ((1u << LP_M_RUN_BITS) - 1); return r ? r : 1u; }
+static inline uint32_t lp_m_said(double m){ return lp_m_bits(m) >> LP_M_RUN_BITS; }
 
 LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
 /* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child

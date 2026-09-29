@@ -23,7 +23,7 @@ static scan_fn pick_scan(void){
     (void)f; return lp_scan_scalar;
 }
 
-static double run_of(const uint8_t *v, size_t i){ double m; memcpy(&m, v + i * LP_VERTEX_BYTES + 24, 8); return m < 1 ? 1 : m; }
+static double run_of(const uint8_t *v, size_t i){ double m; memcpy(&m, v + i * LP_VERTEX_BYTES + 24, 8); return (double)lp_m_run(m); }
 
 size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap){
     const uint8_t *v; size_t nv = lp_ewkb_vertices(ewkb, len, &v);

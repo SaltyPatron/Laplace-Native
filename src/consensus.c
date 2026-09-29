@@ -7,7 +7,10 @@
 
 static double g(double phi){ return 1.0 / sqrt(1.0 + 3.0 * phi * phi / (PI * PI)); }
 
-void lp_glicko2(lp_rating *r, const lp_rating *opp, const double *score, size_t n, double tau){
+static void rate(lp_rating *r, const lp_rating *opp, const double *score, size_t n, double tau, int period);
+void lp_glicko2(lp_rating *r, const lp_rating *opp, const double *score, size_t n, double tau){ rate(r, opp, score, n, tau, 1); }
+void lp_matchup(lp_rating *r, const lp_rating *opp, double score, double tau){ rate(r, opp, &score, 1, tau, 0); }
+static void rate(lp_rating *r, const lp_rating *opp, const double *score, size_t n, double tau, int period){
     const double S = LP_GLICKO_SCALE;
     double mu = (r->rating - 1500.0) / S, phi = r->deviation / S, sigma = r->volatility;
     if (n == 0) { r->deviation = S * sqrt(phi * phi + sigma * sigma); return; }             /* step 6 only */
@@ -29,7 +32,7 @@ void lp_glicko2(lp_rating *r, const lp_rating *opp, const double *score, size_t 
         B = C; fB = fC;
     }
     #undef F
-    double sig2 = exp(A / 2.0), phistar = sqrt(phi * phi + sig2 * sig2);
+    double sig2 = exp(A / 2.0), phistar = period ? sqrt(phi * phi + sig2 * sig2) : phi;
     double phi2 = 1.0 / sqrt(1.0 / (phistar * phistar) + 1.0 / v);
     r->rating = 1500.0 + S * (mu + phi2 * phi2 * dsum);
     r->deviation = S * phi2; r->volatility = sig2;
@@ -46,7 +49,7 @@ void lp_attest(lp_rating *r, double trust, double score, double opp_rating, doub
     if (trust == 0.0) return;                                                               /* no information */
     if (trust < 0.0) score = 1.0 - score;                                                   /* reliably wrong: flip */
     lp_rating o = { opp_rating, lp_trust_deviation(trust), 0.06 };
-    lp_glicko2(r, &o, &score, 1, tau);
+    lp_matchup(r, &o, score, tau);
     if (r->deviation < floor) r->deviation = floor;
 }
 

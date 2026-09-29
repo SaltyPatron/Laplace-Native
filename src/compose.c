@@ -5,7 +5,7 @@
 #include <string.h>
 
 lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp){
-    lp_ref r; r.id = t0[cp].id; memcpy(r.c.m, t0[cp].m, sizeof r.c.m); r.tier = 0; return r;
+    lp_ref r; r.id = t0[cp].id; memcpy(r.c.m, t0[cp].m, sizeof r.c.m); r.tier = 0; r.said = 0; return r;
 }
 
 lp_ref lp_ref_compose(const lp_ref *ch, size_t n, uint8_t tier){
