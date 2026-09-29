@@ -1,4 +1,5 @@
-/* 4D geometry on real coordinates: Euclidean distance and discrete Fréchet distance between trajectories.
+/* 4D geometry on real coordinates: Euclidean distance, and the shape measures between trajectories (discrete Fréchet,
+ * Fréchet with outliers skipped, DTW, EDR).
  *
  * Every squared distance is summed in one fixed order, ((dx^2 + dy^2) + dz^2) + dm^2, in every code path, so the
  * scalar and SIMD kernels give the same bits. The SIMD kernel puts one vertex pair in each lane rather than one axis
@@ -53,6 +54,97 @@ double lp_frechet4(const double *a, size_t na, const double *b, size_t nb){
         double *t = prev; prev = cur; cur = t;
     }
     double r = sqrt(prev[nb - 1]); free(bx);
+    return r;
+}
+
+/* b as structure of arrays, with room for `extra` more doubles after it. */
+static double *soa(const double *b, size_t nb, size_t extra, double **bx, double **by, double **bz, double **bm){
+    double *p = malloc(sizeof(double) * (4 * nb + extra)); if (!p) return NULL;
+    *bx = p; *by = p + nb; *bz = *by + nb; *bm = *bz + nb;
+    for (size_t j = 0; j < nb; j++) { (*bx)[j] = b[4 * j]; (*by)[j] = b[4 * j + 1]; (*bz)[j] = b[4 * j + 2]; (*bm)[j] = b[4 * j + 3]; }
+    return p;
+}
+
+/* Discrete Fréchet distance with up to k interior vertices of each sequence skipped (k-outlier; cf. arXiv:2202.12824).
+ * F[i][j][u][v]: the least largest gap of a walk ending at (a_i, b_j) that skipped u vertices of a and v of b. A step
+ * of two along a sequence skips the vertex between. Three rows of i are kept. */
+double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t nb, unsigned k){
+    if (!na || !nb) return INFINITY;
+    if (k == 0) return lp_frechet4(a, na, b, nb);
+    static row_fn row; if (!row) row = pick_row();
+    size_t K = (size_t)k + 1, cell = K * K, rl = nb * cell;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * rl + nb, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    double *F[3] = { bm + nb, bm + nb + rl, bm + nb + 2 * rl }, *c = bm + nb + 3 * rl;
+    for (size_t i = 0; i < na; i++) {
+        row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
+        double *cur = F[i % 3];
+        for (size_t j = 0; j < nb; j++) for (size_t u = 0; u < K; u++) for (size_t v = 0; v < K; v++) {
+            double *out = &cur[j * cell + u * K + v];
+            if (i == 0 && j == 0) { *out = (u == 0 && v == 0) ? c[0] : INFINITY; continue; }
+            double best = INFINITY;
+            for (size_t di = 0; di <= 2 && di <= i; di++) for (size_t dj = 0; dj <= 2 && dj <= j; dj++) {
+                if (!di && !dj) continue;
+                if ((di == 2 && u == 0) || (dj == 2 && v == 0)) continue;
+                double p = F[(i - di) % 3][(j - dj) * cell + (u - (di == 2)) * K + (v - (dj == 2))];
+                if (p < best) best = p;
+            }
+            *out = best > c[j] ? best : c[j];
+        }
+    }
+    double r = INFINITY, *last = &F[(na - 1) % 3][(nb - 1) * cell];
+    for (size_t x = 0; x < cell; x++) if (last[x] < r) r = last[x];
+    free(mem);
+    return sqrt(r);
+}
+
+/* Dynamic time warping: the least sum of gaps over walks of both sequences, and the length of that walk. Among equal
+ * sums the shorter walk is taken. */
+double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *steps){
+    if (steps) *steps = 0;
+    if (!na || !nb) return INFINITY;
+    static row_fn row; if (!row) row = pick_row();
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * nb + 2, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    double *c = bm + nb, *prev = c + nb, *cur = prev + nb + 1;
+    size_t *lp = malloc(sizeof(size_t) * 2 * (nb + 1)), *lc = lp + nb + 1;
+    for (size_t j = 0; j <= nb; j++) { prev[j] = j ? INFINITY : 0.0; lp[j] = 0; }
+    for (size_t i = 0; i < na; i++) {
+        row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
+        cur[0] = INFINITY; lc[0] = 0;
+        for (size_t j = 1; j <= nb; j++) {
+            double f = prev[j]; size_t l = lp[j];
+            if (cur[j - 1] < f || (cur[j - 1] == f && lc[j - 1] < l)) { f = cur[j - 1]; l = lc[j - 1]; }
+            if (prev[j - 1] < f || (prev[j - 1] == f && lp[j - 1] < l)) { f = prev[j - 1]; l = lp[j - 1]; }
+            cur[j] = f + sqrt(c[j - 1]); lc[j] = l + 1;
+        }
+        double *t = prev; prev = cur; cur = t; size_t *tl = lp; lp = lc; lc = tl;
+    }
+    double r = prev[nb]; if (steps) *steps = lp[nb];
+    free(lp < lc ? lp : lc); free(mem);
+    return r;
+}
+
+/* Edit distance on real sequences (Chen, Özsu, Oria): the edits that turn one sequence into the other, two vertices
+ * counting as equal when they lie within eps of each other. */
+size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double eps){
+    if (!na || !nb) return na + nb;
+    static row_fn row; if (!row) row = pick_row();
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, nb, &bx, &by, &bz, &bm); if (!mem) return (size_t)-1;
+    double *c = bm + nb;
+    size_t *prev = malloc(sizeof(size_t) * 2 * (nb + 1)), *cur = prev + nb + 1, *base = prev;
+    for (size_t j = 0; j <= nb; j++) prev[j] = j;
+    for (size_t i = 0; i < na; i++) {
+        row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
+        cur[0] = i + 1;
+        for (size_t j = 1; j <= nb; j++) {
+            size_t e = prev[j - 1] + (sqrt(c[j - 1]) <= eps ? 0 : 1);
+            if (prev[j] + 1 < e) e = prev[j] + 1;
+            if (cur[j - 1] + 1 < e) e = cur[j - 1] + 1;
+            cur[j] = e;
+        }
+        size_t *t = prev; prev = cur; cur = t;
+    }
+    size_t r = prev[nb];
+    free(base); free(mem);
     return r;
 }
 

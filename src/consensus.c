@@ -49,3 +49,14 @@ void lp_attest(lp_rating *r, double trust, double score, double opp_rating, doub
     lp_glicko2(r, &o, &score, 1, tau);
     if (r->deviation < floor) r->deviation = floor;
 }
+
+/* A claim's chance of beating the anchor, read k deviations below its rating: mu is log-odds on Glicko-2's scale. */
+double lp_confidence(const lp_rating *r, double k){
+    double x = (r->rating - 1500.0) / LP_GLICKO_SCALE - k * r->deviation / LP_GLICKO_SCALE;
+    return 1.0 / (1.0 + exp(-x));
+}
+
+double lp_cost(const lp_rating *r, double k, double per_hop){
+    double x = (r->rating - 1500.0) / LP_GLICKO_SCALE - k * r->deviation / LP_GLICKO_SCALE;
+    return log1p(exp(-x)) + per_hop;                                        /* -ln(1 / (1 + e^-x)) */
+}

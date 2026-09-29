@@ -1,8 +1,9 @@
 /* Laplace-Native: the shared native library of Laplace.
  *
- * Identity, fixed-point coordinates, geometry packing, Hilbert order, trajectory matching, and consensus
- * (Glicko-2 with signed trust). Every function here is deterministic: the same inputs give the same bits on
- * every CPU, whichever SIMD path runs. */
+ * Identity, UTF-8, tier 0, fixed-point coordinates, composition, text decomposition (UAX #29), geometry packing,
+ * Hilbert order, trajectory matching, shape measures, consensus (Glicko-2 with signed trust), and the pull's search
+ * kernels. Laplace-Engine and Laplace-postgres call it and keep no copy of any of it. Every function here is
+ * deterministic: the same inputs give the same bits on every CPU, whichever SIMD path runs. */
 #ifndef LAPLACE_H
 #define LAPLACE_H
 
@@ -48,6 +49,13 @@ LP_API void lp_id_compose(const lp_id *children, size_t n, lp_id *out);
 /* The ID of a UTF-8 string taken as one composition of its codepoints. Returns false on invalid UTF-8. */
 LP_API bool lp_id_codepoints_utf8(const char *s, size_t len, lp_id *out);
 
+/* ---------------------------------------------------------------- UTF-8 */
+/* A codepoint's UTF-8 bytes; surrogates are written in the generalized 3-byte form. Returns the length, 1 to 4. */
+LP_API size_t lp_utf8_put(uint32_t cp, uint8_t out[4]);
+/* The codepoint at s[*i], advancing *i past it. Returns false, leaving *i, on a malformed sequence or a value outside
+ * the codespace. */
+LP_API bool lp_utf8_next(const uint8_t *s, size_t n, size_t *i, uint32_t *cp);
+
 /* ---------------------------------------------------------------- fixed-point coordinates */
 typedef struct { int64_t m[4]; } lp_coord;   /* value = m / 2^53 on each axis */
 
@@ -84,8 +92,17 @@ LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, s
 
 /* ---------------------------------------------------------------- 4D geometry on real coordinates */
 LP_API double lp_distance4(const double a[4], const double b[4]);
-/* Discrete Fréchet distance between 4D vertex sequences (n x 4 doubles each). */
+
+/* Shape measures between 4D vertex sequences (n x 4 doubles each), each for its purpose:
+ *   Fréchet            the largest gap along the best walk of both: one stray vertex sets the distance
+ *   Fréchet, k out     the same, with up to k interior vertices of each sequence skipped
+ *   DTW                the sum of gaps along the best walk: a stray vertex adds its distance once; repeats are absorbed
+ *   EDR                the number of edits between them, vertices within eps of each other counting as equal: a stray
+ *                      vertex costs one edit, and so does a repeat */
 LP_API double lp_frechet4(const double *a, size_t na, const double *b, size_t nb);
+LP_API double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t nb, unsigned k);
+LP_API double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *steps);   /* steps: the walk's length */
+LP_API size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double eps);
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
@@ -110,11 +127,71 @@ LP_API double lp_trust_deviation(double trust);
  * a negative trust flips the outcome; trust 0 changes nothing. The deviation never falls below floor. */
 LP_API void lp_attest(lp_rating *r, double trust, double score, double opponent_rating, double tau, double floor);
 
+/* How hard a strand tugs back: the chance its claim beats the anchor (rating 1500), taken k deviations below its
+ * rating, so a claim few have witnessed counts for less than its rating alone says. */
+LP_API double lp_confidence(const lp_rating *r, double k);
+/* The cost of crossing a claim: -ln(confidence) + per_hop. Costs add, so the cheapest chain is the one whose
+ * confidences multiply to the most; per_hop prefers short chains. */
+LP_API double lp_cost(const lp_rating *r, double k, double per_hop);
+
 /* ---------------------------------------------------------------- tier 0 */
 typedef struct { lp_id id; int64_t m[4]; uint64_t hilbert; uint32_t rank, pad; } lp_tier0_record;   /* 64 bytes */
 
-/* Memory-map a tier-0 table (LP_NCP records). Returns NULL if the file is missing or the wrong size. */
+/* Where tier 0 is: $LAPLACE_TIER0, or the path the library was built with. */
+LP_API const char *lp_tier0_path(void);
+/* Memory-map a tier-0 table (LP_NCP records); NULL or "" maps lp_tier0_path(). Returns NULL if the file is missing or
+ * the wrong size. */
 LP_API const lp_tier0_record *lp_tier0_map(const char *path);
+/* The codepoint with this ID, or -1: O(1), from a table built on first use. */
+LP_API int64_t lp_tier0_codepoint(const lp_tier0_record *t0, const lp_id *id);
+/* The fingerprint of a tier 0: BLAKE3-256 of the table. Two installs with one fingerprint give the same coordinates
+ * to the same content. */
+LP_API void lp_tier0_fingerprint(const lp_tier0_record *t0, uint8_t out[32]);
+
+/* ---------------------------------------------------------------- composition */
+/* An entity as it is composed: its ID, its real coordinate, and its tier. */
+typedef struct { lp_id id; lp_coord c; uint8_t tier; } lp_ref;
+
+LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
+/* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child
+ * is that child. */
+LP_API lp_ref lp_ref_compose(const lp_ref *children, size_t n, uint8_t tier);
+
+/* What receives every composition as it is made, and returns it (a table that records it, or nothing at all).
+ * NULL composes without recording. */
+typedef lp_ref (*lp_compose_fn)(void *sink, const lp_ref *children, uint32_t n, uint8_t tier);
+
+/* ---------------------------------------------------------------- text (liblaplace_text; needs ICU)
+ * UAX #29: codepoint -> grapheme -> word segment -> sentence -> paragraph -> text, tiers 0 to 5. Nothing is dropped:
+ * whitespace and punctuation are constituents like everything else, so the text recomposes byte for byte. A single line
+ * break inside a paragraph is read as a space for segmentation only; what is recorded is the original. One lp_text
+ * per thread. */
+typedef struct lp_text lp_text;
+LP_API lp_text *lp_text_new(const lp_tier0_record *t0);
+LP_API void     lp_text_free(lp_text *);
+LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_compose_fn compose, void *sink);
+/* The same, also giving the trunk's own constituents in order, repeats included (at most cap are written; the count
+ * is returned in *nparts). A trunk that is one codepoint has itself as its only part. */
+LP_API lp_ref   lp_text_parts(lp_text *, const uint8_t *s, size_t n, lp_ref *parts, size_t cap, size_t *nparts);
+
+/* ---------------------------------------------------------------- the pull: search over rated claims
+ * The open set of a best-first search (Dijkstra, A*): entities by ID, each with the cost of the cheapest chain found
+ * to it, the estimate that orders it, and the entity and claim it was reached through. */
+typedef struct lp_frontier lp_frontier;
+typedef struct { lp_id id, from, claim; double cost, order; uint32_t hops; bool closed; } lp_reached;
+
+LP_API lp_frontier *lp_frontier_new(void);
+LP_API void         lp_frontier_free(lp_frontier *);
+/* Reach id at this cost through claim from `from`; estimate is the remaining cost's lower bound (0 for Dijkstra).
+ * Returns true if this is the cheapest chain to it so far. */
+LP_API bool lp_frontier_reach(lp_frontier *, const lp_id *id, const lp_id *from, const lp_id *claim, double cost,
+                              double estimate, uint32_t hops);
+/* Close and return the open entity of least order, or NULL when none is open. */
+LP_API const lp_reached *lp_frontier_next(lp_frontier *);
+/* The least order among open entities, or infinity when none is open. */
+LP_API double lp_frontier_least(lp_frontier *);
+LP_API const lp_reached *lp_frontier_find(const lp_frontier *, const lp_id *id);
+LP_API size_t lp_frontier_count(const lp_frontier *);
 
 #ifdef __cplusplus
 }

@@ -5,21 +5,21 @@
       "name": "icx-release",
       "displayName": "icx, release (primary)",
       "generator": "Ninja",
-      "binaryDir": "/repos/build/Laplace-Native/icx-release",
+      "binaryDir": "$penv{LAPLACE_BUILD}/Laplace-Native/icx-release",
       "cacheVariables": { "CMAKE_C_COMPILER": "icx", "CMAKE_CXX_COMPILER": "icpx", "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
     },
     {
       "name": "icx-debug",
       "displayName": "icx, debug",
       "generator": "Ninja",
-      "binaryDir": "/repos/build/Laplace-Native/icx-debug",
+      "binaryDir": "$penv{LAPLACE_BUILD}/Laplace-Native/icx-debug",
       "cacheVariables": { "CMAKE_C_COMPILER": "icx", "CMAKE_CXX_COMPILER": "icpx", "CMAKE_BUILD_TYPE": "Debug" }
     },
     {
       "name": "gcc-release",
       "displayName": "gcc, release (cross-compiler determinism check)",
       "generator": "Ninja",
-      "binaryDir": "/repos/build/Laplace-Native/gcc-release",
+      "binaryDir": "$penv{LAPLACE_BUILD}/Laplace-Native/gcc-release",
       "cacheVariables": { "CMAKE_C_COMPILER": "gcc", "CMAKE_CXX_COMPILER": "g++", "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
     }
   ],
