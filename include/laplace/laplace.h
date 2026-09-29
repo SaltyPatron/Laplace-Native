@@ -148,6 +148,28 @@ LP_API int64_t lp_tier0_codepoint(const lp_tier0_record *t0, const lp_id *id);
  * to the same content. */
 LP_API void lp_tier0_fingerprint(const lp_tier0_record *t0, uint8_t out[32]);
 
+/* ---------------------------------------------------------------- the flags that go with tier 0
+ * One 256-bit record per codepoint: a bit for each binary property and a field for each enumerated property of the
+ * Unicode Standard, in the standard's own order, a field holding its value's place in the standard's own list. The
+ * layout is a file beside the records; laplace flags (Laplace-Engine) generates both. */
+typedef struct { uint8_t b[32]; } lp_flags;
+typedef struct { char name[32], say[64]; uint16_t bit, width, nvalues; uint32_t first; } lp_field;   /* first: its first value in the layout's values */
+typedef struct { char name[48], say[64]; } lp_value;
+typedef struct { const lp_flags *flags; lp_field *field; size_t nfields; lp_value *value; size_t nvalues; } lp_layout;
+
+/* Where the flags are: $LAPLACE_FLAGS, or tier 0's path with .flags in place of its ending. */
+LP_API const char *lp_flags_path(void);
+/* Memory-map the flags and read their layout (path.layout); NULL or "" maps lp_flags_path(). NULL if either is missing. */
+LP_API const lp_layout *lp_flags_map(const char *path);
+/* A field by the property's name, short or as it is said, by the standard's matching rule; NULL if there is none. */
+LP_API const lp_field *lp_flags_field(const lp_layout *, const char *property);
+/* What a codepoint's field holds: 0 or 1 for a binary property, a value's place in its list for an enumerated one. */
+LP_API uint32_t lp_flags_get(const lp_layout *, uint32_t cp, const lp_field *);
+/* A value's place in a field's list by its name, short or as it is said; -1 if the list does not hold it. */
+LP_API int32_t lp_flags_value(const lp_layout *, const lp_field *, const char *value);
+/* The standard's rule for matching names (UAX #44, LM3): case, spaces, underscores and hyphens do not count. */
+LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
+
 /* ---------------------------------------------------------------- composition */
 /* An entity as it is composed: its ID, its real coordinate, and its tier. */
 typedef struct { lp_id id; lp_coord c; uint8_t tier; } lp_ref;
