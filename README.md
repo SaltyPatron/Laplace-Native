@@ -8,7 +8,7 @@ The library with the shared code of Laplace: identity, UTF-8, tier 0, fixed-poin
 | `laplace_text` | the decomposition of text | ICU 78 (Unicode 17) |
 | `laplace_model` | the model-decomposition kernel | MKL, OpenMP |
 
-The programs are in Laplace-Engine.
+The programs are in [Laplace-Engine](https://github.com/SaltyPatron/Laplace-Engine). The documentation is [Laplace-Wiki](https://github.com/SaltyPatron/Laplace-Wiki), published at <https://saltypatron.github.io/Laplace-Wiki/>.
 
 ## Build
 
