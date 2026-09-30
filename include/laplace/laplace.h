@@ -77,7 +77,7 @@ LP_API void lp_xyz_to_id(const double xyz[3], lp_id *out);
  * identical children with the run length in M. Returns the bytes written, or the bytes needed if cap is too small. */
 LP_API size_t lp_ewkb_path(const lp_id *children, size_t n, uint8_t *out, size_t cap);
 /* The same path from runs already collapsed: vertex i is ids[i] repeated runs[i] times. */
-LP_API size_t lp_ewkb_runs(const lp_id *ids, const uint32_t *runs, size_t nv, uint8_t *out, size_t cap);
+LP_API size_t lp_ewkb_runs(const lp_id *ids, const uint64_t *m, size_t nv, uint8_t *out, size_t cap);   /* m: each vertex's M bits as written (lp_m_of) */
 /* A POINT ZM of real 4D coordinates, as EWKB (37 bytes). */
 LP_API size_t lp_ewkb_point4(const double xyzm[4], uint8_t *out, size_t cap);
 /* Parse a POINT ZM / LINESTRING ZM path (little-endian EWKB, optional SRID). Returns the vertex count and points
@@ -173,21 +173,53 @@ LP_API int32_t lp_flags_value(const lp_layout *, const lp_field *, const char *v
 /* The standard's rule for matching names (UAX #44, LM3): case, spaces, underscores and hyphens do not count. */
 LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
 
+/* ---------------------------------------------------------------- the highway: the types, as a perf-cache
+ * What a curated resource says in its enumerations is a type, not content (Semantics: Claims). Each list of types is
+ * the resource's own, in the order it writes it: UD's parts of speech and relations, WordNet's lexicographer files,
+ * CILI's concepts, VerbNet's classes, FrameNet's frames, PropBank's rolesets, and so on. A type's record is the ID
+ * and real coordinate of its content (the text NOUN as UD writes it; an ILI's definition as CILI gives it), in the
+ * form of a tier-0 record with its slot as the rank; and the mappings the highway sources draw between lists are
+ * edges, pairs of slots. laplace highway (Laplace-Engine) generates highway.bin and its layout beside it. */
+typedef struct { char name[32], say[64]; uint32_t first, count; } lp_list;          /* first: its first record; count: how many */
+typedef struct { uint32_t from, to; } lp_edge;
+typedef struct { char a[32], b[32]; uint32_t first, count; } lp_edges;              /* edges from list a to list b, sorted by from */
+typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
+                 uint32_t *by_id; size_t nby; } lp_highway;
+/* Where the highway is: $LAPLACE_HIGHWAY, or tier 0's path with .highway in place of its ending. */
+LP_API const char *lp_highway_path(void);
+/* Memory-map the highway and read its layout (path.layout); NULL or "" maps lp_highway_path(). NULL if either is missing. */
+LP_API const lp_highway *lp_highway_map(const char *path);
+/* A list by its name, short or as it is said; NULL if there is none. */
+LP_API const lp_list *lp_highway_list(const lp_highway *, const char *name);
+/* The record of a slot of a list: its content's ID, coordinate and Hilbert value; NULL past the list's end. */
+LP_API const lp_tier0_record *lp_highway_at(const lp_highway *, const lp_list *, uint32_t slot);
+/* The slot in a list whose content has this ID, or -1: O(1), from a table built on first use. */
+LP_API int64_t lp_highway_slot(const lp_highway *, const lp_list *, const lp_id *id);
+/* The slots of list b that a slot of list a maps to: a pointer into the edges and how many; 0 when none. */
+LP_API size_t lp_highway_edges(const lp_highway *, const char *a, uint32_t slot, const char *b, const lp_edge **out);
+/* The fingerprint of a highway: BLAKE3-256 of its records and edges. */
+LP_API void lp_highway_fingerprint(const lp_highway *, uint8_t out[32]);
+
 /* ---------------------------------------------------------------- composition */
 /* An entity as it is composed: its ID, its real coordinate, and its tier. */
 typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; } lp_ref;       /* said: what it is within the path it is put in (LP_SAID_*); never part of its ID */
 
-/* M of a path's vertex is that vertex's metadata, as bits. The low 30 are how many times the vertex is repeated. Above
- * them: the vertex is a claim, witnessed in what the path belongs to; or it is a record, holding claims witnessed in
- * it; or it is a tuple. */
+/* M of a path's vertex is that vertex's metadata, as bits: a double holds 53 of them exactly (Storage: Physicality).
+ * The low 30 are how many times the vertex is repeated. The 3 above them say what the vertex is within the path it is
+ * put in: a claim, witnessed in what the path belongs to; a record, holding claims witnessed in it; a tuple, things
+ * that together name one thing; or the metadata of what the path is (a file's, beside its content). */
 #define LP_SAID_CLAIM  1u
 #define LP_SAID_RECORD 2u
-#define LP_SAID_METADATA 4u    /* the vertex is the metadata of what the path is: a file's, beside its content */
 #define LP_SAID_TUPLE  3u      /* the vertex is a path of things that together name one thing: not text, and not a claim */
+#define LP_SAID_METADATA 4u    /* the vertex is the metadata of what the path is: a file's, beside its content */
 #define LP_M_RUN_BITS  30
-static inline uint32_t lp_m_bits(double m){ return m < 1 ? 1u : (uint32_t)m; }
-static inline uint32_t lp_m_run(double m){ uint32_t r = lp_m_bits(m) & ((1u << LP_M_RUN_BITS) - 1); return r ? r : 1u; }
-static inline uint32_t lp_m_said(double m){ return lp_m_bits(m) >> LP_M_RUN_BITS; }
+#define LP_M_SAID_BITS 3
+#define LP_M_SAID_MASK ((1ull << LP_M_SAID_BITS) - 1)
+static inline uint64_t lp_m_bits(double m){ return m < 1 ? 1ull : (uint64_t)m; }
+static inline uint32_t lp_m_run(double m){ uint32_t r = (uint32_t)(lp_m_bits(m) & ((1ull << LP_M_RUN_BITS) - 1)); return r ? r : 1u; }
+static inline uint32_t lp_m_said(double m){ return (uint32_t)((lp_m_bits(m) >> LP_M_RUN_BITS) & LP_M_SAID_MASK); }
+/* M as it is written for a vertex repeated run times that is said to be what said names. */
+static inline double lp_m_of(uint32_t run, uint32_t said){ return (double)(((uint64_t)(said & LP_M_SAID_MASK) << LP_M_RUN_BITS) | (run ? run : 1u)); }
 
 LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
 /* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child

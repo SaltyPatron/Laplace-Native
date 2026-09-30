@@ -54,7 +54,7 @@ size_t lp_ewkb_vertices(const uint8_t *e, size_t len, const uint8_t **vertices){
     *vertices = e + off; return n;
 }
 
-size_t lp_ewkb_runs(const lp_id *ids, const uint32_t *runs, size_t nv, uint8_t *out, size_t cap){
+size_t lp_ewkb_runs(const lp_id *ids, const uint64_t *m, size_t nv, uint8_t *out, size_t cap){
     size_t need = nv == 1 ? 5 + 32 : 9 + 32 * nv;
     if (!out || cap < need || nv == 0) return nv == 0 ? 0 : need;
     uint8_t *p = out; *p++ = 1;
@@ -62,7 +62,7 @@ size_t lp_ewkb_runs(const lp_id *ids, const uint32_t *runs, size_t nv, uint8_t *
     if (nv != 1) p = put32(p, (uint32_t)nv);
     for (size_t i = 0; i < nv; i++) {
         double xyz[3]; lp_id_to_xyz(&ids[i], xyz);
-        p = putd(p, xyz[0]); p = putd(p, xyz[1]); p = putd(p, xyz[2]); p = putd(p, (double)runs[i]);
+        p = putd(p, xyz[0]); p = putd(p, xyz[1]); p = putd(p, xyz[2]); p = putd(p, (double)m[i]);
     }
     return need;
 }
