@@ -1,5 +1,5 @@
 # Golden tests: values the prototype established, which the real implementation must reproduce exactly.
-foreach(name identity geometry coord follows consensus shape pull flags)
+foreach(name identity geometry coord follows consensus shape pull flags highway)
   add_executable(test_${name} test_${name}.c)
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 m)
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
