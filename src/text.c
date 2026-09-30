@@ -2,11 +2,19 @@
  * and punctuation are constituents like everything else, so the text recomposes byte for byte. A single line break
  * inside a paragraph is read as a space for segmentation only; the bytes recorded are the original ones.
  *
+ * Tailored at the word tier: a separator separates. The default rules keep a MidLetter, MidNum, MidNumLet,
+ * ExtendNumLet or quote inside a segment between letters or digits (WB6, WB7, WB11, WB12, WB13a, WB13b: "e.g.",
+ * "3.14", "word_1", "can't"); here each such codepoint is its own segment, so microsoft.com is [microsoft] [.] [com]
+ * and the codepoint is the one entity it is wherever it stands. The sentence and grapheme rules are the standard's.
+ * At every tier, a block of constituents repeated adjacently is one entity, factored from the content alone
+ * (lp_factor): banana is b [an]x2 a.
+ *
  * This is the one decomposition of text in Laplace. The engine records what it composes; the database composes without
  * recording, to compute the ID and coordinate of a text in place. */
 #include "laplace/laplace.h"
 #include <unicode/ubrk.h>
 #include <unicode/utext.h>
+#include <unicode/uchar.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,6 +28,7 @@ struct lp_text {
     uint8_t *cpy; size_t ccap;
     lp_compose_fn compose; void *sink;
     lp_ref *parts; size_t pcap, pn; lp_id parts_of; int want_parts;   /* the constituents of the last composition made */
+    lp_ref *f; size_t fcap;                                                /* room for a composition's factored children */
 };
 
 static void *grow(void *p, size_t n){ p = realloc(p, n ? n : 1); if (!p) abort(); return p; }
@@ -38,7 +47,7 @@ void lp_text_free(lp_text *c){
     if (!c) return;
     for (int i = 0; i < 3; i++) if (c->brk[i]) ubrk_close(c->brk[i]);
     free(c->sb.b); free(c->wb.b); free(c->gb.b); free(c->cps.v); free(c->g.v); free(c->segs.v); free(c->sents.v); free(c->paras.v);
-    free(c->cpy); free(c->parts); free(c);
+    free(c->cpy); free(c->parts); free(c->f); free(c);
 }
 static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out){
     UErrorCode e = U_ZERO_ERROR; ubrk_setUText(bi, ut, &e); out->n = 0;
@@ -48,8 +57,38 @@ static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out){
     }
 }
 
+/* The word tier tailored: a codepoint the default rules would keep inside a segment as a joiner (WB6, WB7, WB11, WB12,
+ * WB13a, WB13b) is a segment of its own, so what is left on either side of it is too. */
+static int joiner(uint32_t cp){
+    switch (u_getIntPropertyValue((UChar32)cp, UCHAR_WORD_BREAK)) {
+        case U_WB_MIDLETTER: case U_WB_MIDNUM: case U_WB_MIDNUMLET: case U_WB_EXTENDNUMLET: case U_WB_SINGLE_QUOTE: case U_WB_DOUBLE_QUOTE: return 1;
+        default: return 0;
+    }
+}
+static void separators(const uint8_t *src, size_t n, Bounds *wb){
+    Bounds o = { 0 };
+    for (size_t k = 0; k + 1 < wb->n; k++) {
+        int32_t a = wb->b[k], b = wb->b[k + 1]; if (o.n == o.cap) { o.cap = o.cap ? o.cap * 2 : 1024; o.b = grow(o.b, o.cap * 4); } o.b[o.n++] = a;
+        size_t i = (size_t)a; while (i < (size_t)b) {
+            size_t at = i; uint32_t cp; if (!lp_utf8_next(src, n, &i, &cp)) { i = at + 1; continue; }
+            if (!joiner(cp) || (at == (size_t)a && i == (size_t)b)) continue;                     /* not a joiner, or the segment is only it */
+            if (o.n + 2 > o.cap) { o.cap = o.cap * 2 + 4; o.b = grow(o.b, o.cap * 4); }
+            if ((int32_t)at != o.b[o.n - 1]) o.b[o.n++] = (int32_t)at;
+            if ((int32_t)i != b) o.b[o.n++] = (int32_t)i;
+        }
+    }
+    if (wb->n) { if (o.n == o.cap) { o.cap = o.cap * 2 + 4; o.b = grow(o.b, o.cap * 4); } o.b[o.n++] = wb->b[wb->n - 1]; }
+    free(wb->b); *wb = o;
+}
+static uint8_t above(const lp_ref *r, size_t n){ uint8_t t = 0; for (size_t i = 0; i < n; i++) if (r[i].tier > t) t = r[i].tier; return (uint8_t)(t < 255 ? t + 1 : 255); }
 static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t tier){
     if (n == 1) return ch[0];
+    if (n >= 4) {                                                             /* repeated blocks become entities of their own */
+        if (n > c->fcap) { c->fcap = n * 2; c->f = grow(c->f, c->fcap * sizeof(lp_ref)); }
+        size_t m = lp_factor(ch, n, c->f, c->compose, c->sink);
+        if (m != n) { ch = c->f; n = m; if (n == 1) return ch[0]; }
+    }
+    uint8_t up = above(ch, n); if (up > tier) tier = up;                         /* a block lifts what holds it */
     lp_ref r = c->compose ? c->compose(c->sink, ch, (uint32_t)n, tier) : lp_ref_compose(ch, n, tier);
     if (c->want_parts) {                            /* the trunk is the last composition of more than one child */
         if (n > c->pcap) { c->pcap = n * 2; c->parts = grow(c->parts, c->pcap * sizeof(lp_ref)); }
@@ -74,6 +113,7 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
     }
     UErrorCode e = U_ZERO_ERROR; UText *ut = utext_openUTF8(NULL, (const char *)cpy, (int64_t)n, &e);
     bounds_of(c->brk[0], ut, &c->sb); bounds_of(c->brk[1], ut, &c->wb); bounds_of(c->brk[2], ut, &c->gb);
+    separators(src, n, &c->wb);
     c->paras.n = 0; c->sents.n = 0; size_t wi = 0, gi = 0;
     for (size_t si = 0; si + 1 < c->sb.n; si++) {
         int32_t s0 = c->sb.b[si], s1 = c->sb.b[si + 1], w0 = s0; c->segs.n = 0;

@@ -198,6 +198,13 @@ LP_API lp_ref lp_ref_compose(const lp_ref *children, size_t n, uint8_t tier);
  * NULL composes without recording. */
 typedef lp_ref (*lp_compose_fn)(void *sink, const lp_ref *children, uint32_t n, uint8_t tier);
 
+/* Repeats within a composition, factored from the content alone (Storage: Compositions, Repeats). A block of two or
+ * more constituents repeated adjacently becomes one entity, composed through compose/sink at one tier above its
+ * highest constituent, and stands in the sequence once per repeat (the path writer makes the run); leftmost, the
+ * shortest period, recursive, so the same content always factors the same way. A repeated single constituent is a run already and is
+ * left as it is. out holds at most n; the count written is returned. */
+LP_API size_t lp_factor(const lp_ref *children, size_t n, lp_ref *out, lp_compose_fn compose, void *sink);
+
 /* ---------------------------------------------------------------- text (liblaplace_text; needs ICU)
  * UAX #29: codepoint -> grapheme -> word segment -> sentence -> paragraph -> text, tiers 0 to 5. Nothing is dropped:
  * whitespace and punctuation are constituents like everything else, so the text recomposes byte for byte. A single line
