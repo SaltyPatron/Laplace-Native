@@ -55,6 +55,7 @@ const lp_highway *lp_highway_map(const char *path){
     }
     free(line); fclose(f);
     if (nrec * sizeof(lp_tier0_record) + nedges * sizeof(lp_edge) > (size_t)st.st_size) { munmap(m, (size_t)st.st_size); free(h->list); free(h->edges); free(h); return NULL; }
+    snprintf(h->path, sizeof h->path, "%s", path);
     h->rec = m; h->nrec = nrec; h->edge = (const lp_edge *)((const uint8_t *)m + nrec * sizeof(lp_tier0_record)); h->nedges = nedges;
     for (size_t i = 0; i < h->nmasks; i++) for (size_t j = 0; j < h->nlists; j++) if (!strcmp(h->mask[i].name, h->list[j].name)) h->mask[i].list = &h->list[j];
     return h;
@@ -111,5 +112,30 @@ int32_t lp_highway_mask_bit(const lp_highway *h, const lp_id *id){
     int64_t i = lp_highway_slot(h, NULL, id); if (i < 0) return -1;
     for (size_t k = 0; k < h->nmasks; k++) { const lp_list *l = h->mask[k].list; if (!l) continue;
         if ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count) { uint32_t slot = (uint32_t)i - l->first; return slot < h->mask[k].width ? (int32_t)(h->mask[k].bit + slot) : -1; } }
+    return -1;
+}
+
+/* the keys: "list\tkey\tslot" lines beside the highway, hashed once on first use */
+typedef struct { uint64_t h; uint32_t off, slot, list; } KeyEnt;
+typedef struct { KeyEnt *t; size_t cap, n; char *pool; size_t pn; } Keys;
+static uint64_t fnv(const char *s, size_t n){ uint64_t h = 1469598103934665603ull; for (size_t i = 0; i < n; i++) h = (h ^ (uint8_t)s[i]) * 1099511628211ull; return h; }
+int64_t lp_highway_key(const lp_highway *hc, const lp_list *l, const char *key){
+    lp_highway *h = (lp_highway *)hc;
+    if (!h->keys) {
+        Keys *k = calloc(1, sizeof *k); char kp[4200]; snprintf(kp, sizeof kp, "%s.keys", h->path); FILE *f = fopen(kp, "r");
+        if (f) { char *line = NULL; size_t cap = 0; size_t pc = 0;
+            while (getline(&line, &cap, f) > 0) { if (line[0] == '#') continue;
+                char *save = NULL, *ln = strtok_r(line, "\t\n", &save), *kv = strtok_r(NULL, "\t\n", &save), *sl = strtok_r(NULL, "\t\n", &save); if (!ln || !kv || !sl) continue;
+                uint32_t li = 0; while (li < h->nlists && strcmp(h->list[li].name, ln)) li++; if (li == h->nlists) continue;
+                if ((k->n + 1) * 2 > k->cap) { size_t nc = k->cap ? k->cap * 2 : 1 << 16; KeyEnt *t = calloc(nc, sizeof(KeyEnt)); for (size_t i = 0; i < k->cap; i++) if (k->t[i].h) { uint64_t x = k->t[i].h & (nc - 1); while (t[x].h) x = (x + 1) & (nc - 1); t[x] = k->t[i]; } free(k->t); k->t = t; k->cap = nc; }
+                size_t kl = strlen(kv); if (k->pn + kl + 1 > pc) { pc = (k->pn + kl + 1) * 2 + 65536; k->pool = realloc(k->pool, pc); }
+                uint64_t x = (fnv(kv, kl) ^ ((uint64_t)li << 56)) & (k->cap - 1); while (k->t[x].h) x = (x + 1) & (k->cap - 1);
+                k->t[x] = (KeyEnt){ fnv(kv, kl) ^ ((uint64_t)li << 56) ^ 1, (uint32_t)k->pn, (uint32_t)strtoul(sl, NULL, 10), li }; memcpy(k->pool + k->pn, kv, kl + 1); k->pn += kl + 1; k->n++; }
+            free(line); fclose(f); }
+        __atomic_store_n(&h->keys, k, __ATOMIC_RELEASE);
+    }
+    Keys *k = h->keys; if (!k->cap || !l) return -1; uint32_t li = (uint32_t)(l - h->list); size_t kl = strlen(key);
+    uint64_t hh = fnv(key, kl) ^ ((uint64_t)li << 56) ^ 1, x = hh & (k->cap - 1);
+    while (k->t[x].h) { if (k->t[x].h == hh && k->t[x].list == li && !strcmp(k->pool + k->t[x].off, key)) return (int64_t)k->t[x].slot; x = (x + 1) & (k->cap - 1); }
     return -1;
 }
