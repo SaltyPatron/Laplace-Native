@@ -183,8 +183,15 @@ LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
 typedef struct { char name[32], say[64]; uint32_t first, count; } lp_list;          /* first: its first record; count: how many */
 typedef struct { uint32_t from, to; } lp_edge;
 typedef struct { char a[32], b[32]; uint32_t first, count; } lp_edges;              /* edges from list a to list b, sorted by from */
+typedef struct { char name[32]; uint16_t bit, width; const lp_list *list; } lp_mask;   /* a list small enough to be a field of the 256-bit mask: its first bit, one per slot */
 typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
-                 uint32_t *by_id; size_t nby; } lp_highway;
+                 lp_mask *mask; size_t nmasks; uint32_t *by_id; size_t nby; } lp_highway;
+/* The mask's fields (Semantics: Claims, Masks): "kind" (bits 0 to 7: what a row is) and the lists small enough. */
+#define LP_KIND_CLAIM    0
+#define LP_KIND_RECORD   1
+#define LP_KIND_TUPLE    2
+#define LP_KIND_FILE     3
+#define LP_MASK_BITS     256
 /* Where the highway is: $LAPLACE_HIGHWAY, or tier 0's path with .highway in place of its ending. */
 LP_API const char *lp_highway_path(void);
 /* Memory-map the highway and read its layout (path.layout); NULL or "" maps lp_highway_path(). NULL if either is missing. */
@@ -199,6 +206,11 @@ LP_API int64_t lp_highway_slot(const lp_highway *, const lp_list *, const lp_id 
 LP_API size_t lp_highway_edges(const lp_highway *, const char *a, uint32_t slot, const char *b, const lp_edge **out);
 /* The fingerprint of a highway: BLAKE3-256 of its records and edges. */
 LP_API void lp_highway_fingerprint(const lp_highway *, uint8_t out[32]);
+/* The mask bit of a type, by its content's ID: the field of the list it is in, plus its slot; -1 when the ID is no
+ * type, or its list is no mask field. O(1). */
+LP_API int32_t lp_highway_mask_bit(const lp_highway *, const lp_id *id);
+/* A mask field by its name (kind, or a list's name); NULL if there is none. */
+LP_API const lp_mask *lp_highway_mask(const lp_highway *, const char *name);
 
 /* ---------------------------------------------------------------- composition */
 /* An entity as it is composed: its ID, its real coordinate, and its tier. */

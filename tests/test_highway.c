@@ -26,6 +26,11 @@ int main(void){
     CHECK(any > 0, "some roleset maps to a class");
     if (any) { CHECK(e[0].to < vn->count, "an edge lands inside the list it names"); }
     (void)n;
+    const lp_mask *km = lp_highway_mask(h, "kind"), *um = lp_highway_mask(h, "upos");
+    CHECK(km && km->bit == 0 && km->width == 8 && um && um->list == upos && um->bit >= 8, "the mask's fields: kind, then the small lists");
+    CHECK(um && lp_highway_mask_bit(h, &noun) == (int32_t)(um->bit + 7), "NOUN's mask bit is its field's first bit plus its slot");
+    lp_id none; memset(&none, 0x5a, 16);
+    CHECK(lp_highway_mask_bit(h, &none) == -1, "no type, no bit");
     uint8_t fp[32]; lp_highway_fingerprint(h, fp); int zero = 1; for (int i = 0; i < 32; i++) zero &= fp[i] == 0;
     CHECK(!zero, "a fingerprint");
     DONE("highway");
