@@ -129,8 +129,8 @@ int64_t lp_highway_key(const lp_highway *hc, const lp_list *l, const char *key){
                 uint32_t li = 0; while (li < h->nlists && strcmp(h->list[li].name, ln)) li++; if (li == h->nlists) continue;
                 if ((k->n + 1) * 2 > k->cap) { size_t nc = k->cap ? k->cap * 2 : 1 << 16; KeyEnt *t = calloc(nc, sizeof(KeyEnt)); for (size_t i = 0; i < k->cap; i++) if (k->t[i].h) { uint64_t x = k->t[i].h & (nc - 1); while (t[x].h) x = (x + 1) & (nc - 1); t[x] = k->t[i]; } free(k->t); k->t = t; k->cap = nc; }
                 size_t kl = strlen(kv); if (k->pn + kl + 1 > pc) { pc = (k->pn + kl + 1) * 2 + 65536; k->pool = realloc(k->pool, pc); }
-                uint64_t x = (fnv(kv, kl) ^ ((uint64_t)li << 56)) & (k->cap - 1); while (k->t[x].h) x = (x + 1) & (k->cap - 1);
-                k->t[x] = (KeyEnt){ fnv(kv, kl) ^ ((uint64_t)li << 56) ^ 1, (uint32_t)k->pn, (uint32_t)strtoul(sl, NULL, 10), li }; memcpy(k->pool + k->pn, kv, kl + 1); k->pn += kl + 1; k->n++; }
+                uint64_t hk = fnv(kv, kl) ^ ((uint64_t)li << 56) ^ 1, x = hk & (k->cap - 1); while (k->t[x].h) x = (x + 1) & (k->cap - 1);     /* placed by the hash it is looked up by */
+                k->t[x] = (KeyEnt){ hk, (uint32_t)k->pn, (uint32_t)strtoul(sl, NULL, 10), li }; memcpy(k->pool + k->pn, kv, kl + 1); k->pn += kl + 1; k->n++; }
             free(line); fclose(f); }
         __atomic_store_n(&h->keys, k, __ATOMIC_RELEASE);
     }
