@@ -18,8 +18,23 @@ if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")            # BLAKE3's CMake knows g
 endif()
 add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3 EXCLUDE_FROM_ALL)
 
+# The registries' law, generated from the manifests (Sequence 6.10): the manifest is the single input, and a change
+# to it regenerates the header at the next configure.
+set(LP_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/manifest/trust_classes.toml)
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/manifest/trust_classes.toml LP_TC_LINES REGEX "^[A-Za-z][A-Za-z0-9]* *= *[0-9.]+")
+set(LP_TRUST_CLASS_ROWS "")
+foreach(line IN LISTS LP_TC_LINES)
+  string(REGEX MATCH "^([A-Za-z][A-Za-z0-9]*) *= *([0-9.]+)" _ "${line}")
+  string(APPEND LP_TRUST_CLASS_ROWS "    { \"${CMAKE_MATCH_1}\", ${CMAKE_MATCH_2} },\n")
+endforeach()
+if(LP_TRUST_CLASS_ROWS STREQUAL "")
+  message(FATAL_ERROR "manifest/trust_classes.toml declares no class")
+endif()
+configure_file(src/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
+
 set(LP_SOURCES src/cpu.c src/flags.c src/utf8.c src/identity.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
-               src/tier0.c src/geom4d.c src/pull.c src/highway.c)
+               src/tier0.c src/geom4d.c src/pull.c src/highway.c src/trust.c)
 set(LP_ISA_SOURCES src/isa/scan_avx2.c src/isa/scan_avx512.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c)
 set_source_files_properties(src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
 set_source_files_properties(src/isa/scan_avx512.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4}")
@@ -34,7 +49,7 @@ foreach(kind static shared)
     set(t laplace)
   endif()
   target_include_directories(${t} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
-                                      PRIVATE src)
+                                      PRIVATE src ${LP_GENERATED})
   target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
   target_compile_options(${t} PRIVATE ${LP_C_FLAGS})
   target_link_libraries(${t} PRIVATE BLAKE3::blake3 m pthread)

@@ -2,6 +2,7 @@
 #include "laplace/laplace.h"
 #include "check.h"
 #include <math.h>
+#include <string.h>
 
 int main(void){
     /* Glickman, "Example of the Glicko-2 system": 1500/200/0.06 plays 1400/30 (win), 1550/100 (loss),
@@ -28,5 +29,13 @@ int main(void){
     CHECK(a.rating > 1500, "a win raises the standing");
     lp_rating lo = { 1500, 350, 0.06 }; lp_attest(&lo, 0.3, 1.0, 1500, 0.5, 30);
     CHECK(lo.rating - 1500 < a.rating - 1500, "low trust moves the standing less");
+    /* The trust classes: the registry's fourteen, in its order; an undeclared label is no class. */
+    CHECK(lp_trust_class_count() == 14, "%zu classes", lp_trust_class_count());
+    CHECK(!strcmp(lp_trust_class_at(0)->label, "SubstrateMandate") && lp_trust_class_at(0)->prior == 1.0, "the first class is the mandate at 1");
+    CHECK(lp_trust_class_named("StandardsDerived") && lp_trust_class_named("StandardsDerived")->prior == 0.95, "StandardsDerived plays at 0.95");
+    CHECK(lp_trust_class_named("AcademicCurated")->prior > lp_trust_class_named("UserCuratedResource")->prior, "an academic curation ranks above a user-curated wiki");
+    CHECK(lp_trust_class_named("AIModelProbe")->prior > lp_trust_class_named("UserPromptContent")->prior, "a model ranks above a user prompt");
+    CHECK(lp_trust_class_named("ResponseContent")->prior < lp_trust_class_named("UserPromptContent")->prior, "Laplace's own output ranks below a user prompt");
+    CHECK(lp_trust_class_named("academiccurated") == NULL && lp_trust_class_named("") == NULL, "an undeclared label is no class");
     DONE("consensus");
 }

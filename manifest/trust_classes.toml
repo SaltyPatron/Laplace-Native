@@ -1,0 +1,19 @@
+# The trust classes (Sequence 6.5, Registries). A witness's class is the only statement of its trust, and the class's
+# prior, in 0 to 1, is what every claim that witness makes is played at. Append-only: a class's label and meaning
+# never change once declared, and a new class goes at the end. The build generates the native law from this file;
+# nothing else states a class or a prior.
+[classes]
+SubstrateMandate             = 1.00   # the substrate's own mandated structure: the governed laws and operational records
+StandardsDerived             = 0.95   # a standards body's published data: Unicode, ISO 639, FIDE, tablebases, a toolchain's specified behaviour
+AcademicCurated              = 0.85   # OEWN, OMW, CILI, UD, FrameNet, VerbNet, PropBank, SemLink, opening theory
+AcademicCuratedWithUserInput = 0.78
+StructuredCorpus             = 0.70
+UserCuratedResource          = 0.60   # Wiktionary
+AIModelProbe                 = 0.50   # an ingested model
+AppDerived                   = 0.40
+UserPromptContent            = 0.30
+ResponseContent              = 0.20   # Laplace's own responses: below a user prompt, by design
+AdversarialUntrusted         = 0.00
+DerivedCalculation           = 0.70
+AgentTranscript              = 0.40
+ToolResultContent            = 0.40

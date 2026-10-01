@@ -121,6 +121,13 @@ typedef struct { double rating, deviation, volatility; } lp_rating;
 
 /* One rating period against n opponents (Glickman's Glicko-2, steps 1-8). tau: system constant. */
 LP_API void lp_glicko2(lp_rating *r, const lp_rating *opponents, const double *scores, size_t n, double tau);
+/* The trust classes (manifest/trust_classes.toml): a witness's class is the only statement of its trust, and the
+ * class's prior is the trust its claims are played at. Append-only, in the manifest's order; a label the manifest
+ * does not declare is no class (NULL). */
+typedef struct { const char *label; double prior; } lp_trust_class;
+LP_API size_t lp_trust_class_count(void);
+LP_API const lp_trust_class *lp_trust_class_at(size_t i);
+LP_API const lp_trust_class *lp_trust_class_named(const char *label);
 /* The deviation a witness of trust |t| plays with: its weight g(phi) equals |t|. Trust 1 plays with deviation 0. */
 LP_API double lp_trust_deviation(double trust);
 /* One attestation as one matchup: the witness plays at rating opponent_rating with the deviation its trust gives;
