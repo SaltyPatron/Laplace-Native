@@ -2,6 +2,7 @@
  * and centroids are exact integer averages truncated toward zero. */
 #include "laplace/laplace.h"
 #include "check.h"
+#include "../src/internal.h"
 #include <string.h>
 
 int main(void){
@@ -24,5 +25,14 @@ int main(void){
     lp_coord_centroid(big, 2, &c); CHECK(c.m[0] == INT64_MAX / 2, "no overflow in the sum");
     lp_coord edge = { { 1ll << 53, 0, 0, 0 } }, over = { { (1ll << 53) + 1, 0, 0, 0 } };
     CHECK(lp_coord_inside(&edge) && !lp_coord_inside(&over), "the wall is exact");
+    /* the hardware division equals the compiler's __int128 division on sums of up to 4096 coordinates of either sign */
+    { uint64_t x = 0x9E3779B97F4A7C15ull; size_t wrong = 0;
+      for (int i = 0; i < 1000000; i++) {
+          x ^= x << 13; x ^= x >> 7; x ^= x << 17; uint64_t n = (x % 4096) + 1; x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+          __int128 s = 0; int64_t m = (int64_t)(x >> (1 + x % 11)); if (x & 1) m = -m;       /* a coordinate, any magnitude below 2^63 */
+          for (uint64_t k = 0; k < n; k++) s += m; s += (int64_t)(x >> 40) * (n & 1 ? -1 : 1);   /* a sum that does not divide evenly */
+          wrong += lp_div128(s, n) != (int64_t)(s / (__int128)n);
+      }
+      CHECK(wrong == 0, "%zu quotients differ from __int128 division", wrong); }
     DONE("coord");
 }

@@ -5,7 +5,7 @@
 void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out){
     __int128 s[4] = { 0, 0, 0, 0 };
     for (size_t i = 0; i < n; i++) for (int d = 0; d < 4; d++) s[d] += c[i].m[d];
-    for (int d = 0; d < 4; d++) out->m[d] = n ? (int64_t)(s[d] / (__int128)n) : 0;      /* C division truncates toward zero */
+    for (int d = 0; d < 4; d++) out->m[d] = n ? lp_div128(s[d], n) : 0;      /* truncated toward zero, as C division is */
 }
 
 bool lp_coord_inside(const lp_coord *c){
