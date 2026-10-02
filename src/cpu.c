@@ -5,6 +5,7 @@
 #include <cpuid.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 static uint64_t xgetbv0(void){ uint32_t a, d; __asm__ volatile("xgetbv" : "=a"(a), "=d"(d) : "c"(0)); return ((uint64_t)d << 32) | a; }
 
@@ -48,7 +49,7 @@ uint32_t lp_cpu_active(void){
 }
 
 const char *lp_cpu_describe(uint32_t f){
-    static char buf[128]; buf[0] = 0;
+    static _Thread_local char buf[128]; buf[0] = 0;
     static const struct { uint32_t bit; const char *name; } names[] = {
         { LP_CPU_SSE2, "sse2" }, { LP_CPU_SSE41, "sse4.1" }, { LP_CPU_AVX2, "avx2" }, { LP_CPU_AVX512, "avx512" },
         { LP_CPU_VNNI512, "avx512-vnni" }, { LP_CPU_AVXVNNI, "avx-vnni" }, { LP_CPU_AMX, "amx" } };
@@ -57,3 +58,19 @@ const char *lp_cpu_describe(uint32_t f){
     if (!buf[0]) strcpy(buf, "scalar");
     return buf;
 }
+
+/* The kernels, chosen once for the process: the widest each has that the active level allows. */
+static lp_kernel_set kernels;
+static pthread_once_t kernels_once = PTHREAD_ONCE_INIT;
+static void kernels_pick(void){
+    uint32_t f = lp_cpu_active();
+    kernels.scan = lp_scan_scalar; kernels.row_d2 = lp_row_d2_scalar; kernels.interleave = lp_hilbert4_interleave_scalar;
+#if defined(LP_HAVE_AVX2)
+    if (f & LP_CPU_AVX2) { kernels.scan = lp_scan_avx2; kernels.row_d2 = lp_row_d2_avx2; kernels.interleave = lp_hilbert4_interleave_bmi2; }   /* x86-64-v3 includes BMI2 */
+#endif
+#if defined(LP_HAVE_AVX512)
+    if (f & LP_CPU_AVX512) kernels.scan = lp_scan_avx512;
+#endif
+    (void)f;
+}
+const lp_kernel_set *lp_kernels(void){ pthread_once(&kernels_once, kernels_pick); return &kernels; }

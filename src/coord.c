@@ -3,9 +3,20 @@
 #include "internal.h"
 
 void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out){
-    __int128 s[4] = { 0, 0, 0, 0 };
-    for (size_t i = 0; i < n; i++) for (int d = 0; d < 4; d++) s[d] += c[i].m[d];
-    for (int d = 0; d < 4; d++) out->m[d] = n ? lp_div128(s[d], n) : 0;      /* truncated toward zero, as C division is */
+    lp_coord_sum a = { { 0, 0, 0, 0 }, 0 };
+    for (size_t i = 0; i < n; i++) lp_coord_add(&a, c[i].m);
+    lp_coord_mean(&a, out);                                                  /* truncated toward zero, as C division is */
+}
+
+/* A double is on the grid when it is exactly m / 2^53 for an integer m with |m| <= 2^53: the range is checked before
+ * the conversion, so nothing outside it is ever converted. */
+bool lp_coord_of_xyzm(const double x[4], lp_coord *out){
+    for (int d = 0; d < 4; d++) {
+        double m = x[d] * LP_FIXED_ONE;
+        if (!(m >= -LP_FIXED_ONE && m <= LP_FIXED_ONE) || m != (double)(int64_t)m) return false;
+        out->m[d] = (int64_t)m;
+    }
+    return true;
 }
 
 bool lp_coord_inside(const lp_coord *c){
@@ -36,19 +47,10 @@ uint64_t lp_hilbert4_interleave_scalar(const uint64_t X[4]){
     return h;
 }
 
-typedef uint64_t (*interleave_fn)(const uint64_t[4]);
-static interleave_fn pick_interleave(void){
-#if defined(LP_HAVE_AVX2)
-    if (lp_cpu_active() & LP_CPU_AVX2) return lp_hilbert4_interleave_bmi2;            /* x86-64-v3 includes BMI2 */
-#endif
-    return lp_hilbert4_interleave_scalar;
-}
-
 uint64_t lp_hilbert4_grid(const uint32_t g[4]){
-    static interleave_fn inter; if (!inter) inter = pick_interleave();
     uint64_t X[4] = { g[0], g[1], g[2], g[3] };
     hilbert_transpose(X);
-    return inter(X);
+    return lp_kernels()->interleave(X);
 }
 
 /* The grid is taken in IEEE double exactly as tier 0 was generated: floor((x + 1) / 2 * 65536), clamped to
