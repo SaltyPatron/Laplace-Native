@@ -2,6 +2,8 @@
 #include "laplace/laplace.h"
 #include "internal.h"
 
+void lp_coord_mean(const lp_coord_sum *a, lp_coord *out){ for (int d = 0; d < 4; d++) out->m[d] = a->n ? lp_div128(a->s[d], a->n) : 0; }
+
 void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out){
     lp_coord_sum a = { { 0, 0, 0, 0 }, 0 };
     for (size_t i = 0; i < n; i++) lp_coord_add(&a, c[i].m);
@@ -17,6 +19,9 @@ bool lp_coord_of_xyzm(const double x[4], lp_coord *out){
         out->m[d] = (int64_t)m;
     }
     return true;
+}
+void lp_coord_trunc(const double x[4], lp_coord *out){
+    for (int d = 0; d < 4; d++) { double m = x[d] * LP_FIXED_ONE; out->m[d] = m != m ? 0 : m >= LP_FIXED_ONE ? (int64_t)LP_FIXED_ONE : m <= -LP_FIXED_ONE ? -(int64_t)LP_FIXED_ONE : (int64_t)m; }
 }
 
 bool lp_coord_inside(const lp_coord *c){

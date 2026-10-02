@@ -46,11 +46,6 @@ static inline int64_t lp_div128(__int128 s, uint64_t n){
 #endif
     return s < 0 ? -(int64_t)q : (int64_t)q;
 }
-/* The exact integer average: four 128-bit sums, each divided once and truncated toward zero. Every centroid in Laplace
- * is this one (coordinates, compositions, points given as doubles). */
-typedef struct { __int128 s[4]; uint64_t n; } lp_coord_sum;
-static inline void lp_coord_add(lp_coord_sum *a, const int64_t m[4]){ for (int d = 0; d < 4; d++) a->s[d] += m[d]; a->n++; }
-static inline void lp_coord_mean(const lp_coord_sum *a, lp_coord *out){ for (int d = 0; d < 4; d++) out->m[d] = a->n ? lp_div128(a->s[d], a->n) : 0; }
 
 /* A perf-cache file, memory-mapped read-only and shared, for the life of the process. NULL if it is missing or, when
  * want is not 0, not exactly want bytes; *size, when given, its size. */

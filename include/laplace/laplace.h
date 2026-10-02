@@ -110,6 +110,11 @@ typedef struct { int64_t m[4]; } lp_coord;   /* value = m / 2^53 on each axis */
 
 /* The exact integer average of n coordinates, truncated toward zero. */
 LP_API void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out);
+/* The same average taken a coordinate at a time: four 128-bit sums, each divided once when the mean is asked for. Every
+ * centroid in Laplace is this one. */
+typedef struct { __int128 s[4]; uint64_t n; } lp_coord_sum;
+static inline void lp_coord_add(lp_coord_sum *a, const int64_t m[4]){ for (int d = 0; d < 4; d++) a->s[d] += m[d]; a->n++; }
+LP_API void lp_coord_mean(const lp_coord_sum *a, lp_coord *out);         /* 0 when nothing was added */
 /* Inside the wall: m . m <= 2^106, exactly. */
 LP_API bool lp_coord_inside(const lp_coord *c);
 /* 4D Hilbert value on a 16-bit grid over [-1, 1]^4 (Skilling). */
@@ -121,6 +126,8 @@ static inline int64_t lp_hilbert_key(uint64_t h){ return (int64_t)(h ^ 0x8000000
  * outside [-1, 1]). */
 static inline void lp_coord_xyzm(const lp_coord *c, double out[4]){ for (int d = 0; d < 4; d++) out[d] = (double)c->m[d] / LP_FIXED_ONE; }
 LP_API bool lp_coord_of_xyzm(const double x[4], lp_coord *out);
+/* A coordinate from doubles that need not lie on the grid: each truncated toward zero onto it, held to [-1, 1]. */
+LP_API void lp_coord_trunc(const double x[4], lp_coord *out);
 
 /* ---------------------------------------------------------------- IDs written into geometry */
 /* An ID's 128 bits go into the X, Y, Z mantissas (43 + 43 + 42 bits) with exponent -2, so the three values lie in
