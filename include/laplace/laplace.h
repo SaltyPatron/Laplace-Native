@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -89,6 +90,26 @@ LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **
  * that follows it. Matching compares raw vertex bytes; only continuations are decoded. Returns the number of
  * continuations found; at most cap are written. */
 LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
+
+/* ---------------------------------------------------------------- IDs, as every reader meets them */
+/* A path's constituents in order, each run written out. Returns how many there are; at most cap are written. */
+LP_API size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap);
+/* A path's vertices as stored: ID, run and what each is said to be. Returns the vertex count; at most cap written. */
+typedef struct { lp_id id; uint32_t run, said; } lp_vertex;
+LP_API size_t lp_path_vertices(const uint8_t *ewkb, size_t len, lp_vertex *out, size_t cap);
+/* A map keyed by ID, a 32-bit value per ID, in insertion order: put returns the entry's index (fresh: whether it was
+ * added), find returns it or -1. */
+typedef struct lp_idmap lp_idmap;
+LP_API lp_idmap    *lp_idmap_new(void);
+LP_API void         lp_idmap_free(lp_idmap *);
+LP_API size_t       lp_idmap_put(lp_idmap *, const lp_id *id, bool *fresh);
+LP_API int64_t      lp_idmap_find(const lp_idmap *, const lp_id *id);
+LP_API size_t       lp_idmap_count(const lp_idmap *);
+LP_API const lp_id *lp_idmap_key(const lp_idmap *, size_t i);
+LP_API uint32_t    *lp_idmap_value(lp_idmap *, size_t i);
+/* A value the database sends in binary: big-endian, as libpq hands it over. */
+static inline uint64_t lp_be(const void *p, int n){ const uint8_t *b = (const uint8_t *)p; uint64_t u = 0; for (int i = 0; i < n; i++) u = u << 8 | b[i]; return u; }
+static inline double   lp_be_f64(const void *p){ uint64_t u = lp_be(p, 8); double d; memcpy(&d, &u, 8); return d; }
 
 /* ---------------------------------------------------------------- 4D geometry on real coordinates */
 LP_API double lp_distance4(const double a[4], const double b[4]);
