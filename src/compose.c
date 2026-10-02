@@ -13,12 +13,16 @@ lp_ref lp_ref_compose(const lp_ref *ch, size_t n, uint8_t tier){
     if (n == 1) return ch[0];
     lp_ref r; memset(&r, 0, sizeof r); r.tier = tier;
     if (n == 0) return r;
-    blake3_hasher h; blake3_hasher_init(&h); __int128 s[4] = { 0, 0, 0, 0 };
-    for (size_t i = 0; i < n; i++) {
-        blake3_hasher_update(&h, ch[i].id.b, 16);
-        for (int d = 0; d < 4; d++) s[d] += ch[i].c.m[d];
+    __int128 s[4] = { 0, 0, 0, 0 };
+    if (n <= 64) {                                         /* one chunk: the IDs side by side, hashed at once (lp_hash16) */
+        lp_id ids[64];
+        for (size_t i = 0; i < n; i++) { ids[i] = ch[i].id; for (int d = 0; d < 4; d++) s[d] += ch[i].c.m[d]; }
+        lp_hash16(ids, 16 * n, &r.id);
+    } else {
+        blake3_hasher h; blake3_hasher_init(&h);
+        for (size_t i = 0; i < n; i++) { blake3_hasher_update(&h, ch[i].id.b, 16); for (int d = 0; d < 4; d++) s[d] += ch[i].c.m[d]; }
+        blake3_hasher_finalize(&h, r.id.b, 16);
     }
-    blake3_hasher_finalize(&h, r.id.b, 16);
     for (int d = 0; d < 4; d++) r.c.m[d] = lp_div128(s[d], n);
     return r;
 }

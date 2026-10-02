@@ -18,6 +18,9 @@ void lp_row_d2_scalar(const double p[4], const double *bx, const double *by, con
 void lp_row_d2_avx2(const double p[4], const double *bx, const double *by, const double *bz, const double *bm,
                     size_t j0, size_t j1, double *out);
 
+/* The standard BLAKE3 hash of an input, its first 16 bytes (identity.c). */
+void lp_hash16(const void *in, size_t len, lp_id *out);
+
 /* Hilbert bit interleave: bit b of axis i goes to bit 4b + (3 - i). */
 uint64_t lp_hilbert4_interleave_scalar(const uint64_t X[4]);
 uint64_t lp_hilbert4_interleave_bmi2(const uint64_t X[4]);
