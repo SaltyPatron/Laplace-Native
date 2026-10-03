@@ -16,7 +16,13 @@ int main(void){
         for (size_t i = 0; i < n; i++) seq[i] = vocab[next() % k];            /* small alphabets: long runs, many hits */
         size_t np = 1 + next() % 3; lp_id phrase[3];
         for (size_t j = 0; j < np; j++) phrase[j] = vocab[next() % k];
-        size_t len = lp_ewkb_path(seq, n, buf, 1 << 20);
+        size_t len;
+        if (trial & 1) len = lp_ewkb_path(seq, n, buf, 1 << 20);
+        else {                                                                /* each run carrying a value in its spare bits: the same matches */
+            static lp_id rid[5000]; static uint64_t rm[5000]; static uint32_t sp[5000]; size_t nr = 0;
+            for (size_t i = 0; i < n; ) { size_t j = i; while (j < n && !memcmp(&seq[j], &seq[i], 16)) j++; rid[nr] = seq[i]; rm[nr] = j - i; sp[nr] = next() & ((1u << LP_SPARE_BITS) - 1); nr++; i = j; }
+            len = lp_ewkb_runs_spare(rid, rm, sp, nr, buf, 1 << 20);
+        }
         size_t nw = 0;
         for (size_t s = 0; s + np < n; s++) {
             size_t j = 0; while (j < np && !memcmp(&seq[s + j], &phrase[j], 16)) j++;

@@ -6,8 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* A vertex is the key when its X, Y and Z agree on the ID's own bits: the spare bits never decide a match. */
+static int same_id(const uint8_t *v, const uint8_t *key){
+    uint64_t a[3], b[3]; memcpy(a, v, 24); memcpy(b, key, 24);
+    for (int k = 0; k < 3; k++) if ((a[k] ^ b[k]) & lp_xyz_id_mask[k]) return 0;
+    return 1;
+}
 size_t lp_scan_scalar(const uint8_t *v, size_t s, size_t n, const uint8_t key[24]){
-    for (; s < n; s++) if (!memcmp(v + s * LP_VERTEX_BYTES, key, 24)) return s;
+    for (; s < n; s++) if (same_id(v + s * LP_VERTEX_BYTES, key)) return s;
     return n;
 }
 
@@ -38,7 +44,7 @@ size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t n
         for (size_t off = 0; off < r0; off++) {                              /* the phrase may start at any copy */
             size_t vi = i, left = r0 - off, j = 0; bool ok = true;
             while (j < np) {
-                if (memcmp(v + vi * LP_VERTEX_BYTES, key + 24 * j, 24)) { ok = false; break; }
+                if (!same_id(v + vi * LP_VERTEX_BYTES, key + 24 * j)) { ok = false; break; }
                 j++; left--;
                 if (left == 0) { vi++; if (vi >= nv) break; left = (size_t)run_of(v, vi); }
             }

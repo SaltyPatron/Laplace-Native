@@ -50,7 +50,7 @@ size_t lp_path_vertices(const uint8_t *ewkb, size_t len, lp_vertex *out, size_t 
     const uint8_t *vx; size_t nv = lp_ewkb_vertices(ewkb, len, &vx);
     for (size_t i = 0; i < nv && i < cap; i++) {
         double xyz[3], m; memcpy(xyz, vx + 32 * i, 24); memcpy(&m, vx + 32 * i + 24, 8);
-        lp_xyz_to_id(xyz, &out[i].id); out[i].run = lp_m_run(m); out[i].said = lp_m_said(m);
+        lp_xyz_to_id(xyz, &out[i].id); out[i].run = lp_m_run(m); out[i].said = lp_m_said(m); out[i].spare = lp_xyz_spare(xyz);
     }
     return nv;
 }

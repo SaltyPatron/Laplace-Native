@@ -79,6 +79,19 @@ LP_API void lp_xyz_to_id(const double xyz[3], lp_id *out);
 LP_API size_t lp_ewkb_path(const lp_id *children, size_t n, uint8_t *out, size_t cap);
 /* The same path from runs already collapsed: vertex i is ids[i] repeated runs[i] times. */
 LP_API size_t lp_ewkb_runs(const lp_id *ids, const uint64_t *m, size_t nv, uint8_t *out, size_t cap);   /* m: each vertex's M bits as written (lp_m_of) */
+/* The same, each vertex carrying a value in its spare bits (spare[i]; 0 is none; NULL: none at all). */
+LP_API size_t lp_ewkb_runs_spare(const lp_id *ids, const uint64_t *m, const uint32_t *spare, size_t nv, uint8_t *out, size_t cap);
+/* A vertex's spare bits (Identity: the 28 bits of X, Y and Z the 128-bit ID leaves; values from known lists, a small
+ * tag saying which layout): bits 0-3 the layout's tag, 4-27 its payload; 0 is no value. The ID is read through its own
+ * bits only (lp_xyz_id_mask), so a value never changes which entity a vertex is. */
+#define LP_SPARE_BITS     28
+#define LP_SPARE_TAG_BITS 4
+static inline uint32_t lp_spare_of(uint32_t tag, uint32_t payload){ return (tag & 0xF) | (payload << LP_SPARE_TAG_BITS); }
+static inline uint32_t lp_spare_tag(uint32_t v){ return v & 0xF; }
+static inline uint32_t lp_spare_payload(uint32_t v){ return v >> LP_SPARE_TAG_BITS; }
+LP_API extern const uint64_t lp_xyz_id_mask[3];
+LP_API uint32_t lp_xyz_spare(const double xyz[3]);
+LP_API void lp_xyz_spare_set(double xyz[3], uint32_t v);
 /* A POINT ZM of real 4D coordinates, as EWKB (37 bytes). */
 LP_API size_t lp_ewkb_point4(const double xyzm[4], uint8_t *out, size_t cap);
 /* Parse a POINT ZM / LINESTRING ZM path (little-endian EWKB, optional SRID). Returns the vertex count and points
@@ -95,7 +108,7 @@ LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, s
 /* A path's constituents in order, each run written out. Returns how many there are; at most cap are written. */
 LP_API size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap);
 /* A path's vertices as stored: ID, run and what each is said to be. Returns the vertex count; at most cap written. */
-typedef struct { lp_id id; uint32_t run, said; } lp_vertex;
+typedef struct { lp_id id; uint32_t run, said, spare; } lp_vertex;
 LP_API size_t lp_path_vertices(const uint8_t *ewkb, size_t len, lp_vertex *out, size_t cap);
 /* A map keyed by ID, a 32-bit value per ID, in insertion order: put returns the entry's index (fresh: whether it was
  * added), find returns it or -1. */

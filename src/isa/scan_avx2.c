@@ -4,15 +4,16 @@
 
 size_t lp_scan_avx2(const uint8_t *v, size_t s, size_t n, const uint8_t key[24]){
     const __m256i k = _mm256_setr_epi64x(((const int64_t *)key)[0], ((const int64_t *)key)[1], ((const int64_t *)key)[2], 0);
+    const __m256i idm = _mm256_setr_epi64x((int64_t)lp_xyz_id_mask[0], (int64_t)lp_xyz_id_mask[1], (int64_t)lp_xyz_id_mask[2], 0);   /* the spare bits never decide a match */
     for (; s + 4 <= n; s += 4) {
         for (int u = 0; u < 4; u++) {
-            __m256i x = _mm256_loadu_si256((const __m256i *)(v + (s + u) * LP_VERTEX_BYTES));
+            __m256i x = _mm256_and_si256(_mm256_loadu_si256((const __m256i *)(v + (s + u) * LP_VERTEX_BYTES)), idm);
             int mask = _mm256_movemask_pd(_mm256_castsi256_pd(_mm256_cmpeq_epi64(x, k)));
             if ((mask & 7) == 7) return s + u;
         }
     }
     for (; s < n; s++) {
-        __m256i x = _mm256_loadu_si256((const __m256i *)(v + s * LP_VERTEX_BYTES));
+        __m256i x = _mm256_and_si256(_mm256_loadu_si256((const __m256i *)(v + s * LP_VERTEX_BYTES)), idm);
         if ((_mm256_movemask_pd(_mm256_castsi256_pd(_mm256_cmpeq_epi64(x, k))) & 7) == 7) return s;
     }
     return n;
