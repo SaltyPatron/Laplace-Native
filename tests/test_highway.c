@@ -26,11 +26,14 @@ int main(void){
     CHECK(any > 0, "some roleset maps to a class");
     if (any) { CHECK(e[0].to < vn->count, "an edge lands inside the list it names"); }
     (void)n;
-    const lp_mask *km = lp_highway_mask(h, "kind"), *um = lp_highway_mask(h, "upos");
-    CHECK(km && km->bit == 0 && km->width == 8 && um && um->list == upos && um->bit >= 8, "the mask's fields: kind, then the small lists");
-    CHECK(um && lp_highway_mask_bit(h, &noun) == (int32_t)(um->bit + 7), "NOUN's mask bit is its field's first bit plus its slot");
+    const lp_bank *kb = lp_highway_bank(h, "kind"), *ub = lp_highway_bank(h, "upos"), *db = lp_highway_bank(h, "deprel");
+    CHECK(kb && !kb->list && !strcmp(kb->carrier, "row") && kb->width == 8, "kind: the row's own bank, no list");
+    CHECK(ub && ub->list == upos && !strcmp(ub->group, "lexical") && !strcmp(ub->carrier, "entity"), "upos: a lexical bank on the entity");
+    CHECK(db && !strcmp(db->group, "structural") && !strcmp(db->carrier, "occurrence"), "deprel: a structural bank on the occurrence");
+    int32_t bit; const lp_bank *nb = lp_highway_bank_of(h, &noun, &bit);
+    CHECK(nb == ub && bit == 7, "NOUN is bit 7 of the upos bank: its frozen slot");
     lp_id none; memset(&none, 0x5a, 16);
-    CHECK(lp_highway_mask_bit(h, &none) == -1, "no type, no bit");
+    CHECK(lp_highway_bank_of(h, &none, &bit) == NULL && bit == -1, "no type, no bank");
     uint8_t fp[32]; lp_highway_fingerprint(h, fp); int zero = 1; for (int i = 0; i < 32; i++) zero &= fp[i] == 0;
     CHECK(!zero, "a fingerprint");
     DONE("highway");

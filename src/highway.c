@@ -39,11 +39,13 @@ const lp_highway *lp_highway_map(const char *path){
             lp_list *x = &h->list[h->nlists++]; memset(x, 0, sizeof *x);
             snprintf(x->name, sizeof x->name, "%s", name); snprintf(x->say, sizeof x->say, "%s", say); x->first = (uint32_t)strtoul(first, NULL, 10); x->count = (uint32_t)strtoul(count, NULL, 10);
         }
-        else if (kind && !strcmp(kind, "mask")) {
-            char *name = strtok_r(NULL, "\t\n", &save), *bit = strtok_r(NULL, "\t\n", &save), *width = strtok_r(NULL, "\t\n", &save);
-            if (!name || !bit || !width) continue;
-            h->mask = realloc(h->mask, (h->nmasks + 1) * sizeof(lp_mask)); lp_mask *x = &h->mask[h->nmasks++]; memset(x, 0, sizeof *x);
-            snprintf(x->name, sizeof x->name, "%s", name); x->bit = (uint16_t)atoi(bit); x->width = (uint16_t)atoi(width);
+        else if (kind && !strcmp(kind, "bank")) {
+            char *name = strtok_r(NULL, "\t\n", &save), *list = strtok_r(NULL, "\t\n", &save), *group = strtok_r(NULL, "\t\n", &save), *carrier = strtok_r(NULL, "\t\n", &save), *width = strtok_r(NULL, "\t\n", &save);
+            if (!name || !list || !group || !carrier || !width) continue;
+            h->bank = realloc(h->bank, (h->nbanks + 1) * sizeof(lp_bank)); lp_bank *x = &h->bank[h->nbanks++]; memset(x, 0, sizeof *x);
+            snprintf(x->name, sizeof x->name, "%s", name); snprintf(x->group, sizeof x->group, "%s", group); snprintf(x->carrier, sizeof x->carrier, "%s", carrier);
+            x->width = (uint16_t)atoi(width); x->list = NULL;
+            if (strcmp(list, "-")) for (size_t i = 0; i < h->nlists; i++) if (!strcmp(h->list[i].name, list)) x->list = &h->list[i];
         }
         else if (kind && !strcmp(kind, "edges")) {
             char *a = strtok_r(NULL, "\t\n", &save), *b = strtok_r(NULL, "\t\n", &save), *first = strtok_r(NULL, "\t\n", &save), *count = strtok_r(NULL, "\t\n", &save);
@@ -57,7 +59,7 @@ const lp_highway *lp_highway_map(const char *path){
     if (nrec * sizeof(lp_tier0_record) + nedges * sizeof(lp_edge) > (size_t)st.st_size) { munmap(m, (size_t)st.st_size); free(h->list); free(h->edges); free(h); return NULL; }
     snprintf(h->path, sizeof h->path, "%s", path);
     h->rec = m; h->nrec = nrec; h->edge = (const lp_edge *)((const uint8_t *)m + nrec * sizeof(lp_tier0_record)); h->nedges = nedges;
-    for (size_t i = 0; i < h->nmasks; i++) for (size_t j = 0; j < h->nlists; j++) if (!strcmp(h->mask[i].name, h->list[j].name)) h->mask[i].list = &h->list[j];
+    /* a bank names its list after the lists are read: the layout writes the banks last */
     return h;
 }
 
@@ -104,15 +106,16 @@ void lp_highway_fingerprint(const lp_highway *h, uint8_t out[32]){
     blake3_hasher_finalize(&hs, out, 32);
 }
 
-const lp_mask *lp_highway_mask(const lp_highway *h, const char *name){
-    for (size_t i = 0; i < h->nmasks; i++) if (!strcmp(h->mask[i].name, name)) return &h->mask[i];
+const lp_bank *lp_highway_bank(const lp_highway *h, const char *name){
+    for (size_t i = 0; i < h->nbanks; i++) if (!strcmp(h->bank[i].name, name)) return &h->bank[i];
     return NULL;
 }
-int32_t lp_highway_mask_bit(const lp_highway *h, const lp_id *id){
-    int64_t i = lp_highway_slot(h, NULL, id); if (i < 0) return -1;
-    for (size_t k = 0; k < h->nmasks; k++) { const lp_list *l = h->mask[k].list; if (!l) continue;
-        if ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count) { uint32_t slot = (uint32_t)i - l->first; return slot < h->mask[k].width ? (int32_t)(h->mask[k].bit + slot) : -1; } }
-    return -1;
+const lp_bank *lp_highway_bank_of(const lp_highway *h, const lp_id *id, int32_t *bit){
+    int64_t i = lp_highway_slot(h, NULL, id); if (bit) *bit = -1; if (i < 0) return NULL;
+    for (size_t k = 0; k < h->nbanks; k++) { const lp_list *l = h->bank[k].list; if (!l) continue;
+        if ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count) { uint32_t slot = (uint32_t)i - l->first;
+            if (slot >= h->bank[k].width) return NULL; if (bit) *bit = (int32_t)slot; return &h->bank[k]; } }
+    return NULL;
 }
 
 /* the keys: "list\tkey\tslot" lines beside the highway, hashed once on first use */

@@ -1,0 +1,20 @@
+# The frozen slots of the highway list upos (Universal part of speech). A slot never moves: a type no resource lists any longer is
+# retired and keeps its slot; a new type takes the next. Written by laplace highway; never edited by hand.
+slot	id	status	key
+0	d88366c648b9e04d7a2c3365b1921025	live	ADJ
+1	af0ffef4ea543e66eb440600cde48008	live	ADP
+2	4661ecb1adc58907ef220f7bd560b1b1	live	ADV
+3	fb2816b8caf19c768cee0f50124fb26e	live	AUX
+4	6aa88a09d2b2f83eb2abd81f4e283476	live	CCONJ
+5	3b9db121728f188d1fe14e1bf2d6c63f	live	DET
+6	324a71d0710bf5b9350e5ce35a867051	live	INTJ
+7	26e825a928584b6d54e0f4726fd1c2fa	live	NOUN
+8	b11ee2bb764c74cf1b383c30e0638c68	live	NUM
+9	0638166005c4a16869e1ad1902f59404	live	PART
+10	5f4ad059f8799159cba74960aad2f44f	live	PRON
+11	237f9c1c91a7d63298a129553741e362	live	PROPN
+12	de90c1b838e559435b6dd004dc06f922	live	PUNCT
+13	ce673e41d273b28f0044f49868be8974	live	SCONJ
+14	2674c42eb68488811cdf9b002592aa65	live	SYM
+15	2b2dd4196bb8864781537e96d901339c	live	VERB
+16	f7b966d4b544408e21361e62d4d554fe	live	X

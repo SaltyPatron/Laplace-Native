@@ -1,0 +1,14 @@
+# The mask banks: one per semantic group, each a mask of its own on the row its group describes. A value's bit in its
+# bank is its frozen slot in the bank's list (manifest/slots/LIST.tsv), so a bit never moves; width is the room the bank
+# keeps for values still to be appended. Banks are never packed together: what a bit means is its bank's, not its place.
+#   group: lexical (what a word is: part of speech, sense), structural (a role inside a structure: a dependency relation,
+#          a thematic role), kind (what a row is)
+#   carrier: entity (the entity's row), occurrence (a vertex of a layer: the token in its sentence, the argument in its
+#            frame), row (the physicality row itself)
+# Appending a bank, or widening one, is the only change; a bank is never renamed, narrowed or removed.
+bank	list	group	carrier	width
+kind	-	kind	row	8
+upos	upos	lexical	entity	32
+lexfile	lexfile	lexical	entity	64
+deprel	deprel	structural	occurrence	64
+vnrole	vnrole	structural	occurrence	64

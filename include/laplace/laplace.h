@@ -211,10 +211,11 @@ LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
 typedef struct { char name[32], say[64]; uint32_t first, count; } lp_list;          /* first: its first record; count: how many */
 typedef struct { uint32_t from, to; } lp_edge;
 typedef struct { char a[32], b[32]; uint32_t first, count; } lp_edges;              /* edges from list a to list b, sorted by from */
-typedef struct { char name[32]; uint16_t bit, width; const lp_list *list; } lp_mask;   /* a list small enough to be a field of the 256-bit mask: its first bit, one per slot */
+typedef struct { char name[32], group[16], carrier[16]; uint16_t width; const lp_list *list; } lp_bank;   /* a mask of its own: a value's bit is its frozen slot in the list (none for kind) */
 typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
-                 lp_mask *mask; size_t nmasks; uint32_t *by_id; size_t nby; char path[4096]; void *keys; } lp_highway;
-/* The mask's fields (Semantics: Claims, Masks): "kind" (bits 0 to 7: what a row is) and the lists small enough. */
+                 lp_bank *bank; size_t nbanks; uint32_t *by_id; size_t nby; char path[4096]; void *keys; } lp_highway;
+/* The banks (manifest/banks.tsv): one mask per semantic group, on the row the group describes (carrier: entity, occurrence,
+ * row). "kind" is the row's own bank: bits 0 to 7 say what a row is. */
 #define LP_KIND_CLAIM    0
 #define LP_KIND_RECORD   1
 #define LP_KIND_TUPLE    2
@@ -234,11 +235,11 @@ LP_API int64_t lp_highway_slot(const lp_highway *, const lp_list *, const lp_id 
 LP_API size_t lp_highway_edges(const lp_highway *, const char *a, uint32_t slot, const char *b, const lp_edge **out);
 /* The fingerprint of a highway: BLAKE3-256 of its records and edges. */
 LP_API void lp_highway_fingerprint(const lp_highway *, uint8_t out[32]);
-/* The mask bit of a type, by its content's ID: the field of the list it is in, plus its slot; -1 when the ID is no
- * type, or its list is no mask field. O(1). */
-LP_API int32_t lp_highway_mask_bit(const lp_highway *, const lp_id *id);
-/* A mask field by its name (kind, or a list's name); NULL if there is none. */
-LP_API const lp_mask *lp_highway_mask(const lp_highway *, const char *name);
+/* A bank by its name; NULL if there is none. */
+LP_API const lp_bank *lp_highway_bank(const lp_highway *, const char *name);
+/* The bank a type is a value of, by its content's ID, and its bit there (its frozen slot); NULL when the ID is no type
+ * or its list is no bank. O(1). */
+LP_API const lp_bank *lp_highway_bank_of(const lp_highway *, const lp_id *id, int32_t *bit);
 /* The slot of a list a source's own key points at (CILI's i46360, PropBank's abandon.01, a VerbNet class number):
  * from the keys beside the highway (path.keys: list, key, slot), read once; -1 when none. Keys are how a resource
  * points at its types, resolved here and recorded nowhere. */
