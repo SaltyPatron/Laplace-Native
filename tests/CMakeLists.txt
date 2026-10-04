@@ -1,5 +1,5 @@
 # Golden tests: values the prototype established, which the real implementation must reproduce exactly.
-foreach(name identity geometry coord follows consensus shape pull flags highway)
+foreach(name identity geometry coord follows consensus shape s3 pull flags highway)
   add_executable(test_${name} test_${name}.c)
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
@@ -16,6 +16,11 @@ endforeach()
 foreach(isa scalar avx2)
   add_test(NAME shape_${isa} COMMAND test_shape)
   set_tests_properties(shape_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
+endforeach()
+# The S^3 angle kernels, likewise: the batch is checked bit for bit against lp_angle4 one point at a time.
+foreach(isa scalar avx2)
+  add_test(NAME s3_${isa} COMMAND test_s3)
+  set_tests_properties(s3_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
 endforeach()
 
 if(TARGET laplace_text)

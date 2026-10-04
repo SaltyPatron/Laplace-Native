@@ -154,6 +154,33 @@ LP_API double lp_hausdorff4(const double *a, size_t na, const double *b, size_t 
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
+/* ---------------------------------------------------------------- S^3: directions as unit 4-vectors
+ * Points on S^3, not rotations: p and -p are different points (opposite), never identified, except by
+ * lp_eigen_centroid4. Dot products and squared lengths are summed ((x + y) + z) + m, as lp_distance4 sums.
+ *
+ * The angle between the directions of a and b, in radians in [0, pi]: each divided by its length, then
+ * 2 asin(min(chord / 2, 1)). Laplace-postgres's <=>, bit for bit. A zero vector has no direction: NaN. */
+LP_API double lp_angle4(const double a[4], const double b[4]);
+/* out[i] = lp_angle4(q, pts + 4i) for i < n, bit for bit on every ISA. */
+LP_API void lp_angle4_batch(const double q[4], const double *pts, size_t n, double *out);
+/* For unit base and p. The log map: the tangent at base pointing along the geodesic to p, its length the angle
+ * atan2(|p - (base.p) base|, base.p). Zero when p is base, and zero when p is -base (no single geodesic). */
+LP_API void lp_s3_log(const double base[4], const double p[4], double out[4]);
+/* The exp map, its inverse: walk |v| radians from unit base along tangent v (v orthogonal to base). The result is
+ * divided by its length so repeated steps do not drift off the sphere. v = 0 gives base exactly. */
+LP_API void lp_s3_exp(const double base[4], const double v[4], double out[4]);
+/* Spherical interpolation along the geodesic from unit a to unit b (no short-way flip): t = 0 gives a and t = 1 gives
+ * b, exactly. When b is a or -a there is no single geodesic, and the result is a. */
+LP_API void lp_slerp4(const double a[4], const double b[4], double t, double out[4]);
+/* The Karcher (Fréchet) mean of n unit points: the point that minimises the summed squared angles, by gradient steps
+ * through lp_s3_log/lp_s3_exp from the normalised Euclidean mean. Points are visited in one canonical order
+ * (numeric, component by component), so any permutation of them gives the same bits. Converged when a step is under
+ * 1e-12 radians, within 128 steps; false otherwise, or for n = 0 or no memory (out then holds the last estimate). */
+LP_API bool lp_karcher_mean4(const double *pts, size_t n, double out[4]);
+/* Markley's average: the dominant eigenvector of sum p p^T (summed in the canonical order above), by cyclic Jacobi;
+ * unit length, its first nonzero component positive. p and -p count alike. NaN for n = 0 or no memory. */
+LP_API void lp_eigen_centroid4(const double *pts, size_t n, double out[4]);
+
 /* ---------------------------------------------------------------- b beats c given a */
 typedef struct { uint32_t row, col; float score, z; } lp_rowsig_hit;
 typedef struct { uint64_t rows, candidates, above[3], rows_without; double flops; } lp_rowsig_stats;   /* above z = zmin, 4, 5 */
