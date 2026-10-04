@@ -67,6 +67,17 @@ LP_API bool lp_coord_inside(const lp_coord *c);
 /* 4D Hilbert value on a 16-bit grid over [-1, 1]^4 (Skilling). */
 LP_API uint64_t lp_hilbert4(const lp_coord *c);
 LP_API uint64_t lp_hilbert4_grid(const uint32_t g[4]);
+/* The grid coordinate lp_hilbert4 gives a real coordinate x: floor((x + 1) / 2 * 65536), clamped to [0, 65535]
+ * (NaN to 0). */
+LP_API uint32_t lp_hilbert4_axis(double x);
+/* The grid cell of a Hilbert value: lp_hilbert4_grid's inverse. */
+LP_API void lp_hilbert4_decode(uint64_t h, uint32_t g[4]);
+/* The Hilbert values of the grid cells in the box lo..hi (inclusive on each axis), as ranges in ascending order with
+ * adjacent ones merged. At most cap ranges (cap >= 1): when the exact cover needs more, cells along the box's faces
+ * are taken whole, so the ranges always cover the box and may cover cells outside it (a query filters on the
+ * coordinates). Returns the number written; 0 when lo > hi on an axis. */
+typedef struct { uint64_t lo, hi; } lp_hrange;
+LP_API size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange *out, size_t cap);
 
 /* ---------------------------------------------------------------- IDs written into geometry */
 /* An ID's 128 bits go into the X, Y, Z mantissas (43 + 43 + 42 bits) with exponent -2, so the three values lie in
