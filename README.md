@@ -4,9 +4,10 @@ The library with the shared code of Laplace: identity, UTF-8, tier 0, fixed-poin
 
 | Library | Holds | Needs |
 | --- | --- | --- |
-| `laplace` (static and shared) | everything but the two below | BLAKE3 |
+| `laplace` (static and shared) | everything but the three below | BLAKE3 |
 | `laplace_text` | the decomposition of text | ICU 78 (Unicode 17) |
 | `laplace_model` | the model-decomposition kernel | MKL, OpenMP |
+| `laplace_linalg` | Laplacian eigenmaps, Procrustes, Gram-Schmidt (`laplace/linalg.h`) | Eigen 3.4, Spectra 1.x (`LAPLACE_EIGEN_DIR`, `LAPLACE_SPECTRA_DIR`) |
 
 The programs are in [Laplace-Engine](https://github.com/SaltyPatron/Laplace-Engine). The documentation is [Laplace-Wiki](https://github.com/SaltyPatron/Laplace-Wiki), published at <https://saltypatron.github.io/Laplace-Wiki/>.
 
