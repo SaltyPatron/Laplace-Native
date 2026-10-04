@@ -13,7 +13,8 @@ include(cmake/LaplaceFlags.cmake)
 
 # BLAKE3, built with this compiler and every SIMD variant (its own runtime dispatch).
 set(BUILD_SHARED_LIBS OFF)
-if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")            # BLAKE3's CMake knows gcc/clang/MSVC, not icx: same Unix assembly
+if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM" AND NOT WIN32)   # BLAKE3's CMake knows gcc/clang/MSVC, not icx: same Unix assembly
+                                                              # (on Windows icx is MSVC to it, and takes its MASM sources)
   set(BLAKE3_AMD64_ASM_SOURCES blake3_avx2_x86-64_unix.S blake3_avx512_x86-64_unix.S blake3_sse2_x86-64_unix.S blake3_sse41_x86-64_unix.S)
 endif()
 add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3 EXCLUDE_FROM_ALL)
@@ -33,7 +34,7 @@ if(LP_TRUST_CLASS_ROWS STREQUAL "")
 endif()
 configure_file(src/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
 
-set(LP_SOURCES src/cpu.c src/flags.c src/utf8.c src/identity.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
+set(LP_SOURCES src/platform.c src/cpu.c src/flags.c src/utf8.c src/identity.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
                src/tier0.c src/geom4d.c src/pull.c src/highway.c src/trust.c src/ids.c)
 set(LP_ISA_SOURCES src/isa/scan_avx2.c src/isa/scan_avx512.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c)
 set_source_files_properties(src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/hilbert_bmi2.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
@@ -43,7 +44,9 @@ foreach(kind static shared)
   if(kind STREQUAL "static")
     add_library(laplace_static STATIC ${LP_SOURCES} ${LP_ISA_SOURCES})
     set(t laplace_static)
-    set_target_properties(${t} PROPERTIES OUTPUT_NAME laplace)
+    if(NOT WIN32)                                     # on Windows the DLL's import library is laplace.lib
+      set_target_properties(${t} PROPERTIES OUTPUT_NAME laplace)
+    endif()
   else()
     add_library(laplace SHARED ${LP_SOURCES} ${LP_ISA_SOURCES})
     set(t laplace)
@@ -52,9 +55,11 @@ foreach(kind static shared)
                                       PRIVATE src ${LP_GENERATED})
   target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
   target_compile_options(${t} PRIVATE ${LP_C_FLAGS})
-  target_link_libraries(${t} PRIVATE BLAKE3::blake3 m pthread)
+  target_link_libraries(${t} PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
 endforeach()
-target_link_options(laplace PRIVATE -Wl,--exclude-libs,ALL)
+if(NOT WIN32)
+  target_link_options(laplace PRIVATE -Wl,--exclude-libs,ALL)
+endif()
 
 # laplace_text: the one decomposition of text (UAX #29), which needs ICU for the Unicode version tier 0 was built from.
 # ICU's symbols carry its version, so it loads beside the ICU a PostgreSQL server was built with.
@@ -62,10 +67,15 @@ if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
   add_library(laplace_text STATIC src/text.c)
   target_include_directories(laplace_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
-  target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib)
-  target_link_libraries(laplace_text PUBLIC laplace_static icui18n icuuc icudata)
-  # ICU's libraries find each other through the run path of whatever loads them: the old-style tag covers that.
-  target_link_options(laplace_text INTERFACE -Wl,--disable-new-dtags)
+  if(WIN32)                                         # ICU's Windows release: lib64, and its own library names
+    target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib64)
+    target_link_libraries(laplace_text PUBLIC laplace_static icuin icuuc icudt)
+  else()
+    target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib)
+    target_link_libraries(laplace_text PUBLIC laplace_static icui18n icuuc icudata)
+    # ICU's libraries find each other through the run path of whatever loads them: the old-style tag covers that.
+    target_link_options(laplace_text INTERFACE -Wl,--disable-new-dtags)
+  endif()
 else()
   message(WARNING "ICU not found at ${LAPLACE_ICU_DIR}: laplace_text is not built, and neither is anything that decomposes text")
 endif()
@@ -84,7 +94,11 @@ if(DEFINED ENV{MKLROOT} AND OpenMP_C_FOUND)
   add_library(laplace_model STATIC src/rowsig.c)
   target_include_directories(laplace_model PUBLIC $ENV{MKLROOT}/include ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_compile_options(laplace_model PRIVATE ${LP_C_FLAGS})
-  target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/libmkl_rt.so OpenMP::OpenMP_C m)
+  if(WIN32)
+    target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/mkl_rt.lib OpenMP::OpenMP_C)
+  else()
+    target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/libmkl_rt.so OpenMP::OpenMP_C m)
+  endif()
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)

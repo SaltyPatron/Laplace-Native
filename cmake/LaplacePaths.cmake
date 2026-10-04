@@ -1,9 +1,11 @@
 # Where everything Laplace builds against and runs with is. One definition, shared by Laplace-Native, Laplace-postgres,
 # and Laplace-Engine: each value comes from the environment (laplace.env) when it is set there, else from the default
-# here. -D on the command line overrides both.
+# here. -D on the command line overrides both. Every path is kept with forward slashes, which every platform
+# accepts: one compiled into C as a string (LP_TIER0_DEFAULT) must not carry backslash escapes.
 macro(laplace_path var default doc)
   if(DEFINED ENV{${var}} AND NOT "$ENV{${var}}" STREQUAL "")
-    set(${var} "$ENV{${var}}" CACHE PATH "${doc}")
+    file(TO_CMAKE_PATH "$ENV{${var}}" _lp_path)
+    set(${var} "${_lp_path}" CACHE PATH "${doc}")
   else()
     set(${var} "${default}" CACHE PATH "${doc}")
   endif()
