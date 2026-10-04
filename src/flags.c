@@ -1,13 +1,10 @@
 /* The flags that go with tier 0: the records memory-mapped read-only, and their layout read once. */
 #define _GNU_SOURCE
 #include "laplace/laplace.h"
-#include <fcntl.h>
+#include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 _Static_assert(sizeof(lp_flags) == 32, "flags are 256 bits");
 
@@ -32,10 +29,9 @@ const char *lp_flags_path(void){
 
 const lp_layout *lp_flags_map(const char *path){
     if (!path || !*path) path = lp_flags_path();
-    int fd = open(path, O_RDONLY); struct stat st; if (fd < 0) return NULL;
-    if (fstat(fd, &st) != 0 || (size_t)st.st_size != (size_t)LP_NCP * sizeof(lp_flags)) { close(fd); return NULL; }
-    void *m = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0); close(fd); if (m == MAP_FAILED) return NULL;
-    char lp[4200]; snprintf(lp, sizeof lp, "%s.layout", path); FILE *f = fopen(lp, "r"); if (!f) { munmap(m, (size_t)st.st_size); return NULL; }
+    size_t n; const void *m = lp_map_file(path, &n); if (!m) return NULL;
+    if (n != (size_t)LP_NCP * sizeof(lp_flags)) { lp_unmap_file(m, n); return NULL; }
+    char lp[4200]; snprintf(lp, sizeof lp, "%s.layout", path); FILE *f = fopen(lp, "r"); if (!f) { lp_unmap_file(m, n); return NULL; }
     lp_layout *l = calloc(1, sizeof *l); l->flags = m; char *line = NULL; size_t cap = 0; size_t fc = 0, vc = 0;
     while (getline(&line, &cap, f) > 0) {
         if (line[0] == '#') continue;

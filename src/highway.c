@@ -2,13 +2,10 @@
 #define _GNU_SOURCE
 #include "laplace/laplace.h"
 #include "blake3.h"
-#include <fcntl.h>
+#include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 const char *lp_highway_path(void){
     static char path[4096];
@@ -22,10 +19,9 @@ const char *lp_highway_path(void){
  * follow them at the offset the first "edges" line's FIRST gives, as 8-byte pairs. */
 const lp_highway *lp_highway_map(const char *path){
     if (!path || !*path) path = lp_highway_path();
-    int fd = open(path, O_RDONLY); struct stat st; if (fd < 0) return NULL;
-    if (fstat(fd, &st) != 0 || st.st_size < (off_t)sizeof(lp_tier0_record)) { close(fd); return NULL; }
-    void *m = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0); close(fd); if (m == MAP_FAILED) return NULL;
-    char lp[4200]; snprintf(lp, sizeof lp, "%s.layout", path); FILE *f = fopen(lp, "r"); if (!f) { munmap(m, (size_t)st.st_size); return NULL; }
+    size_t n; const void *m = lp_map_file(path, &n); if (!m) return NULL;
+    if (n < sizeof(lp_tier0_record)) { lp_unmap_file(m, n); return NULL; }
+    char lp[4200]; snprintf(lp, sizeof lp, "%s.layout", path); FILE *f = fopen(lp, "r"); if (!f) { lp_unmap_file(m, n); return NULL; }
     lp_highway *h = calloc(1, sizeof *h); char *line = NULL; size_t cap = 0; size_t lc = 0, ec = 0; uint64_t nrec = 0, nedges = 0;
     while (getline(&line, &cap, f) > 0) {
         if (line[0] == '#') continue;
@@ -56,7 +52,7 @@ const lp_highway *lp_highway_map(const char *path){
         }
     }
     free(line); fclose(f);
-    if (nrec * sizeof(lp_tier0_record) + nedges * sizeof(lp_edge) > (size_t)st.st_size) { munmap(m, (size_t)st.st_size); free(h->list); free(h->edges); free(h); return NULL; }
+    if (nrec * sizeof(lp_tier0_record) + nedges * sizeof(lp_edge) > n) { lp_unmap_file(m, n); free(h->list); free(h->edges); free(h); return NULL; }
     snprintf(h->path, sizeof h->path, "%s", path);
     h->rec = m; h->nrec = nrec; h->edge = (const lp_edge *)((const uint8_t *)m + nrec * sizeof(lp_tier0_record)); h->nedges = nedges;
     /* a bank names its list after the lists are read: the layout writes the banks last */

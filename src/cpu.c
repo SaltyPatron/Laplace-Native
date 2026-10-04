@@ -2,26 +2,34 @@
  * testing (scalar, sse2, avx2, avx512), never raise it past what the CPU supports. */
 #include "laplace/laplace.h"
 #include "internal.h"
-#include <cpuid.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _MSC_VER
+#include <intrin.h>
+static void cpuid(uint32_t leaf, uint32_t sub, uint32_t r[4]){ int v[4]; __cpuidex(v, (int)leaf, (int)sub); memcpy(r, v, sizeof v); }
+#else
+#include <cpuid.h>
+static void cpuid(uint32_t leaf, uint32_t sub, uint32_t r[4]){ __cpuid_count(leaf, sub, r[0], r[1], r[2], r[3]); }
+#endif
 
 static uint64_t xgetbv0(void){ uint32_t a, d; __asm__ volatile("xgetbv" : "=a"(a), "=d"(d) : "c"(0)); return ((uint64_t)d << 32) | a; }
 
 uint32_t lp_cpu_features(void){
     static uint32_t cached = 0xFFFFFFFFu;
     if (cached != 0xFFFFFFFFu) return cached;
-    uint32_t a, b, c, d, f = 0;
-    if (!__get_cpuid(1, &a, &b, &c, &d)) return cached = 0;
+    uint32_t r[4], f = 0;
+    cpuid(0, 0, r); uint32_t max = r[0];
+    if (max < 1) return cached = 0;
+    cpuid(1, 0, r); uint32_t c = r[2], d = r[3];
     if (d & (1u << 26)) f |= LP_CPU_SSE2;
     if (c & (1u << 19)) f |= LP_CPU_SSE41;
     bool osxsave = c & (1u << 27), fma = c & (1u << 12);
     uint64_t xcr0 = osxsave ? xgetbv0() : 0;
     bool ymm = (xcr0 & 0x6) == 0x6, zmm = (xcr0 & 0xE6) == 0xE6, tiles = (xcr0 & 0x60000) == 0x60000;
     uint32_t b7 = 0, c7 = 0, d7 = 0, a71 = 0;
-    if (__get_cpuid_max(0, NULL) >= 7) {
-        __cpuid_count(7, 0, a, b7, c7, d7);
-        __cpuid_count(7, 1, a71, b, c, d);
+    if (max >= 7) {
+        cpuid(7, 0, r); b7 = r[1]; c7 = r[2]; d7 = r[3];
+        cpuid(7, 1, r); a71 = r[0];
     }
     if (ymm && fma && (b7 & (1u << 5)) && (b7 & (1u << 8))) f |= LP_CPU_AVX2;                 /* AVX2, BMI2 */
     if (zmm && (b7 & (1u << 16)) && (b7 & (1u << 30)) && (b7 & (1u << 31)) && (b7 & (1u << 17)))
