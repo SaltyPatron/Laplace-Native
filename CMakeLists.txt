@@ -11,6 +11,19 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 include(cmake/LaplacePaths.cmake)
 include(cmake/LaplaceFlags.cmake)
 
+# laplace-math: CORE-MATH's correctly rounded functions under the libm names, built from the pinned CORE-MATH checkout
+# under the same contract, and linked whole ahead of any libm by everything that links Native. One right answer on
+# every CPU and compiler, which vendor libms (Intel's libimf dispatches by CPU) do not give. Tier 0 is generated with
+# it, and so is the gcc build that checks results do not depend on the compiler. lp_crmath is its former name.
+if(LP_FP_COMPILE)
+  if(NOT EXISTS "${LAPLACE_COREMATH}/src/binary64/cos/cos.c")
+    message(FATAL_ERROR "LAPLACE_COREMATH: no CORE-MATH checkout at '${LAPLACE_COREMATH}'")
+  endif()
+  set(CORE_MATH "${LAPLACE_COREMATH}" CACHE PATH "CORE-MATH checkout")
+  add_subdirectory(${LAPLACE_OPERATIONS}/math laplace-math EXCLUDE_FROM_ALL)
+  add_library(lp_crmath ALIAS laplace_math_link)
+endif()
+
 # BLAKE3, built with this compiler and every SIMD variant (its own runtime dispatch).
 set(BUILD_SHARED_LIBS OFF)
 if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM" AND NOT WIN32)   # BLAKE3's CMake knows gcc/clang/MSVC, not icx: same Unix assembly
@@ -56,6 +69,9 @@ foreach(kind static shared)
   target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
   target_compile_options(${t} PRIVATE ${LP_C_FLAGS})
   target_link_libraries(${t} PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
+  if(TARGET laplace::math)                          # everything that links Native takes its libm calls from laplace-math
+    target_link_libraries(${t} PUBLIC laplace::math)
+  endif()
 endforeach()
 if(NOT WIN32)
   target_link_options(laplace PRIVATE -Wl,--exclude-libs,ALL)
@@ -80,25 +96,19 @@ else()
   message(WARNING "ICU not found at ${LAPLACE_ICU_DIR}: laplace_text is not built, and neither is anything that decomposes text")
 endif()
 
-# Correctly rounded sin and cos (CORE-MATH): one right answer on every CPU and compiler, which vendor libms
-# (Intel's libimf dispatches by CPU) do not give. Tier 0 is generated with them.
-if(EXISTS "${LAPLACE_COREMATH}/src/binary64/sin/sin.c")
-  add_library(lp_crmath STATIC ${LAPLACE_COREMATH}/src/binary64/sin/sin.c ${LAPLACE_COREMATH}/src/binary64/cos/cos.c)
-  target_compile_options(lp_crmath PRIVATE -w ${LP_C_FLAGS})
-endif()
-
 # laplace_model: the model-decomposition kernels, which need MKL and OpenMP; kept out of the core library so the
-# PostgreSQL extension does not depend on them.
+# PostgreSQL extension does not depend on them. MKL through its own CMake package (on CMAKE_PREFIX_PATH in the oneAPI
+# dev shell on both platforms), as the single dynamic library mkl_rt; reproducible mode is pinned in rowsig.c.
 find_package(OpenMP)
-if(DEFINED ENV{MKLROOT} AND OpenMP_C_FOUND)
+set(MKL_LINK sdl)
+find_package(MKL CONFIG QUIET)
+if(MKL_FOUND AND OpenMP_C_FOUND)
   add_library(laplace_model STATIC src/rowsig.c)
-  target_include_directories(laplace_model PUBLIC $ENV{MKLROOT}/include ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_include_directories(laplace_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_compile_options(laplace_model PRIVATE ${LP_C_FLAGS})
-  if(WIN32)
-    target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/mkl_rt.lib OpenMP::OpenMP_C)
-  else()
-    target_link_libraries(laplace_model PUBLIC $ENV{MKLROOT}/lib/libmkl_rt.so OpenMP::OpenMP_C m)
-  endif()
+  target_link_libraries(laplace_model PUBLIC MKL::MKL OpenMP::OpenMP_C ${LP_SYSLIBS})
+else()
+  message(STATUS "laplace_model not built: MKL ${MKL_FOUND}, OpenMP ${OpenMP_C_FOUND} (run from the oneAPI dev shell)")
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)

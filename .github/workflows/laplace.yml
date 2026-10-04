@@ -1,6 +1,7 @@
 # Laplace-Native on its runner: built with icx (the primary compiler) and with gcc (the check that results do not
 # depend on the compiler), its tests run under both. The runner's environment (runner/.env, from agents.sh) names its
-# build root and the machine's dependency sources and ICU; nothing else is needed.
+# build root and the machine's dependency sources and ICU. Laplace-Operations is checked out beside the code: the
+# floating-point contract and laplace-math are its.
 name: Laplace-Native
 on:
   workflow_dispatch:
@@ -14,10 +15,12 @@ jobs:
       matrix: { preset: [icx-release, gcc-release] }
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Operations", path: .operations/Laplace-Operations, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: build (${{ matrix.preset }})
         run: |
           . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
-          export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc)
+          export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc) LAPLACE_OPERATIONS=$GITHUB_WORKSPACE/.operations/Laplace-Operations
           cmake --preset ${{ matrix.preset }}
           cmake --build --preset ${{ matrix.preset }}
       - name: tests (${{ matrix.preset }})

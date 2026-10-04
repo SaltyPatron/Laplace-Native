@@ -147,6 +147,9 @@ typedef struct { uint64_t rows, candidates, above[3], rows_without; double flops
  * the candidates above mean + zmin * sd (at most cap per row, highest first). Returns the hits written. Needs MKL. */
 LP_API size_t lp_rowsig(const float *A, size_t m, const float *B, size_t n, size_t r, float scale, float zmin, uint32_t cap,
                         lp_rowsig_hit *out, size_t out_cap, lp_rowsig_stats *stats);
+/* Pins MKL to one reproducible code path (CNR: AVX2, strict), the same bits on every machine; lp_rowsig calls it.
+ * Anything else that calls MKL calls it first, before any MKL function. Returns false if MKL refused. Needs MKL. */
+LP_API int lp_mkl_reproducible(void);
 
 /* ---------------------------------------------------------------- consensus: Glicko-2 */
 typedef struct { double rating, deviation, volatility; } lp_rating;

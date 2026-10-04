@@ -19,5 +19,6 @@ laplace_path(LAPLACE_ICU_DIR    "${LAPLACE_DEPS}/icu78"           "ICU 78 instal
 laplace_path(LAPLACE_PG_DIR     "/usr/local/pgsql"                "PostgreSQL install")
 laplace_path(LAPLACE_BLAKE3_DIR "${LAPLACE_SRC}/blake3/c"         "BLAKE3 C sources")
 laplace_path(LAPLACE_COREMATH   "${LAPLACE_SRC}/core-math"        "CORE-MATH sources")
+laplace_path(LAPLACE_OPERATIONS "${LAPLACE_SRC}/Laplace-Operations" "Laplace-Operations: the floating-point contract and laplace-math")
 laplace_path(LAPLACE_TREESITTER "${LAPLACE_SRC}/tree-sitter"      "tree-sitter runtime")
 laplace_path(LAPLACE_UCD        "/vault/Data/UCD"                 "the Unicode data tier 0 is generated from")

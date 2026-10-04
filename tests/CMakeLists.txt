@@ -24,3 +24,11 @@ if(TARGET laplace_text)
     set_tests_properties(text PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LAPLACE_ICU_DIR}/bin64")
   endif()
 endif()
+
+# rowsig needs MKL: its hash is golden across machines, which MKL gives only in reproducible mode.
+if(TARGET laplace_model)
+  add_executable(test_rowsig test_rowsig.c)
+  target_link_libraries(test_rowsig PRIVATE laplace_model laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
+  target_compile_options(test_rowsig PRIVATE ${LP_C_FLAGS})
+  add_test(NAME rowsig COMMAND test_rowsig)
+endif()
