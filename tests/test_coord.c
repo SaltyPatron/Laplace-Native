@@ -34,5 +34,58 @@ int main(void){
           wrong += lp_div128(s, n) != (int64_t)(s / (__int128)n);
       }
       CHECK(wrong == 0, "%zu quotients differ from __int128 division", wrong); }
+
+    /* Hilbert decode is the encode's inverse: on every tier-0 point and on a million grid cells */
+    { size_t bad = 0;
+      for (uint32_t cp = 0; cp < LP_NCP; cp++) {
+          uint32_t g[4], e[4]; lp_hilbert4_decode(t0[cp].hilbert, g);
+          for (int d = 0; d < 4; d++) e[d] = lp_hilbert4_axis((double)t0[cp].m[d] / LP_FIXED_ONE);
+          bad += memcmp(g, e, sizeof g) != 0;
+      }
+      CHECK(bad == 0, "%zu tier-0 Hilbert values decode to another cell", bad);
+      uint64_t x = 0x2545F4914F6CDD1Dull; bad = 0;
+      for (int i = 0; i < 1000000; i++) {
+          x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+          uint32_t g[4] = { (uint32_t)(x & 0xffff), (uint32_t)(x >> 16 & 0xffff), (uint32_t)(x >> 32 & 0xffff), (uint32_t)(x >> 48) }, r[4];
+          uint64_t h = lp_hilbert4_grid(g); lp_hilbert4_decode(h, r);
+          bad += memcmp(g, r, sizeof g) != 0;
+          lp_hilbert4_decode(x, r); bad += lp_hilbert4_grid(r) != x;           /* and the other way round */
+      }
+      CHECK(bad == 0, "%zu grid cells or values do not round-trip", bad); }
+
+    /* Box to ranges: ascending, disjoint, within the budget, covering every cell of the box; exact when the budget
+     * allows (small boxes, every cell counted) */
+    { uint64_t x = 0x9E3779B97F4A7C15ull; size_t bad_order = 0, over = 0, missed = 0, inexact = 0;
+      static lp_hrange r[1024];
+      for (int t = 0; t < 2000; t++) {
+          uint32_t lo[4], hi[4]; uint64_t cells = 1;
+          int small = t % 2;
+          for (int d = 0; d < 4; d++) {
+              x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+              uint32_t w = small ? (uint32_t)(x % 6) : (uint32_t)(x % 20000);
+              lo[d] = (uint32_t)((x >> 20) % (65536 - w)); hi[d] = lo[d] + w; cells *= (uint64_t)w + 1;
+          }
+          size_t cap = small ? 1024 : (size_t[]){ 1, 8, 64, 512 }[t / 2 % 4];
+          size_t n = lp_hilbert4_ranges(lo, hi, r, cap);
+          over += n == 0 || n > cap;
+          uint64_t total = 0;
+          for (size_t i = 0; i < n; i++) { bad_order += r[i].lo > r[i].hi || (i && r[i].lo <= r[i - 1].hi + 1 && r[i - 1].hi != UINT64_MAX); total += r[i].hi - r[i].lo + 1; }
+          if (small && total != cells) inexact++;
+          for (int s = 0; s < 200; s++) {                                     /* cells of the box fall in a range */
+              uint32_t g[4];
+              for (int d = 0; d < 4; d++) { x ^= x << 13; x ^= x >> 7; x ^= x << 17; g[d] = lo[d] + (uint32_t)(x % ((uint64_t)hi[d] - lo[d] + 1)); }
+              uint64_t h = lp_hilbert4_grid(g); int in = 0;
+              for (size_t i = 0; i < n && !in; i++) in = h >= r[i].lo && h <= r[i].hi;
+              missed += !in;
+          }
+      }
+      CHECK(bad_order == 0, "%zu ranges out of order, overlapping or touching", bad_order);
+      CHECK(over == 0, "%zu boxes gave no ranges or more than the budget", over);
+      CHECK(missed == 0, "%zu cells of a box outside its ranges", missed);
+      CHECK(inexact == 0, "%zu small boxes not covered exactly", inexact);
+      uint32_t a[4] = { 5, 5, 5, 5 }, b[4] = { 4, 9, 9, 9 };
+      CHECK(lp_hilbert4_ranges(b, a, r, 8) == 0, "an empty box gives no ranges");
+      uint32_t z[4] = { 0, 0, 0, 0 }, f[4] = { 65535, 65535, 65535, 65535 };
+      CHECK(lp_hilbert4_ranges(z, f, r, 8) == 1 && r[0].lo == 0 && r[0].hi == UINT64_MAX, "the whole grid is one range"); }
     DONE("coord");
 }

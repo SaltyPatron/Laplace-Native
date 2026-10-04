@@ -148,6 +148,26 @@ size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double ep
     return r;
 }
 
+/* Discrete Hausdorff distance between the vertex sets of a and b: the largest of each vertex's least squared gap to
+ * the other set, both ways, from one pass of squared-distance rows (each gap computed once, in the one summation
+ * order), then its root. */
+double lp_hausdorff4(const double *a, size_t na, const double *b, size_t nb){
+    if (!na || !nb) return INFINITY;
+    static row_fn row; if (!row) row = pick_row();
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 2 * nb, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    double *c = bm + nb, *col = c + nb, h = 0;
+    for (size_t j = 0; j < nb; j++) col[j] = INFINITY;
+    for (size_t i = 0; i < na; i++) {
+        row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
+        double m = INFINITY;
+        for (size_t j = 0; j < nb; j++) { if (c[j] < m) m = c[j]; if (c[j] < col[j]) col[j] = c[j]; }
+        if (m > h) h = m;
+    }
+    for (size_t j = 0; j < nb; j++) if (col[j] > h) h = col[j];
+    free(mem);
+    return sqrt(h);
+}
+
 /* The exact centroid of 4D points given as doubles that are fixed-point values m / 2^53. */
 bool lp_centroid4_exact(const double *p, size_t n, double out[4]){
     if (!n) return false;

@@ -25,5 +25,22 @@ int main(void){
     CHECK(lp_dtw4(a, N, b, N + 1, &steps) == 0 && steps == N + 1, "a repeat is nothing to DTW");
     CHECK(lp_edr4(a, N, b, N + 1, 0.1) == 1, "a repeat is one edit");
     CHECK(lp_frechet4_outliers(a, N, b, N, 0) == lp_frechet4(a, N, b, N), "no outliers allowed is Frechet");
+    CHECK(lp_hausdorff4(a, N, b, N + 1) == 0, "a repeat is nothing to Hausdorff");
+
+    for (int i = 0; i < N; i++) memcpy(b + 4 * i, a + 4 * (N - 1 - i), 4 * sizeof(double));       /* reversed */
+    CHECK(lp_hausdorff4(a, N, b, N) == 0, "a reversal is nothing to Hausdorff");
+    CHECK(lp_frechet4(a, N, b, N) > 0, "but it is to Frechet");
+    memcpy(b, a, sizeof a); for (int d = 0; d < 4; d++) b[4 * 30 + d] = 5.0 + d;
+    double h = lp_hausdorff4(a, N, b, N), hb = lp_hausdorff4(b, N, a, N);
+    CHECK(h > 4.0 && h <= lp_frechet4(a, N, b, N), "a stray vertex sets Hausdorff, which is at most Frechet (%g)", h);
+    CHECK(h == hb, "Hausdorff is symmetric, bit for bit");
+    { double brute = 0;                                                                    /* against the definition */
+      for (int w = 0; w < 2; w++) {
+          const double *p = w ? b : a, *q = w ? a : b;
+          for (int i = 0; i < N; i++) { double m = INFINITY;
+              for (int j = 0; j < N; j++) { double dx = p[4*i] - q[4*j], dy = p[4*i+1] - q[4*j+1], dz = p[4*i+2] - q[4*j+2], dm = p[4*i+3] - q[4*j+3];
+                  double d2 = ((dx * dx + dy * dy) + dz * dz) + dm * dm; if (d2 < m) m = d2; }
+              if (m > brute) brute = m; } }
+      CHECK(h == sqrt(brute), "Hausdorff equals its definition, bit for bit"); }
     DONE("shape");
 }
