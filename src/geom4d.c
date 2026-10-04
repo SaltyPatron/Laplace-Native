@@ -28,10 +28,14 @@ void lp_row_d2_scalar(const double p[4], const double *bx, const double *by, con
 
 typedef void (*row_fn)(const double *, const double *, const double *, const double *, const double *, size_t, size_t, double *);
 static row_fn pick_row(void){
-#if defined(LP_HAVE_AVX2)
-    if (lp_cpu_active() & LP_CPU_AVX2) return lp_row_d2_avx2;
+    uint32_t f = lp_cpu_active();
+#if defined(LP_HAVE_AVX512)
+    if (f & LP_CPU_AVX512) return lp_row_d2_avx512;
 #endif
-    return lp_row_d2_scalar;
+#if defined(LP_HAVE_AVX2)
+    if (f & LP_CPU_AVX2) return lp_row_d2_avx2;
+#endif
+    (void)f; return lp_row_d2_scalar;
 }
 
 /* Discrete Fréchet distance (Eiter and Mannila) between 4D vertex sequences a (na x 4) and b (nb x 4), row by row

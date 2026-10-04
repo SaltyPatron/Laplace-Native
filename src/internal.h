@@ -17,6 +17,22 @@ void lp_row_d2_scalar(const double p[4], const double *bx, const double *by, con
                       size_t j0, size_t j1, double *out);
 void lp_row_d2_avx2(const double p[4], const double *bx, const double *by, const double *bz, const double *bm,
                     size_t j0, size_t j1, double *out);
+void lp_row_d2_avx512(const double p[4], const double *bx, const double *by, const double *bz, const double *bm,
+                      size_t j0, size_t j1, double *out);
+
+/* int8 dot kernels: the sum of a[i] * b[i] modulo 2^32 (exact while n <= 131071), and a batch of rows against one
+ * query, out[r] = dot(q, rows + r * stride, n). The VNNI kernels take a ^ 0x80 = a + 128 as vpdpbusd's unsigned side
+ * and subtract 128 * sum(b), itself a vpdpbusd of 0x80 bytes with b: every partial sum wraps alike, so all agree. */
+int32_t lp_dot_i8_scalar(const int8_t *a, const int8_t *b, size_t n);
+int32_t lp_dot_i8_avx2(const int8_t *a, const int8_t *b, size_t n);
+int32_t lp_dot_i8_avxvnni(const int8_t *a, const int8_t *b, size_t n);
+int32_t lp_dot_i8_avx512(const int8_t *a, const int8_t *b, size_t n);
+int32_t lp_dot_i8_avx512vnni(const int8_t *a, const int8_t *b, size_t n);
+void lp_dot_i8_batch_scalar(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+void lp_dot_i8_batch_avx2(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+void lp_dot_i8_batch_avxvnni(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+void lp_dot_i8_batch_avx512(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+void lp_dot_i8_batch_avx512vnni(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
 
 /* The standard BLAKE3 hash of an input, its first 16 bytes (identity.c). */
 void lp_hash16(const void *in, size_t len, lp_id *out);

@@ -154,6 +154,13 @@ LP_API double lp_hausdorff4(const double *a, size_t na, const double *b, size_t 
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
+/* ---------------------------------------------------------------- quantized rows */
+/* The int8 dot product of a and b: the sum of a[i] * b[i] modulo 2^32, which is exact while n <= 131071. Integer
+ * arithmetic, so the same value at every dispatch level (AVX-512 VNNI, AVX-VNNI, AVX-512, AVX2, scalar). */
+LP_API int32_t lp_dot_i8(const int8_t *a, const int8_t *b, size_t n);
+/* One query against nrows rows of n bytes, stride bytes apart: out[r] = lp_dot_i8(q, rows + r * stride, n). */
+LP_API void lp_dot_i8_batch(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+
 /* ---------------------------------------------------------------- b beats c given a */
 typedef struct { uint32_t row, col; float score, z; } lp_rowsig_hit;
 typedef struct { uint64_t rows, candidates, above[3], rows_without; double flops; } lp_rowsig_stats;   /* above z = zmin, 4, 5 */

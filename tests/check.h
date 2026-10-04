@@ -1,8 +1,10 @@
 /* A minimal test harness: CHECK counts failures, and the test exits nonzero if any failed. */
 #ifndef LP_CHECK_H
 #define LP_CHECK_H
+#include "laplace/laplace.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int lp_failures = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { lp_failures++; fprintf(stderr, "FAIL %s:%d: ", __FILE__, __LINE__); \
@@ -11,4 +13,15 @@ static int lp_failures = 0;
 
 static inline void lp_hex(const unsigned char *b, int n, char *out){ static const char *H = "0123456789abcdef";
     for (int i = 0; i < n; i++) { out[2 * i] = H[b[i] >> 4]; out[2 * i + 1] = H[b[i] & 15]; } out[2 * n] = 0; }
+
+/* A test run at a dispatch level (LAPLACE_ISA) this CPU does not have is skipped (77), not run at a lower level. */
+#define LP_SKIP 77
+static inline void lp_isa_or_skip(void){
+    const char *w = getenv("LAPLACE_ISA"); uint32_t f = lp_cpu_features();
+    uint32_t need = !w ? 0 : !strcmp(w, "sse2") ? LP_CPU_SSE2 : !strcmp(w, "avx2") ? LP_CPU_AVX2
+                  : !strcmp(w, "avxvnni") ? (LP_CPU_AVX2 | LP_CPU_AVXVNNI) : !strcmp(w, "avx512") ? LP_CPU_AVX512
+                  : !strcmp(w, "avx512vnni") ? (LP_CPU_AVX512 | LP_CPU_VNNI512) : 0;
+    printf("dispatch: %s", lp_cpu_describe(lp_cpu_active())); printf(" (cpu: %s)\n", lp_cpu_describe(f));   /* one buffer */
+    if ((f & need) != need) { printf("skipped: no %s on this CPU\n", w); exit(LP_SKIP); }
+}
 #endif

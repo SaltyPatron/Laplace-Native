@@ -1,5 +1,5 @@
 # Golden tests: values the prototype established, which the real implementation must reproduce exactly.
-foreach(name identity geometry coord follows consensus shape pull flags highway)
+foreach(name identity geometry coord follows consensus shape pull flags highway kernels)
   add_executable(test_${name} test_${name}.c)
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
@@ -7,15 +7,27 @@ foreach(name identity geometry coord follows consensus shape pull flags highway)
   add_test(NAME ${name} COMMAND test_${name})
 endforeach()
 
-# The matching kernels must agree with each other: run the matching test at every dispatch level this CPU has.
-foreach(isa scalar sse2 avx2)
-  add_test(NAME follows_${isa} COMMAND test_follows)
-  set_tests_properties(follows_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
-endforeach()
-# The squared-distance rows under the shape measures, likewise: Hausdorff is checked bit for bit against its definition.
-foreach(isa scalar avx2)
-  add_test(NAME shape_${isa} COMMAND test_shape)
-  set_tests_properties(shape_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
+# The dispatched kernels must equal the scalar path at every dispatch level: continuation matching (scan), the
+# squared-distance rows under the shape measures, and the int8 dot. A level this CPU lacks is skipped (exit 77). The
+# AVX-512 levels run under Intel SDE as a Sapphire Rapids when LAPLACE_SDE names its sde executable (cache variable
+# or environment), and natively, or skipped, otherwise.
+set(LAPLACE_SDE "" CACHE FILEPATH "Intel SDE's sde executable, to run the AVX-512 dispatch levels")
+set(lp_sde "${LAPLACE_SDE}")
+if(NOT lp_sde AND DEFINED ENV{LAPLACE_SDE})
+  set(lp_sde "$ENV{LAPLACE_SDE}")
+endif()
+if(lp_sde AND NOT EXISTS "${lp_sde}")
+  message(FATAL_ERROR "LAPLACE_SDE: no file at '${lp_sde}'")
+endif()
+foreach(name follows shape kernels)
+  foreach(isa scalar sse2 avx2 avxvnni avx512 avx512vnni)
+    if(isa MATCHES "^avx512" AND lp_sde)
+      add_test(NAME ${name}_${isa} COMMAND ${lp_sde} -spr -- $<TARGET_FILE:test_${name}>)
+    else()
+      add_test(NAME ${name}_${isa} COMMAND test_${name})
+    endif()
+    set_tests_properties(${name}_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}" SKIP_RETURN_CODE 77)
+  endforeach()
 endforeach()
 
 if(TARGET laplace_text)

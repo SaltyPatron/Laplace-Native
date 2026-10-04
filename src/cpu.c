@@ -1,5 +1,6 @@
 /* CPU feature detection and the dispatch level. Every ISA the CPU has is used; LAPLACE_ISA may lower the level for
- * testing (scalar, sse2, avx2, avx512), never raise it past what the CPU supports. */
+ * testing (scalar, sse2, avx2, avxvnni, avx512, avx512vnni), never raise it past what the CPU supports. avx2 is
+ * x86-64-v3 alone (hart-server's Broadwell-E); avx512 is x86-64-v4 without either VNNI (Skylake-SP). */
 #include "laplace/laplace.h"
 #include "internal.h"
 #include <stdlib.h>
@@ -48,8 +49,10 @@ uint32_t lp_cpu_active(void){
     if (want) {
         uint32_t cap = !strcmp(want, "scalar") ? 0
                      : !strcmp(want, "sse2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41)
-                     : !strcmp(want, "avx2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVXVNNI)
-                     : 0xFFFFFFFFu;
+                     : !strcmp(want, "avx2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2)
+                     : !strcmp(want, "avxvnni") ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVXVNNI)
+                     : !strcmp(want, "avx512") ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVX512)
+                     : 0xFFFFFFFFu;                                                         /* avx512vnni: all */
         f &= cap;
     }
     return cached = f;
