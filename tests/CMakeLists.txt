@@ -12,6 +12,11 @@ foreach(isa scalar sse2 avx2)
   add_test(NAME follows_${isa} COMMAND test_follows)
   set_tests_properties(follows_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
 endforeach()
+# The squared-distance rows under the shape measures, likewise: Hausdorff is checked bit for bit against its definition.
+foreach(isa scalar avx2)
+  add_test(NAME shape_${isa} COMMAND test_shape)
+  set_tests_properties(shape_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
+endforeach()
 
 if(TARGET laplace_text)
   add_executable(test_text test_text.c)

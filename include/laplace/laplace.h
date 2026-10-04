@@ -143,11 +143,14 @@ LP_API double lp_distance4(const double a[4], const double b[4]);
  *   Fréchet, k out     the same, with up to k interior vertices of each sequence skipped
  *   DTW                the sum of gaps along the best walk: a stray vertex adds its distance once; repeats are absorbed
  *   EDR                the number of edits between them, vertices within eps of each other counting as equal: a stray
- *                      vertex costs one edit, and so does a repeat */
+ *                      vertex costs one edit, and so does a repeat
+ *   Hausdorff          the farthest any vertex of either lies from the other's vertices: order is ignored, so a
+ *                      reversal or a reordering is nothing, and one stray vertex sets it */
 LP_API double lp_frechet4(const double *a, size_t na, const double *b, size_t nb);
 LP_API double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t nb, unsigned k);
 LP_API double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *steps);   /* steps: the walk's length */
 LP_API size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double eps);
+LP_API double lp_hausdorff4(const double *a, size_t na, const double *b, size_t nb);
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
