@@ -86,6 +86,15 @@ int main(void){
       uint32_t a[4] = { 5, 5, 5, 5 }, b[4] = { 4, 9, 9, 9 };
       CHECK(lp_hilbert4_ranges(b, a, r, 8) == 0, "an empty box gives no ranges");
       uint32_t z[4] = { 0, 0, 0, 0 }, f[4] = { 65535, 65535, 65535, 65535 };
-      CHECK(lp_hilbert4_ranges(z, f, r, 8) == 1 && r[0].lo == 0 && r[0].hi == UINT64_MAX, "the whole grid is one range"); }
+      CHECK(lp_hilbert4_ranges(z, f, r, 8) == 1 && r[0].lo == 0 && r[0].hi == UINT64_MAX, "the whole grid is one range");
+      /* Exact at the smallest budgets: the budget is not what limits refinement */
+      CHECK(lp_hilbert4_ranges(z, z, r, 1) == 1 && r[0].lo == lp_hilbert4_grid(z) && r[0].hi == r[0].lo, "one cell, budget 1: that cell");
+      uint32_t p[4] = { 32767, 0, 0, 0 }, q[4] = { 32768, 0, 0, 0 };          /* two cells either side of the coarsest split */
+      uint64_t hp = lp_hilbert4_grid(p), hq = lp_hilbert4_grid(q);
+      size_t n2 = lp_hilbert4_ranges(p, q, r, 2);
+      CHECK(n2 == 2 && r[0].lo == r[0].hi && r[1].lo == r[1].hi && r[0].lo == (hp < hq ? hp : hq) && r[1].lo == (hp < hq ? hq : hp),
+            "two cells across the top split, budget 2: those two cells");
+      CHECK(lp_hilbert4_ranges(p, q, r, 1) == 1 && r[0].lo == (hp < hq ? hp : hq) && r[0].hi == (hp < hq ? hq : hp),
+            "the same with budget 1: the one gap closed, nothing wider"); }
     DONE("coord");
 }

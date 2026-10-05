@@ -100,15 +100,21 @@ size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange 
     for (int d = 0; d < 4; d++) if (lo[d] > hi[d] || lo[d] > 65535u) return 0;
     if (cap == 0) return 0;
     uint32_t h4[4]; for (int d = 0; d < 4; d++) h4[d] = hi[d] > 65535u ? 65535u : hi[d];
-    /* The level loop keeps full ranges plus crossing cells within 4 cap + 16, so these never grow. */
+    /* The level loop keeps full ranges plus crossing cells within room, so these never grow. The room is the work
+     * bound, not the budget: a box whose exact cover fits it is refined to the exact cover whatever cap is, and the
+     * budget is met afterwards by closing gaps, so a small box is exact whenever its cell count fits cap. */
     size_t n = 0, ncross = 1, room = cap * 4 + 16;
+    if (room < LP_HRANGE_WORK) room = LP_HRANGE_WORK;
     lp_hrange *full = malloc(sizeof *full * room);
     cell *cross = malloc(sizeof *cross * room), *next = malloc(sizeof *next * room);
-    if (!full || !cross || !next) { free(full); free(cross); free(next); return 0; }
+    if (!full || !cross || !next) {                     /* no memory: the whole space, which covers; never an empty answer */
+        free(full); free(cross); free(next);
+        out[0].lo = 0; out[0].hi = UINT64_MAX; return 1;
+    }
     cross[0].prefix = 0;
     int level = 0;
     for (; level < 16 && ncross; level++) {
-        if (n + ncross * 16 > cap * 4) break;   /* the next level could need more ranges than gaps can be closed for */
+        if (n + ncross * 16 > room) break;      /* the next level could need more cells than there is room for */
         int shift = 4 * (15 - level);                              /* low bits of a child's first value */
         uint32_t side = 1u << (15 - level);
         size_t nn = 0;
