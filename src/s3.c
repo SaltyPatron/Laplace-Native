@@ -31,18 +31,9 @@ void lp_half_chord_scalar(const double u[4], const double *pts, size_t i0, size_
     for (size_t i = i0; i < n; i++) { double v[4]; dir4(pts + 4 * i, v); out[i] = lp_distance4(u, v) / 2.0; }
 }
 
-typedef void (*half_chord_fn)(const double *, const double *, size_t, size_t, double *);
-static half_chord_fn pick_half_chord(void){
-#if defined(LP_HAVE_AVX2)
-    if (lp_cpu_active() & LP_CPU_AVX2) return lp_half_chord_avx2;
-#endif
-    return lp_half_chord_scalar;
-}
-
 void lp_angle4_batch(const double q[4], const double *pts, size_t n, double *out){
-    static half_chord_fn kernel; if (!kernel) kernel = pick_half_chord();
     double u[4]; dir4(q, u);
-    kernel(u, pts, 0, n, out);
+    lp_kernels()->half_chord(u, pts, 0, n, out);
     for (size_t i = 0; i < n; i++) out[i] = angle_of_half_chord(out[i]);   /* one libm, whichever kernel ran */
 }
 

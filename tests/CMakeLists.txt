@@ -1,5 +1,5 @@
 # Golden tests: values the prototype established, which the real implementation must reproduce exactly.
-foreach(name identity geometry coord follows consensus shape s3 pull flags highway)
+foreach(name identity geometry coord follows consensus shape s3 pull flags highway core)
   add_executable(test_${name} test_${name}.c)
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
@@ -7,20 +7,14 @@ foreach(name identity geometry coord follows consensus shape s3 pull flags highw
   add_test(NAME ${name} COMMAND test_${name})
 endforeach()
 
-# The matching kernels must agree with each other: run the matching test at every dispatch level this CPU has.
-foreach(isa scalar sse2 avx2)
-  add_test(NAME follows_${isa} COMMAND test_follows)
-  set_tests_properties(follows_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
-endforeach()
-# The squared-distance rows under the shape measures, likewise: Hausdorff is checked bit for bit against its definition.
-foreach(isa scalar avx2)
-  add_test(NAME shape_${isa} COMMAND test_shape)
-  set_tests_properties(shape_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
-endforeach()
-# The S^3 angle kernels, likewise: the batch is checked bit for bit against lp_angle4 one point at a time.
-foreach(isa scalar avx2)
-  add_test(NAME s3_${isa} COMMAND test_s3)
-  set_tests_properties(s3_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
+# The kernels must agree with each other: every test of a dispatched kernel (the vertex scan, the distance rows under
+# the shape measures with Hausdorff checked bit for bit against its definition, the S^3 angle batch checked against
+# lp_angle4 one point at a time, the Hilbert interleave) runs again at every dispatch level.
+foreach(isa scalar sse2 avx2 avx512)
+  foreach(name follows core coord shape s3)
+    add_test(NAME ${name}_${isa} COMMAND test_${name})
+    set_tests_properties(${name}_${isa} PROPERTIES ENVIRONMENT "LAPLACE_ISA=${isa}")
+  endforeach()
 endforeach()
 
 if(TARGET laplace_text)

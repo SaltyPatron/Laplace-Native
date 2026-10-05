@@ -5,8 +5,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
-/* The whole file mapped read-only, its size in *size; NULL when it cannot be opened or mapped, or is empty. */
-const void *lp_map_file(const char *path, size_t *size);
+/* The whole file mapped read-only and shared, its size in *size when size is given; NULL when it cannot be opened or
+ * mapped, is empty, or (want not 0) is not exactly want bytes. */
+const void *lp_map_file(const char *path, size_t want, size_t *size);
 void lp_unmap_file(const void *p, size_t size);
 
 #ifdef _WIN32

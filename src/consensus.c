@@ -12,11 +12,11 @@ void lp_glicko2(lp_rating *r, const lp_rating *opp, const double *score, size_t 
 void lp_matchup(lp_rating *r, const lp_rating *opp, double score, double tau){ rate(r, opp, &score, 1, tau, 0); }
 static void rate(lp_rating *r, const lp_rating *opp, const double *score, size_t n, double tau, int period){
     const double S = LP_GLICKO_SCALE;
-    double mu = (r->rating - 1500.0) / S, phi = r->deviation / S, sigma = r->volatility;
+    double mu = (r->rating - LP_GLICKO_RATING) / S, phi = r->deviation / S, sigma = r->volatility;
     if (n == 0) { r->deviation = S * sqrt(phi * phi + sigma * sigma); return; }             /* step 6 only */
     double vinv = 0, dsum = 0;
     for (size_t j = 0; j < n; j++) {
-        double muj = (opp[j].rating - 1500.0) / S, gj = g(opp[j].deviation / S);
+        double muj = (opp[j].rating - LP_GLICKO_RATING) / S, gj = g(opp[j].deviation / S);
         double E = 1.0 / (1.0 + exp(-gj * (mu - muj)));
         vinv += gj * gj * E * (1.0 - E); dsum += gj * (score[j] - E);
     }
@@ -34,7 +34,7 @@ static void rate(lp_rating *r, const lp_rating *opp, const double *score, size_t
     #undef F
     double sig2 = exp(A / 2.0), phistar = period ? sqrt(phi * phi + sig2 * sig2) : phi;
     double phi2 = 1.0 / sqrt(1.0 / (phistar * phistar) + 1.0 / v);
-    r->rating = 1500.0 + S * (mu + phi2 * phi2 * dsum);
+    r->rating = LP_GLICKO_RATING + S * (mu + phi2 * phi2 * dsum);
     r->deviation = S * phi2; r->volatility = sig2;
 }
 
@@ -48,18 +48,18 @@ double lp_trust_deviation(double t){
 void lp_attest(lp_rating *r, double trust, double score, double opp_rating, double tau, double floor){
     if (trust == 0.0) return;                                                               /* no information */
     if (trust < 0.0) score = 1.0 - score;                                                   /* reliably wrong: flip */
-    lp_rating o = { opp_rating, lp_trust_deviation(trust), 0.06 };
+    lp_rating o = { opp_rating, lp_trust_deviation(trust), LP_GLICKO_VOLATILITY };
     lp_matchup(r, &o, score, tau);
     if (r->deviation < floor) r->deviation = floor;
 }
 
-/* A claim's chance of beating the anchor, read k deviations below its rating: mu is log-odds on Glicko-2's scale. */
-double lp_confidence(const lp_rating *r, double k){
-    double x = (r->rating - 1500.0) / LP_GLICKO_SCALE - k * r->deviation / LP_GLICKO_SCALE;
-    return 1.0 / (1.0 + exp(-x));
+double lp_entry_deviation(double trust){
+    double t = fabs(trust); if (t == 0.0) return LP_GLICKO_DEVIATION;
+    double d = lp_trust_deviation(t); return d < LP_ATTEST_FLOOR ? LP_ATTEST_FLOOR : d;
 }
 
-double lp_cost(const lp_rating *r, double k, double per_hop){
-    double x = (r->rating - 1500.0) / LP_GLICKO_SCALE - k * r->deviation / LP_GLICKO_SCALE;
-    return log1p(exp(-x)) + per_hop;                                        /* -ln(1 / (1 + e^-x)) */
-}
+/* A standing read k deviations below its rating, as log-odds of beating the anchor on Glicko-2's scale. */
+static double reading(const lp_rating *r, double k){ return (r->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE - k * r->deviation / LP_GLICKO_SCALE; }
+/* A claim's chance of beating the anchor, so read. */
+double lp_confidence(const lp_rating *r, double k){ return 1.0 / (1.0 + exp(-reading(r, k))); }
+double lp_cost(const lp_rating *r, double k, double per_hop){ return log1p(exp(-reading(r, k))) + per_hop; }   /* -ln(1 / (1 + e^-x)) */

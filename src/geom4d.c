@@ -26,21 +26,20 @@ void lp_row_d2_scalar(const double p[4], const double *bx, const double *by, con
     }
 }
 
-typedef void (*row_fn)(const double *, const double *, const double *, const double *, const double *, size_t, size_t, double *);
-static row_fn pick_row(void){
-#if defined(LP_HAVE_AVX2)
-    if (lp_cpu_active() & LP_CPU_AVX2) return lp_row_d2_avx2;
-#endif
-    return lp_row_d2_scalar;
+/* b as structure of arrays, with room for `extra` more doubles after it: one allocation for a measure's whole state. */
+static double *soa(const double *b, size_t nb, size_t extra, double **bx, double **by, double **bz, double **bm){
+    double *p = lp_alloc(sizeof(double) * (4 * nb + extra));
+    *bx = p; *by = p + nb; *bz = *by + nb; *bm = *bz + nb;
+    for (size_t j = 0; j < nb; j++) { (*bx)[j] = b[4 * j]; (*by)[j] = b[4 * j + 1]; (*bz)[j] = b[4 * j + 2]; (*bm)[j] = b[4 * j + 3]; }
+    return p;
 }
 
 /* Discrete Fréchet distance (Eiter and Mannila) between 4D vertex sequences a (na x 4) and b (nb x 4), row by row
  * in O(nb) memory. Returns the distance, not its square. */
 double lp_frechet4(const double *a, size_t na, const double *b, size_t nb){
     if (!na || !nb) return INFINITY;
-    static row_fn row; if (!row) row = pick_row();
-    double *bx = malloc(sizeof(double) * nb * 6), *by = bx + nb, *bz = by + nb, *bm = bz + nb, *prev = bm + nb, *cur = prev + nb;
-    for (size_t j = 0; j < nb; j++) { bx[j] = b[4 * j]; by[j] = b[4 * j + 1]; bz[j] = b[4 * j + 2]; bm[j] = b[4 * j + 3]; }
+    lp_row_fn row = lp_kernels()->row_d2;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 2 * nb, &bx, &by, &bz, &bm), *prev = bm + nb, *cur = prev + nb;
     for (size_t i = 0; i < na; i++) {
         row(a + 4 * i, bx, by, bz, bm, 0, nb, cur);                                  /* cur[j] = d2(a_i, b_j) */
         if (i == 0) { for (size_t j = 1; j < nb; j++) if (cur[j] < cur[j - 1]) cur[j] = cur[j - 1]; }
@@ -53,16 +52,8 @@ double lp_frechet4(const double *a, size_t na, const double *b, size_t nb){
         }
         double *t = prev; prev = cur; cur = t;
     }
-    double r = sqrt(prev[nb - 1]); free(bx);
+    double r = sqrt(prev[nb - 1]); lp_free(mem);
     return r;
-}
-
-/* b as structure of arrays, with room for `extra` more doubles after it. */
-static double *soa(const double *b, size_t nb, size_t extra, double **bx, double **by, double **bz, double **bm){
-    double *p = malloc(sizeof(double) * (4 * nb + extra)); if (!p) return NULL;
-    *bx = p; *by = p + nb; *bz = *by + nb; *bm = *bz + nb;
-    for (size_t j = 0; j < nb; j++) { (*bx)[j] = b[4 * j]; (*by)[j] = b[4 * j + 1]; (*bz)[j] = b[4 * j + 2]; (*bm)[j] = b[4 * j + 3]; }
-    return p;
 }
 
 /* Discrete Fréchet distance with up to k interior vertices of each sequence skipped (k-outlier; cf. arXiv:2202.12824).
@@ -71,9 +62,9 @@ static double *soa(const double *b, size_t nb, size_t extra, double **bx, double
 double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t nb, unsigned k){
     if (!na || !nb) return INFINITY;
     if (k == 0) return lp_frechet4(a, na, b, nb);
-    static row_fn row; if (!row) row = pick_row();
+    lp_row_fn row = lp_kernels()->row_d2;
     size_t K = (size_t)k + 1, cell = K * K, rl = nb * cell;
-    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * rl + nb, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * rl + nb, &bx, &by, &bz, &bm);
     double *F[3] = { bm + nb, bm + nb + rl, bm + nb + 2 * rl }, *c = bm + nb + 3 * rl;
     for (size_t i = 0; i < na; i++) {
         row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
@@ -93,7 +84,7 @@ double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t 
     }
     double r = INFINITY, *last = &F[(na - 1) % 3][(nb - 1) * cell];
     for (size_t x = 0; x < cell; x++) if (last[x] < r) r = last[x];
-    free(mem);
+    lp_free(mem);
     return sqrt(r);
 }
 
@@ -102,10 +93,10 @@ double lp_frechet4_outliers(const double *a, size_t na, const double *b, size_t 
 double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *steps){
     if (steps) *steps = 0;
     if (!na || !nb) return INFINITY;
-    static row_fn row; if (!row) row = pick_row();
-    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * nb + 2, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    lp_row_fn row = lp_kernels()->row_d2;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 3 * nb + 2, &bx, &by, &bz, &bm);
     double *c = bm + nb, *prev = c + nb, *cur = prev + nb + 1;
-    size_t *lp = malloc(sizeof(size_t) * 2 * (nb + 1)), *lc = lp + nb + 1;
+    size_t *lbase = lp_alloc(sizeof(size_t) * 2 * (nb + 1)), *lp = lbase, *lc = lp + nb + 1;
     for (size_t j = 0; j <= nb; j++) { prev[j] = j ? INFINITY : 0.0; lp[j] = 0; }
     for (size_t i = 0; i < na; i++) {
         row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
@@ -119,7 +110,7 @@ double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *s
         double *t = prev; prev = cur; cur = t; size_t *tl = lp; lp = lc; lc = tl;
     }
     double r = prev[nb]; if (steps) *steps = lp[nb];
-    free(lp < lc ? lp : lc); free(mem);
+    lp_free(lbase); lp_free(mem);
     return r;
 }
 
@@ -127,10 +118,10 @@ double lp_dtw4(const double *a, size_t na, const double *b, size_t nb, size_t *s
  * counting as equal when they lie within eps of each other. */
 size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double eps){
     if (!na || !nb) return na + nb;
-    static row_fn row; if (!row) row = pick_row();
-    double *bx, *by, *bz, *bm, *mem = soa(b, nb, nb, &bx, &by, &bz, &bm); if (!mem) return (size_t)-1;
+    lp_row_fn row = lp_kernels()->row_d2;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, nb, &bx, &by, &bz, &bm);
     double *c = bm + nb;
-    size_t *prev = malloc(sizeof(size_t) * 2 * (nb + 1)), *cur = prev + nb + 1, *base = prev;
+    size_t *base = lp_alloc(sizeof(size_t) * 2 * (nb + 1)), *prev = base, *cur = prev + nb + 1;
     for (size_t j = 0; j <= nb; j++) prev[j] = j;
     for (size_t i = 0; i < na; i++) {
         row(a + 4 * i, bx, by, bz, bm, 0, nb, c);
@@ -144,7 +135,7 @@ size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double ep
         size_t *t = prev; prev = cur; cur = t;
     }
     size_t r = prev[nb];
-    free(base); free(mem);
+    lp_free(base); lp_free(mem);
     return r;
 }
 
@@ -153,8 +144,8 @@ size_t lp_edr4(const double *a, size_t na, const double *b, size_t nb, double ep
  * order), then its root. */
 double lp_hausdorff4(const double *a, size_t na, const double *b, size_t nb){
     if (!na || !nb) return INFINITY;
-    static row_fn row; if (!row) row = pick_row();
-    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 2 * nb, &bx, &by, &bz, &bm); if (!mem) return INFINITY;
+    lp_row_fn row = lp_kernels()->row_d2;
+    double *bx, *by, *bz, *bm, *mem = soa(b, nb, 2 * nb, &bx, &by, &bz, &bm);
     double *c = bm + nb, *col = c + nb, h = 0;
     for (size_t j = 0; j < nb; j++) col[j] = INFINITY;
     for (size_t i = 0; i < na; i++) {
@@ -164,19 +155,15 @@ double lp_hausdorff4(const double *a, size_t na, const double *b, size_t nb){
         if (m > h) h = m;
     }
     for (size_t j = 0; j < nb; j++) if (col[j] > h) h = col[j];
-    free(mem);
+    lp_free(mem);
     return sqrt(h);
 }
 
-/* The exact centroid of 4D points given as doubles that are fixed-point values m / 2^53. */
+/* The exact centroid of 4D points given as doubles that are fixed-point values m / 2^53: the one centroid. */
 bool lp_centroid4_exact(const double *p, size_t n, double out[4]){
     if (!n) return false;
-    __int128 s[4] = { 0, 0, 0, 0 };
-    for (size_t i = 0; i < n; i++) for (int d = 0; d < 4; d++) {
-        double m = p[4 * i + d] * LP_FIXED_ONE;
-        if (m != (double)(int64_t)m) return false;                                    /* not a fixed-point value */
-        s[d] += (int64_t)m;
-    }
-    for (int d = 0; d < 4; d++) out[d] = (double)(int64_t)(s[d] / (__int128)n) / LP_FIXED_ONE;
+    lp_coord_sum a = { { 0, 0, 0, 0 }, 0 }; lp_coord c;
+    for (size_t i = 0; i < n; i++) { if (!lp_coord_of_xyzm(p + 4 * i, &c)) return false; lp_coord_add(&a, c.m); }
+    lp_coord_mean(&a, &c); lp_coord_xyzm(&c, out);
     return true;
 }

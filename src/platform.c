@@ -8,17 +8,17 @@
 
 _Static_assert(sizeof(lp_lock) == sizeof(SRWLOCK), "lp_lock holds an SRWLOCK");
 
-const void *lp_map_file(const char *path, size_t *size){
+const void *lp_map_file(const char *path, size_t want, size_t *size){
     wchar_t w[4096];                                   /* paths are UTF-8, as on every other platform */
     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, w, (int)(sizeof w / sizeof *w))) return NULL;
     HANDLE f = CreateFileW(w, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) return NULL;
     LARGE_INTEGER n; HANDLE m = NULL; const void *p = NULL;
-    if (GetFileSizeEx(f, &n) && n.QuadPart > 0 && (m = CreateFileMappingW(f, NULL, PAGE_READONLY, 0, 0, NULL)))
+    if (GetFileSizeEx(f, &n) && n.QuadPart > 0 && (!want || (size_t)n.QuadPart == want) && (m = CreateFileMappingW(f, NULL, PAGE_READONLY, 0, 0, NULL)))
         p = MapViewOfFile(m, FILE_MAP_READ, 0, 0, 0);
     if (m) CloseHandle(m);                             /* the view keeps the mapping alive */
     CloseHandle(f);
-    if (p) *size = (size_t)n.QuadPart;
+    if (p && size) *size = (size_t)n.QuadPart;
     return p;
 }
 void lp_unmap_file(const void *p, size_t size){ (void)size; if (p) UnmapViewOfFile(p); }
@@ -45,12 +45,13 @@ ptrdiff_t lp_getline(char **line, size_t *cap, FILE *f){
 #include <sys/stat.h>
 #include <unistd.h>
 
-const void *lp_map_file(const char *path, size_t *size){
+const void *lp_map_file(const char *path, size_t want, size_t *size){
     int fd = open(path, O_RDONLY); struct stat st; if (fd < 0) return NULL;
-    if (fstat(fd, &st) != 0 || st.st_size <= 0) { close(fd); return NULL; }
+    if (fstat(fd, &st) != 0 || st.st_size <= 0 || (want && (size_t)st.st_size != want)) { close(fd); return NULL; }
     void *p = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0); close(fd);
     if (p == MAP_FAILED) return NULL;
-    *size = (size_t)st.st_size; return p;
+    if (size) *size = (size_t)st.st_size;
+    return p;
 }
 void lp_unmap_file(const void *p, size_t size){ if (p) munmap((void *)p, size); }
 
