@@ -73,10 +73,13 @@ LP_API uint32_t lp_hilbert4_axis(double x);
 /* The grid cell of a Hilbert value: lp_hilbert4_grid's inverse. */
 LP_API void lp_hilbert4_decode(uint64_t h, uint32_t g[4]);
 /* The Hilbert values of the grid cells in the box lo..hi (inclusive on each axis), as ranges in ascending order with
- * adjacent ones merged. At most cap ranges (cap >= 1): the exact cover when it fits cap and its refinement fits the
- * work bound LP_HRANGE_WORK cells; otherwise the narrowest gaps between ranges are closed, or cells along the box's
- * faces are taken whole, so the ranges always cover the box and may cover cells outside it (a query filters on the
- * coordinates). Returns the number written; 0 when lo > hi on an axis. */
+ * adjacent ones merged, at most cap of them (cap >= 1). Exact when the box's exact cover takes at most LP_HRANGE_WORK
+ * cells of work (the cells inside it plus the cells crossing its faces, over the whole 16-ary tree of Hilbert cells)
+ * and the merged ranges fit cap. Otherwise the narrowest gaps between ranges are closed until they fit, and a box
+ * beyond the work bound is covered a level at a time with crossing cells taken whole, so the ranges always cover the
+ * box and may cover cells outside it (a query filters on the coordinates). A call decodes at most 16 LP_HRANGE_WORK
+ * cells and holds about 128 KB. Returns the number written; 0 when lo > hi on an axis; without memory, the one range
+ * of the whole space, which covers. */
 #define LP_HRANGE_WORK 4096
 typedef struct { uint64_t lo, hi; } lp_hrange;
 LP_API size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange *out, size_t cap);
