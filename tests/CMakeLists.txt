@@ -51,3 +51,16 @@ if(TARGET laplace_model)
   target_compile_options(test_rowsig PRIVATE ${LP_C_FLAGS})
   add_test(NAME rowsig COMMAND test_rowsig)
 endif()
+
+# linalg needs Eigen and Spectra. The same golden hash from an x86-64 build (SSE2, no FMA) shows the x86-64-v3 build
+# rounds as scalar code does.
+if(TARGET laplace_linalg)
+  lp_linalg_library(laplace_linalg_base ${LP_ISA_BASE})
+  foreach(lib laplace_linalg laplace_linalg_base)
+    add_executable(test_${lib} test_linalg.c)
+    target_link_libraries(test_${lib} PRIVATE ${lib} ${LP_SYSLIBS})
+    target_compile_options(test_${lib} PRIVATE ${LP_C_FLAGS})
+  endforeach()
+  add_test(NAME linalg COMMAND test_laplace_linalg)
+  add_test(NAME linalg_base COMMAND test_laplace_linalg_base)
+endif()

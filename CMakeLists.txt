@@ -116,6 +116,28 @@ else()
   message(STATUS "laplace_model not built: MKL ${MKL_FOUND}, OpenMP ${OpenMP_C_FOUND} (run from the oneAPI dev shell)")
 endif()
 
+# laplace_linalg: eigenmaps, Procrustes and Gram-Schmidt over Eigen and Spectra (headers only), kept out of the core
+# library like laplace_model. Eigen's packet math fuses with FMA under x86-64-v3 and its product blocking follows the
+# cache sizes cpuid reports, so it is compiled scalar with fixed blocking: the results are the scalar ones everywhere.
+set(LAPLACE_EIGEN_DIR "$ENV{LAPLACE_EIGEN_DIR}" CACHE PATH "Eigen 3.4 checkout")
+set(LAPLACE_SPECTRA_DIR "$ENV{LAPLACE_SPECTRA_DIR}" CACHE PATH "Spectra 1.x checkout")
+file(TO_CMAKE_PATH "${LAPLACE_EIGEN_DIR}" LP_EIGEN)
+file(TO_CMAKE_PATH "${LAPLACE_SPECTRA_DIR}" LP_SPECTRA)
+function(lp_linalg_library name)                    # extra arguments: compile options after the contract's
+  add_library(${name} STATIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src/linalg.cpp)
+  set_target_properties(${name} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_VISIBILITY_PRESET hidden)
+  target_include_directories(${name} PUBLIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/include)
+  target_include_directories(${name} SYSTEM PRIVATE ${LP_EIGEN} ${LP_SPECTRA}/include)
+  target_compile_definitions(${name} PRIVATE EIGEN_DONT_VECTORIZE EIGEN_NO_CPUID EIGEN_DONT_PARALLELIZE)
+  target_compile_options(${name} PRIVATE ${LP_C_FLAGS} ${ARGN})
+  target_link_libraries(${name} PUBLIC ${LP_SYSLIBS})
+endfunction()
+if(EXISTS "${LP_EIGEN}/Eigen/Core" AND EXISTS "${LP_SPECTRA}/include/Spectra/SymEigsSolver.h")
+  lp_linalg_library(laplace_linalg)
+else()
+  message(STATUS "laplace_linalg not built: set LAPLACE_EIGEN_DIR and LAPLACE_SPECTRA_DIR")
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
   enable_testing()
   add_subdirectory(tests)
