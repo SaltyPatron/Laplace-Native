@@ -40,8 +40,56 @@ LP_API uint32_t    lp_cpu_features(void);    /* what this CPU supports */
 LP_API uint32_t    lp_cpu_active(void);      /* what the dispatcher uses (LAPLACE_ISA may lower it) */
 LP_API const char *lp_cpu_describe(uint32_t features);
 
+/* ---------------------------------------------------------------- memory: one way to grow, one allocator
+ * Working memory (arrays, maps, buffers) comes from lp_realloc and goes back through lp_free, which a host may point at
+ * its own allocator: the PostgreSQL extension points them at its memory contexts, so an error frees what a call held.
+ * What lives as long as the process (the tables built over tier 0 and the highway) is never working memory. */
+typedef void *(*lp_realloc_fn)(void *p, size_t n);
+typedef void  (*lp_free_fn)(void *p);
+LP_API void  lp_allocator(lp_realloc_fn grow, lp_free_fn release);   /* NULL, NULL: the C library's */
+LP_API void *lp_realloc(void *p, size_t n);                          /* never NULL: an allocation that fails aborts */
+LP_API void  lp_free(void *p);
+static inline void *lp_alloc(size_t n){ return lp_realloc(NULL, n); }
+static inline void *lp_zalloc(size_t n){ void *p = lp_realloc(NULL, n); memset(p, 0, n); return p; }
+/* Room for at least need elements of size bytes in *p, whose room is *cap: doubled as it fills. Returns *p. */
+LP_API void *lp_reserve(void **p, size_t *cap, size_t need, size_t size);
+
+/* A growable array of any type, the one way an array grows in Laplace:
+ *   lp_vec(lp_id) ids = { 0 };  lp_push(&ids, id);  ids.v[i] for i < ids.n;  lp_vec_free(&ids); */
+#define lp_vec(T)            struct { T *v; size_t n, cap; }
+#define lp_vec_reserve(a, k) lp_reserve((void **)&(a)->v, &(a)->cap, (k), sizeof *(a)->v)
+#define lp_push(a, ...)      (lp_vec_reserve((a), (a)->n + 1), (a)->v[(a)->n++] = (__VA_ARGS__))
+#define lp_vec_add(a)        (lp_vec_reserve((a), (a)->n + 1), memset(&(a)->v[(a)->n], 0, sizeof *(a)->v), &(a)->v[(a)->n++])
+#define lp_vec_free(a)       (lp_free((a)->v), (a)->v = NULL, (a)->n = (a)->cap = 0)
+
+/* Bytes as they are written for someone else to read: a file, the wire, a COPY stream. */
+typedef struct { uint8_t *b; size_t n, cap; } lp_buf;
+LP_API uint8_t *lp_buf_room(lp_buf *, size_t k);                    /* k more bytes at the end: where they go */
+static inline void lp_buf_put(lp_buf *b, const void *p, size_t k){ if (k) memcpy(lp_buf_room(b, k), p, k); }
+static inline void lp_buf_free(lp_buf *b){ lp_free(b->b); b->b = NULL; b->n = b->cap = 0; }
+
+/* Big-endian, as the database writes and reads every binary value. */
+static inline uint64_t lp_be(const void *p, int n){ const uint8_t *b = (const uint8_t *)p; uint64_t u = 0; for (int i = 0; i < n; i++) u = u << 8 | b[i]; return u; }
+static inline double   lp_be_f64(const void *p){ uint64_t u = lp_be(p, 8); double d; memcpy(&d, &u, 8); return d; }
+static inline void     lp_put_be(uint8_t *p, uint64_t v, int n){ for (int i = n - 1; i >= 0; i--) { p[i] = (uint8_t)v; v >>= 8; } }
+static inline void     lp_buf_be(lp_buf *b, uint64_t v, int n){ lp_put_be(lp_buf_room(b, (size_t)n), v, n); }
+static inline void     lp_buf_be_f64(lp_buf *b, double d){ uint64_t u; memcpy(&u, &d, 8); lp_buf_be(b, u, 8); }
+static inline void     lp_buf_be_f32(lp_buf *b, float f){ uint32_t u; memcpy(&u, &f, 4); lp_buf_be(b, u, 4); }
+
+/* Hexadecimal: 2n lowercase digits and a NUL; and back, false on anything but 2n hexadecimal digits. */
+LP_API void lp_hex(const void *bytes, size_t n, char *out);
+LP_API bool lp_unhex(const char *s, size_t n, void *out);
+
+/* Sorting that gives the same order on every platform: stable, so what compares equal keeps the order it came in
+ * (the C library's qsort promises neither, and differs between releases). */
+LP_API void lp_sort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
+
 /* ---------------------------------------------------------------- identity */
 typedef struct { uint8_t b[16]; } lp_id;
+static inline bool lp_id_eq(const lp_id *a, const lp_id *b){ return !memcmp(a->b, b->b, 16); }
+static inline int  lp_id_cmp(const void *a, const void *b){ return memcmp(a, b, 16); }      /* byte order: the database's */
+static inline void lp_id_hex(const lp_id *id, char out[33]){ lp_hex(id->b, 16, out); }
+static inline bool lp_id_unhex(const char *s, lp_id *out){ return lp_unhex(s, 16, out->b); }
 
 /* A codepoint's ID: BLAKE3-128 of its UTF-8 bytes; surrogates are written in the generalized 3-byte form. */
 LP_API void lp_id_codepoint(uint32_t cp, lp_id *out);
@@ -62,6 +110,11 @@ typedef struct { int64_t m[4]; } lp_coord;   /* value = m / 2^53 on each axis */
 
 /* The exact integer average of n coordinates, truncated toward zero. */
 LP_API void lp_coord_centroid(const lp_coord *c, size_t n, lp_coord *out);
+/* The same average taken a coordinate at a time: four 128-bit sums, each divided once when the mean is asked for. Every
+ * centroid in Laplace is this one. */
+typedef struct { __int128 s[4]; uint64_t n; } lp_coord_sum;
+static inline void lp_coord_add(lp_coord_sum *a, const int64_t m[4]){ for (int d = 0; d < 4; d++) a->s[d] += m[d]; a->n++; }
+LP_API void lp_coord_mean(const lp_coord_sum *a, lp_coord *out);         /* 0 when nothing was added */
 /* Inside the wall: m . m <= 2^106, exactly. */
 LP_API bool lp_coord_inside(const lp_coord *c);
 /* 4D Hilbert value on a 16-bit grid over [-1, 1]^4 (Skilling). */
@@ -73,11 +126,24 @@ LP_API uint32_t lp_hilbert4_axis(double x);
 /* The grid cell of a Hilbert value: lp_hilbert4_grid's inverse. */
 LP_API void lp_hilbert4_decode(uint64_t h, uint32_t g[4]);
 /* The Hilbert values of the grid cells in the box lo..hi (inclusive on each axis), as ranges in ascending order with
- * adjacent ones merged. At most cap ranges (cap >= 1): when the exact cover needs more, cells along the box's faces
- * are taken whole, so the ranges always cover the box and may cover cells outside it (a query filters on the
- * coordinates). Returns the number written; 0 when lo > hi on an axis. */
+ * adjacent ones merged, at most cap of them (cap >= 1). Exact when the box's exact cover takes at most LP_HRANGE_WORK
+ * cells of work (the cells inside it plus the cells crossing its faces, over the whole 16-ary tree of Hilbert cells)
+ * and the merged ranges fit cap. Otherwise the narrowest gaps between ranges are closed until they fit, and a box
+ * beyond the work bound is covered a level at a time with crossing cells taken whole, so the ranges always cover the
+ * box and may cover cells outside it (a query filters on the coordinates). A call decodes at most 16 LP_HRANGE_WORK
+ * cells and holds about 128 KB. Returns the number written; 0 when lo > hi on an axis; without memory, the one range
+ * of the whole space, which covers. */
+#define LP_HRANGE_WORK 4096
 typedef struct { uint64_t lo, hi; } lp_hrange;
 LP_API size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange *out, size_t cap);
+/* The Hilbert value as it is stored: its top bit flipped, so bigint order is Hilbert order. */
+static inline int64_t lp_hilbert_key(uint64_t h){ return (int64_t)(h ^ 0x8000000000000000ull); }
+/* A coordinate as the four doubles it is, m / 2^53; and back, false when a double is not on the fixed-point grid (or
+ * outside [-1, 1]). */
+static inline void lp_coord_xyzm(const lp_coord *c, double out[4]){ for (int d = 0; d < 4; d++) out[d] = (double)c->m[d] / LP_FIXED_ONE; }
+LP_API bool lp_coord_of_xyzm(const double x[4], lp_coord *out);
+/* A coordinate from doubles that need not lie on the grid: each truncated toward zero onto it, held to [-1, 1]. */
+LP_API void lp_coord_trunc(const double x[4], lp_coord *out);
 
 /* ---------------------------------------------------------------- IDs written into geometry */
 /* An ID's 128 bits go into the X, Y, Z mantissas (43 + 43 + 42 bits) with exponent -2, so the three values lie in
@@ -105,6 +171,7 @@ LP_API uint32_t lp_xyz_spare(const double xyz[3]);
 LP_API void lp_xyz_spare_set(double xyz[3], uint32_t v);
 /* A POINT ZM of real 4D coordinates, as EWKB (37 bytes). */
 LP_API size_t lp_ewkb_point4(const double xyzm[4], uint8_t *out, size_t cap);
+static inline size_t lp_ewkb_coord(const lp_coord *c, uint8_t *out, size_t cap){ double x[4]; lp_coord_xyzm(c, x); return lp_ewkb_point4(x, out, cap); }
 /* Parse a POINT ZM / LINESTRING ZM path (little-endian EWKB, optional SRID). Returns the vertex count and points
  * *vertices at the first vertex (32 bytes each: X, Y, Z, M), or 0 on malformed input. */
 LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **vertices);
@@ -115,25 +182,118 @@ LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **
  * continuations found; at most cap are written. */
 LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
 
-/* ---------------------------------------------------------------- IDs, as every reader meets them */
-/* A path's constituents in order, each run written out. Returns how many there are; at most cap are written. */
+/* ---------------------------------------------------------------- paths, as every reader meets them
+ * A path is its vertex block: n vertices of 32 bytes, X, Y, Z (a constituent's ID, packed) and M (its run, and what it
+ * is said to be). EWKB carries the block after a header; PostGIS's own serialization carries the same block, so a
+ * reader inside the database hands it over as it lies, and nothing is copied to be read. Every operation on a path's
+ * constituents is one of these, for the engine, the extension and every tool alike. */
+typedef struct { const uint8_t *v; size_t n; } lp_path;
+typedef struct { lp_id id; uint32_t run, said, spare; } lp_vertex;           /* spare: the value its spare bits carry, 0 none */
+LP_API lp_path lp_path_of(const uint8_t *ewkb, size_t len);                  /* n = 0 when it is no path */
+static inline lp_path lp_path_block(const void *xyzm, size_t n){ lp_path p = { (const uint8_t *)xyzm, n }; return p; }
+LP_API lp_id    lp_path_id(lp_path, size_t i);                               /* vertex i's ID */
+LP_API uint32_t lp_path_run(lp_path, size_t i);                              /* how many times vertex i stands */
+LP_API size_t   lp_path_len(lp_path);                                        /* its constituents, each run written out */
+/* Its constituents in order, each run written out: returns how many there are; at most cap are written. */
+LP_API size_t lp_path_expand(lp_path, lp_id *out, size_t cap);
+/* Its vertices as stored: ID, run, what each is said to be, and its spare bits' value. Returns the vertex count; at most cap are written. */
+LP_API size_t lp_path_decode(lp_path, lp_vertex *out, size_t cap);
+/* The distinct IDs it holds, in byte order (the keys of the container index): out holds n; returns how many. */
+LP_API size_t lp_path_keys(lp_path, lp_id *out);
+/* Whether it holds every one of ids (all) or any of them. */
+LP_API bool   lp_path_holds(lp_path, const lp_id *ids, size_t n, bool all);
+/* How many times it holds each of ids, runs counted: ids sorted and distinct (lp_ids_unique); times[i] for ids[i]. */
+LP_API void   lp_path_times(lp_path, const lp_id *ids, size_t n, uint64_t *times);
+/* Whether any of ids stands between its first constituent and its last, runs counted as what they repeat: the place a
+ * claim's predicate takes. */
+LP_API bool   lp_path_middle_any(lp_path, const lp_id *ids, size_t n);
+/* Every place the phrase occurs as a run inside it, the ID of the constituent that follows: lp_follows on a path. */
+LP_API size_t lp_path_follows(lp_path, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
+
+/* The same, from EWKB as the database sends it. */
 LP_API size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap);
-/* A path's vertices as stored: ID, run and what each is said to be. Returns the vertex count; at most cap written. */
-typedef struct { lp_id id; uint32_t run, said, spare; } lp_vertex;
 LP_API size_t lp_path_vertices(const uint8_t *ewkb, size_t len, lp_vertex *out, size_t cap);
-/* A map keyed by ID, a 32-bit value per ID, in insertion order: put returns the entry's index (fresh: whether it was
- * added), find returns it or -1. */
+
+/* IDs sorted in byte order and each kept once, in place: returns how many are left. */
+LP_API size_t lp_ids_unique(lp_id *ids, size_t n);
+
+/* ---------------------------------------------------------------- tuples: what a claim's parts are
+ * A claim is a tuple of entities: its first part and its last are what it ties together, and what stands between them
+ * names the tie. */
+/* The other end of a tuple from `at`: the last part's index when at is the first, the first's when at is the last; -1
+ * when at is neither end, or both ends are at. */
+LP_API int  lp_tuple_other(const lp_id *part, size_t n, const lp_id *at);
+/* Whether any of ids stands between the first part and the last. */
+LP_API bool lp_tuple_middle_any(const lp_id *part, size_t n, const lp_id *ids, size_t nids);
+
+/* ---------------------------------------------------------------- maps keyed by ID
+ * One open-addressing table for every set or map of IDs: an ID is a BLAKE3 hash, so its own bits are the hash (bytes 8
+ * to 15, which nothing shards or partitions by). Entries keep the order they were added in, keys side by side, each
+ * with a value of the size the map was made for, zeroed when it is added. */
 typedef struct lp_idmap lp_idmap;
-LP_API lp_idmap    *lp_idmap_new(void);
+LP_API lp_idmap    *lp_idmap_new(void);                                      /* a 32-bit value per ID */
+LP_API lp_idmap    *lp_idmap_sized(size_t value_bytes);                      /* any value: a count, a sum, a struct */
 LP_API void         lp_idmap_free(lp_idmap *);
-LP_API size_t       lp_idmap_put(lp_idmap *, const lp_id *id, bool *fresh);
-LP_API int64_t      lp_idmap_find(const lp_idmap *, const lp_id *id);
+LP_API void         lp_idmap_clear(lp_idmap *);                              /* empty, its room kept */
+LP_API size_t       lp_idmap_put(lp_idmap *, const lp_id *id, bool *fresh);  /* the entry's index; fresh: it was added */
+LP_API int64_t      lp_idmap_find(const lp_idmap *, const lp_id *id);        /* the entry's index, or -1 */
 LP_API size_t       lp_idmap_count(const lp_idmap *);
 LP_API const lp_id *lp_idmap_key(const lp_idmap *, size_t i);
-LP_API uint32_t    *lp_idmap_value(lp_idmap *, size_t i);
-/* A value the database sends in binary: big-endian, as libpq hands it over. */
-static inline uint64_t lp_be(const void *p, int n){ const uint8_t *b = (const uint8_t *)p; uint64_t u = 0; for (int i = 0; i < n; i++) u = u << 8 | b[i]; return u; }
-static inline double   lp_be_f64(const void *p){ uint64_t u = lp_be(p, 8); double d; memcpy(&d, &u, 8); return d; }
+LP_API const lp_id *lp_idmap_keys(const lp_idmap *);                         /* every key, in the order added */
+LP_API void        *lp_idmap_at(lp_idmap *, size_t i);                       /* entry i's value */
+LP_API uint32_t    *lp_idmap_value(lp_idmap *, size_t i);                    /* entry i's value, in a map of 32-bit values */
+/* An ID's value, added (zeroed) when it is new: *fresh, when given, says which. */
+static inline void *lp_idmap_get(lp_idmap *m, const lp_id *id, bool *fresh){ return lp_idmap_at(m, lp_idmap_put(m, id, fresh)); }
+static inline void *lp_idmap_lookup(lp_idmap *m, const lp_id *id){ int64_t i = lp_idmap_find(m, id); return i < 0 ? NULL : lp_idmap_at(m, (size_t)i); }
+
+/* An index over records that hold their own IDs (tier 0, the highway): only their places are kept, never a copy. The
+ * ID is at the start of each record of stride bytes. find gives the records with this ID one by one: *probe starts at
+ * 0 and is advanced; -1 when there are no more. */
+typedef struct lp_idindex lp_idindex;
+LP_API lp_idindex *lp_idindex_build(const void *records, size_t n, size_t stride);
+LP_API void        lp_idindex_free(lp_idindex *);
+LP_API int64_t     lp_idindex_find(const lp_idindex *, const lp_id *id, uint64_t *probe);
+
+/* A map keyed by bytes (a name, a source's key), each key kept once: the same table as lp_idmap, the key hashed. */
+typedef struct lp_strmap lp_strmap;
+LP_API lp_strmap   *lp_strmap_sized(size_t value_bytes);
+LP_API void         lp_strmap_free(lp_strmap *);
+LP_API size_t       lp_strmap_put(lp_strmap *, const void *key, size_t len, bool *fresh);
+LP_API int64_t      lp_strmap_find(const lp_strmap *, const void *key, size_t len);
+LP_API size_t       lp_strmap_count(const lp_strmap *);
+LP_API const char  *lp_strmap_key(const lp_strmap *, size_t i, size_t *len);  /* NUL-terminated as well */
+LP_API void        *lp_strmap_at(lp_strmap *, size_t i);
+static inline void *lp_strmap_get(lp_strmap *m, const void *k, size_t len, bool *fresh){ return lp_strmap_at(m, lp_strmap_put(m, k, len, fresh)); }
+static inline void *lp_strmap_lookup(lp_strmap *m, const void *k, size_t len){ int64_t i = lp_strmap_find(m, k, len); return i < 0 ? NULL : lp_strmap_at(m, (size_t)i); }
+LP_API uint64_t     lp_hash_bytes(const void *p, size_t n);                  /* FNV-1a, 64 bits */
+
+/* ---------------------------------------------------------------- PostgreSQL's binary forms, as bytes
+ * What a client sends the database and reads back in binary: arrays of IDs, and COPY streams. Pure bytes, no libpq, so
+ * every client writes them one way. */
+/* An array of IDs (blake3[]) of the element type elem_oid. */
+LP_API void   lp_pg_ids(lp_buf *, uint32_t elem_oid, const lp_id *ids, size_t n);
+/* An array's header; its n elements follow, each lp_pg_elem (or a NULL, length -1). */
+LP_API void   lp_pg_array(lp_buf *, uint32_t elem_oid, size_t n);
+static inline void lp_pg_elem(lp_buf *b, const void *p, uint32_t len){ lp_buf_be(b, len, 4); lp_buf_put(b, p, len); }
+/* The IDs of a blake3[] as the database sends it: returns how many it holds; at most cap are written. */
+LP_API size_t lp_pg_ids_read(const uint8_t *a, size_t len, lp_id *out, size_t cap);
+
+/* A binary COPY stream: rows go into the buffer and out through flush (PQputCopyData, or a file) whenever it holds
+ * flush_at bytes. lp_copy_start writes the header, lp_copy_end the trailer and the last flush; flush returns 0 on
+ * failure, and lp_copy_end returns whether every flush succeeded. */
+typedef int (*lp_copy_flush_fn)(void *ctx, const uint8_t *bytes, size_t n);
+typedef struct { lp_buf buf; size_t flush_at; lp_copy_flush_fn flush; void *ctx; uint64_t rows, bytes; bool failed; } lp_copy;
+LP_API void lp_copy_start(lp_copy *, size_t flush_at, lp_copy_flush_fn, void *ctx);
+LP_API void lp_copy_row(lp_copy *, uint16_t fields);                         /* a row of this many fields begins */
+LP_API void lp_copy_field(lp_copy *, const void *p, uint32_t len);
+LP_API bool lp_copy_end(lp_copy *);
+static inline void lp_copy_null(lp_copy *c){ lp_buf_be(&c->buf, 0xFFFFFFFFu, 4); }
+static inline void lp_copy_id(lp_copy *c, const lp_id *id){ lp_copy_field(c, id->b, 16); }
+static inline void lp_copy_i16(lp_copy *c, int16_t v){ lp_buf_be(&c->buf, 2, 4); lp_buf_be(&c->buf, (uint16_t)v, 2); }
+static inline void lp_copy_i32(lp_copy *c, int32_t v){ lp_buf_be(&c->buf, 4, 4); lp_buf_be(&c->buf, (uint32_t)v, 4); }
+static inline void lp_copy_i64(lp_copy *c, int64_t v){ lp_buf_be(&c->buf, 8, 4); lp_buf_be(&c->buf, (uint64_t)v, 8); }
+static inline void lp_copy_f32(lp_copy *c, float v){ lp_buf_be(&c->buf, 4, 4); lp_buf_be_f32(&c->buf, v); }
+static inline void lp_copy_f64(lp_copy *c, double v){ lp_buf_be(&c->buf, 8, 4); lp_buf_be_f64(&c->buf, v); }
 
 /* ---------------------------------------------------------------- 4D geometry on real coordinates */
 LP_API double lp_distance4(const double a[4], const double b[4]);
@@ -154,6 +314,40 @@ LP_API double lp_hausdorff4(const double *a, size_t na, const double *b, size_t 
 /* Exact centroid of points whose coordinates are fixed-point values m / 2^53; false if any is not. */
 LP_API bool lp_centroid4_exact(const double *points, size_t n, double out[4]);
 
+/* ---------------------------------------------------------------- S^3: directions as unit 4-vectors
+ * Points on S^3, not rotations: p and -p are different points (opposite), never identified, except by
+ * lp_eigen_centroid4. Dot products and squared lengths are summed ((x + y) + z) + m, as lp_distance4 sums.
+ *
+ * The angle between the directions of a and b, in radians in [0, pi]: each divided by its length, then
+ * 2 asin(min(chord / 2, 1)). Laplace-postgres's <=>, bit for bit. A zero vector has no direction: NaN. */
+LP_API double lp_angle4(const double a[4], const double b[4]);
+/* out[i] = lp_angle4(q, pts + 4i) for i < n, bit for bit on every ISA. */
+LP_API void lp_angle4_batch(const double q[4], const double *pts, size_t n, double *out);
+/* For unit base and p. The log map: the tangent at base pointing along the geodesic to p, its length the angle
+ * atan2(|p - (base.p) base|, base.p). Zero when p is base, and zero when p is -base (no single geodesic). */
+LP_API void lp_s3_log(const double base[4], const double p[4], double out[4]);
+/* The exp map, its inverse: walk |v| radians from unit base along tangent v (v orthogonal to base). The result is
+ * divided by its length so repeated steps do not drift off the sphere. v = 0 gives base exactly. */
+LP_API void lp_s3_exp(const double base[4], const double v[4], double out[4]);
+/* Spherical interpolation along the geodesic from unit a to unit b (no short-way flip): t = 0 gives a and t = 1 gives
+ * b, exactly. When b is a or -a there is no single geodesic, and the result is a. */
+LP_API void lp_slerp4(const double a[4], const double b[4], double t, double out[4]);
+/* The Karcher (Fréchet) mean of n unit points: the point that minimises the summed squared angles, by gradient steps
+ * through lp_s3_log/lp_s3_exp from the normalised Euclidean mean. Points are visited in one canonical order
+ * (numeric, component by component), so any permutation of them gives the same bits. Converged when a step is under
+ * 1e-12 radians, within 128 steps; false otherwise, or for n = 0 or no memory (out then holds the last estimate). */
+LP_API bool lp_karcher_mean4(const double *pts, size_t n, double out[4]);
+/* Markley's average: the dominant eigenvector of sum p p^T (summed in the canonical order above), by cyclic Jacobi;
+ * unit length, its first nonzero component positive. p and -p count alike. NaN for n = 0 or no memory. */
+LP_API void lp_eigen_centroid4(const double *pts, size_t n, double out[4]);
+
+/* ---------------------------------------------------------------- quantized rows */
+/* The int8 dot product of a and b: the sum of a[i] * b[i] modulo 2^32, which is exact while n <= 131071. Integer
+ * arithmetic, so the same value at every dispatch level (AVX-512 VNNI, AVX-VNNI, AVX-512, AVX2, scalar). */
+LP_API int32_t lp_dot_i8(const int8_t *a, const int8_t *b, size_t n);
+/* One query against nrows rows of n bytes, stride bytes apart: out[r] = lp_dot_i8(q, rows + r * stride, n). */
+LP_API void lp_dot_i8_batch(const int8_t *q, const int8_t *rows, size_t nrows, size_t n, size_t stride, int32_t *out);
+
 /* ---------------------------------------------------------------- b beats c given a */
 typedef struct { uint32_t row, col; float score, z; } lp_rowsig_hit;
 typedef struct { uint64_t rows, candidates, above[3], rows_without; double flops; } lp_rowsig_stats;   /* above z = zmin, 4, 5 */
@@ -168,7 +362,16 @@ LP_API int lp_mkl_reproducible(void);
 /* ---------------------------------------------------------------- consensus: Glicko-2 */
 typedef struct { double rating, deviation, volatility; } lp_rating;
 
-#define LP_GLICKO_SCALE 173.7178
+#define LP_GLICKO_SCALE      173.7178
+#define LP_GLICKO_RATING     1500.0       /* the anchor, and where the unrated enter */
+#define LP_GLICKO_DEVIATION  350.0        /* the unrated's deviation */
+#define LP_GLICKO_VOLATILITY 0.06         /* the unrated's volatility, and every witness's */
+#define LP_ATTEST_TAU        0.5          /* the system constant every attestation is played with */
+#define LP_ATTEST_FLOOR      30.0         /* the least deviation a standing keeps, and a witness enters with */
+static inline lp_rating lp_rating_stock(void){ lp_rating r = { LP_GLICKO_RATING, LP_GLICKO_DEVIATION, LP_GLICKO_VOLATILITY }; return r; }
+/* The deviation a claim enters with when a witness of trust t brings it: the deviation that trust plays with, never
+ * below the floor; the unrated's when the witness says nothing (trust 0). */
+LP_API double lp_entry_deviation(double trust);
 
 /* One rating period against n opponents (Glickman's Glicko-2, steps 1-8). tau: system constant. */
 LP_API void lp_glicko2(lp_rating *r, const lp_rating *opponents, const double *scores, size_t n, double tau);
@@ -243,7 +446,7 @@ typedef struct { uint32_t from, to; } lp_edge;
 typedef struct { char a[32], b[32]; uint32_t first, count; } lp_edges;              /* edges from list a to list b, sorted by from */
 typedef struct { char name[32], group[16], carrier[16]; uint16_t width; const lp_list *list; } lp_bank;   /* a mask of its own: a value's bit is its frozen slot in the list (none for kind) */
 typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
-                 lp_bank *bank; size_t nbanks; uint32_t *by_id; size_t nby; char path[4096]; void *keys; } lp_highway;
+                 lp_bank *bank; size_t nbanks; lp_idindex *by_id; char path[4096]; lp_strmap *keys; } lp_highway;
 /* The banks (manifest/banks.tsv): one mask per semantic group, on the row the group describes (carrier: entity, occurrence,
  * row). "kind" is the row's own bank: bits 0 to 7 say what a row is. */
 #define LP_KIND_CLAIM    0
@@ -300,6 +503,12 @@ LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
 /* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child
  * is that child. */
 LP_API lp_ref lp_ref_compose(const lp_ref *children, size_t n, uint8_t tier);
+/* The tier a composition of these children takes at the least: one above the highest of them. */
+static inline uint8_t lp_tier_above(const lp_ref *r, size_t n){ uint8_t t = 0; for (size_t i = 0; i < n; i++) if (r[i].tier > t) t = r[i].tier; return (uint8_t)(t < 255 ? t + 1 : 255); }
+/* UTF-8 taken as one composition of its codepoints, with no tier between (lp_id_codepoints_utf8's ID): its ID and
+ * coordinate from tier 0, its tier one above them; one codepoint is that codepoint. ok is false on invalid UTF-8 or an
+ * empty string. */
+LP_API lp_ref lp_ref_codepoints(const lp_tier0_record *t0, const uint8_t *s, size_t n, bool *ok);
 
 /* What receives every composition as it is made, and returns it (a table that records it, or nothing at all).
  * NULL composes without recording. */

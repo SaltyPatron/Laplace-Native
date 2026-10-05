@@ -5,6 +5,7 @@
 #include <string.h>
 
 int main(void){
+    lp_isa_or_skip();
     enum { N = 60 }; double a[4 * N], b[4 * (N + 1)]; uint64_t s = 0x9E3779B97F4A7C15ull;
     for (int i = 0; i < 4 * N; i++) { s ^= s << 13; s ^= s >> 7; s ^= s << 17; a[i] = (double)(s >> 11) / 9007199254740992.0; }
     size_t steps;

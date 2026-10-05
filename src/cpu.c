@@ -1,5 +1,6 @@
 /* CPU feature detection and the dispatch level. Every ISA the CPU has is used; LAPLACE_ISA may lower the level for
- * testing (scalar, sse2, avx2, avx512), never raise it past what the CPU supports. */
+ * testing (scalar, sse2, avx2, avxvnni, avx512, avx512vnni), never raise it past what the CPU supports. avx2 is
+ * x86-64-v3 alone (hart-server's Broadwell-E); avx512 is x86-64-v4 without either VNNI (Skylake-SP). */
 #include "laplace/laplace.h"
 #include "internal.h"
 #include <stdlib.h>
@@ -48,15 +49,17 @@ uint32_t lp_cpu_active(void){
     if (want) {
         uint32_t cap = !strcmp(want, "scalar") ? 0
                      : !strcmp(want, "sse2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41)
-                     : !strcmp(want, "avx2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVXVNNI)
-                     : 0xFFFFFFFFu;
+                     : !strcmp(want, "avx2")   ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2)
+                     : !strcmp(want, "avxvnni") ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVXVNNI)
+                     : !strcmp(want, "avx512") ? (LP_CPU_SSE2 | LP_CPU_SSE41 | LP_CPU_AVX2 | LP_CPU_AVX512)
+                     : 0xFFFFFFFFu;                                                         /* avx512vnni: all */
         f &= cap;
     }
     return cached = f;
 }
 
 const char *lp_cpu_describe(uint32_t f){
-    static char buf[128]; buf[0] = 0;
+    static _Thread_local char buf[128]; buf[0] = 0;
     static const struct { uint32_t bit; const char *name; } names[] = {
         { LP_CPU_SSE2, "sse2" }, { LP_CPU_SSE41, "sse4.1" }, { LP_CPU_AVX2, "avx2" }, { LP_CPU_AVX512, "avx512" },
         { LP_CPU_VNNI512, "avx512-vnni" }, { LP_CPU_AVXVNNI, "avx-vnni" }, { LP_CPU_AMX, "amx" } };
@@ -64,4 +67,28 @@ const char *lp_cpu_describe(uint32_t f){
         if (f & names[i].bit) { if (buf[0]) strcat(buf, " "); strcat(buf, names[i].name); }
     if (!buf[0]) strcpy(buf, "scalar");
     return buf;
+}
+
+/* The kernels, chosen once for the process: the widest each has that the active level allows. */
+static lp_kernel_set kernels; static int kernels_set; static lp_lock kernels_mu = LP_LOCK_INIT;
+static void kernels_pick(void){
+    uint32_t f = lp_cpu_active();
+    kernels.scan = lp_scan_scalar; kernels.row_d2 = lp_row_d2_scalar; kernels.interleave = lp_hilbert4_interleave_scalar;
+    kernels.half_chord = lp_half_chord_scalar;
+#if defined(LP_HAVE_AVX2)
+    if (f & LP_CPU_AVX2) { kernels.scan = lp_scan_avx2; kernels.row_d2 = lp_row_d2_avx2; kernels.interleave = lp_hilbert4_interleave_bmi2;   /* x86-64-v3 includes BMI2 */
+                           kernels.half_chord = lp_half_chord_avx2; }
+#endif
+#if defined(LP_HAVE_AVX512)
+    if (f & LP_CPU_AVX512) { kernels.scan = lp_scan_avx512; kernels.row_d2 = lp_row_d2_avx512; }
+#endif
+    (void)f;
+}
+const lp_kernel_set *lp_kernels(void){
+    if (!__atomic_load_n(&kernels_set, __ATOMIC_ACQUIRE)) {
+        lp_lock_take(&kernels_mu);
+        if (!kernels_set) { kernels_pick(); __atomic_store_n(&kernels_set, 1, __ATOMIC_RELEASE); }
+        lp_lock_give(&kernels_mu);
+    }
+    return &kernels;
 }

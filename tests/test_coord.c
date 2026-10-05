@@ -86,6 +86,26 @@ int main(void){
       uint32_t a[4] = { 5, 5, 5, 5 }, b[4] = { 4, 9, 9, 9 };
       CHECK(lp_hilbert4_ranges(b, a, r, 8) == 0, "an empty box gives no ranges");
       uint32_t z[4] = { 0, 0, 0, 0 }, f[4] = { 65535, 65535, 65535, 65535 };
-      CHECK(lp_hilbert4_ranges(z, f, r, 8) == 1 && r[0].lo == 0 && r[0].hi == UINT64_MAX, "the whole grid is one range"); }
+      CHECK(lp_hilbert4_ranges(z, f, r, 8) == 1 && r[0].lo == 0 && r[0].hi == UINT64_MAX, "the whole grid is one range");
+      /* Exact at the smallest budgets: the budget is not what limits refinement */
+      CHECK(lp_hilbert4_ranges(z, z, r, 1) == 1 && r[0].lo == lp_hilbert4_grid(z) && r[0].hi == r[0].lo, "one cell, budget 1: that cell");
+      uint32_t p[4] = { 32767, 0, 0, 0 }, q[4] = { 32768, 0, 0, 0 };          /* two cells either side of the coarsest split */
+      uint64_t hp = lp_hilbert4_grid(p), hq = lp_hilbert4_grid(q);
+      size_t n2 = lp_hilbert4_ranges(p, q, r, 2);
+      CHECK(n2 == 2 && r[0].lo == r[0].hi && r[1].lo == r[1].hi && r[0].lo == (hp < hq ? hp : hq) && r[1].lo == (hp < hq ? hq : hp),
+            "two cells across the top split, budget 2: those two cells");
+      CHECK(lp_hilbert4_ranges(p, q, r, 1) == 1 && r[0].lo == (hp < hq ? hp : hq) && r[0].hi == (hp < hq ? hq : hp),
+            "the same with budget 1: the one gap closed, nothing wider");
+      /* A thin box of 600 cells whose crossing frontier is wide: exact at budget 600, since the exact cover fits the
+       * work bound; at budget 8 the gaps closed cover every cell and the ranges are still disjoint and ordered */
+      uint32_t t0[4] = { 0, 0, 0, 0 }, t1[4] = { 0, 0, 0, 599 };
+      size_t n6 = lp_hilbert4_ranges(t0, t1, r, 600); uint64_t tot = 0;
+      for (size_t i = 0; i < n6; i++) tot += r[i].hi - r[i].lo + 1;
+      CHECK(n6 >= 1 && n6 <= 600 && tot == 600, "600 cells in a line, budget 600: exactly 600 values in %zu ranges", n6);
+      size_t n8 = lp_hilbert4_ranges(t0, t1, r, 8); size_t bad = 0, miss = 0;
+      for (size_t i = 1; i < n8; i++) bad += r[i].lo <= r[i - 1].hi + 1;
+      for (uint32_t k = 0; k < 600; k++) { uint32_t g[4] = { 0, 0, 0, k }; uint64_t h = lp_hilbert4_grid(g); int in = 0;
+          for (size_t i = 0; i < n8 && !in; i++) in = h >= r[i].lo && h <= r[i].hi; miss += !in; }
+      CHECK(n8 >= 1 && n8 <= 8 && bad == 0 && miss == 0, "the same at budget 8: %zu ranges, ordered, disjoint, every cell covered", n8); }
     DONE("coord");
 }
