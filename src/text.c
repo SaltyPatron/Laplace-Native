@@ -31,7 +31,7 @@ struct lp_text {
     lp_ref *f; size_t fcap;                                                /* room for a composition's factored children */
 };
 
-static void *grow(void *p, size_t n){ p = realloc(p, n ? n : 1); if (!p) abort(); return p; }
+static void *grow(void *p, size_t n){ p = realloc(p, n ? n : 1); if (!p) abort(); return p; }   /* an lp_text lasts as long as its thread: never working memory */
 static void push(Refs *r, lp_ref x){ if (r->n == r->cap) { r->cap = r->cap ? r->cap * 2 : 256; r->v = grow(r->v, r->cap * sizeof(lp_ref)); } r->v[r->n++] = x; }
 
 lp_text *lp_text_new(const lp_tier0_record *t0){
@@ -80,7 +80,6 @@ static void separators(const uint8_t *src, size_t n, Bounds *wb){
     if (wb->n) { if (o.n == o.cap) { o.cap = o.cap * 2 + 4; o.b = grow(o.b, o.cap * 4); } o.b[o.n++] = wb->b[wb->n - 1]; }
     free(wb->b); *wb = o;
 }
-static uint8_t above(const lp_ref *r, size_t n){ uint8_t t = 0; for (size_t i = 0; i < n; i++) if (r[i].tier > t) t = r[i].tier; return (uint8_t)(t < 255 ? t + 1 : 255); }
 static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t tier){
     if (n == 1) return ch[0];
     if (n >= 4) {                                                             /* repeated blocks become entities of their own */
@@ -88,7 +87,7 @@ static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t tier){
         size_t m = lp_factor(ch, n, c->f, c->compose, c->sink);
         if (m != n) { ch = c->f; n = m; if (n == 1) return ch[0]; }
     }
-    uint8_t up = above(ch, n); if (up > tier) tier = up;                         /* a block lifts what holds it */
+    uint8_t up = lp_tier_above(ch, n); if (up > tier) tier = up;                         /* a block lifts what holds it */
     lp_ref r = c->compose ? c->compose(c->sink, ch, (uint32_t)n, tier) : lp_ref_compose(ch, n, tier);
     if (c->want_parts) {                            /* the trunk is the last composition of more than one child */
         if (n > c->pcap) { c->pcap = n * 2; c->parts = grow(c->parts, c->pcap * sizeof(lp_ref)); }
