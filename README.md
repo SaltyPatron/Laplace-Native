@@ -27,7 +27,9 @@ The checks reproduce what the prototype established and what the documentation s
 - every codepoint's ID and Hilbert value against the tier-0 table
 - the wall
 - packing round-trips
-- continuation matching at every dispatch level (`LAPLACE_ISA=scalar|sse2|avx2`)
+- continuation matching, the shape measures' distance rows and the int8 dot, equal to the scalar path at every dispatch
+  level (`LAPLACE_ISA=scalar|sse2|avx2|avxvnni|avx512|avx512vnni`); a level the CPU lacks is skipped, and the AVX-512
+  levels run under Intel SDE (`-spr`) when `LAPLACE_SDE` names its `sde` executable
 - Glickman's worked Glicko-2 example
 - `[[S,h,e,r,l,o,c,k], ' ', [H,o,l,m,e,s]]`, and a word filling every tier above it
 - what each shape measure does with a stray vertex and with a repeat

@@ -8,7 +8,7 @@ static uint64_t rng = 88172645463325252ull;
 static uint32_t next(void){ rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; return (uint32_t)rng; }
 
 int main(void){
-    printf("dispatch: %s (cpu: %s)\n", lp_cpu_describe(lp_cpu_active()), lp_cpu_describe(lp_cpu_features()));
+    lp_isa_or_skip();
     lp_id vocab[6]; for (int i = 0; i < 6; i++) lp_id_codepoint('a' + i, &vocab[i]);
     uint8_t *buf = malloc(1 << 20); lp_id *seq = malloc(sizeof(lp_id) * 5000), got[6000], want[6000];
     for (int trial = 0; trial < 400; trial++) {

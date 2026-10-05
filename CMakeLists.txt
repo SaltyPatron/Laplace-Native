@@ -49,10 +49,14 @@ configure_file(src/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
 
 set(LP_SOURCES src/platform.c src/mem.c src/map.c src/wire.c src/mapped.c src/path.c
                src/cpu.c src/flags.c src/utf8.c src/identity.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
-               src/tier0.c src/geom4d.c src/s3.c src/pull.c src/highway.c src/trust.c)
-set(LP_ISA_SOURCES src/isa/scan_avx2.c src/isa/scan_avx512.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c)
-set_source_files_properties(src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
-set_source_files_properties(src/isa/scan_avx512.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4}")
+               src/tier0.c src/geom4d.c src/s3.c src/pull.c src/highway.c src/trust.c src/dot.c)
+set(LP_ISA_V3_SOURCES src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c src/isa/dot_avx2.c)
+set(LP_ISA_V4_SOURCES src/isa/scan_avx512.c src/isa/row_avx512.c src/isa/dot_avx512.c)
+set(LP_ISA_SOURCES ${LP_ISA_V3_SOURCES} ${LP_ISA_V4_SOURCES} src/isa/dot_avxvnni.c src/isa/dot_avx512vnni.c)
+set_source_files_properties(${LP_ISA_V3_SOURCES} PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
+set_source_files_properties(${LP_ISA_V4_SOURCES} PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4}")
+set_source_files_properties(src/isa/dot_avxvnni.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3};${LP_ISA_AVXVNNI}")
+set_source_files_properties(src/isa/dot_avx512vnni.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4};${LP_ISA_VNNI512}")
 
 foreach(kind static shared)
   if(kind STREQUAL "static")
@@ -67,7 +71,7 @@ foreach(kind static shared)
   endif()
   target_include_directories(${t} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
                                       PRIVATE src ${LP_GENERATED})
-  target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
+  target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_HAVE_AVXVNNI LP_HAVE_AVX512VNNI LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
   target_compile_options(${t} PRIVATE ${LP_C_FLAGS})
   target_link_libraries(${t} PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
   if(TARGET laplace::math)                          # everything that links Native takes its libm calls from laplace-math
