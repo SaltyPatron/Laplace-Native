@@ -18,6 +18,11 @@ void lp_row_d2_scalar(const double p[4], const double *bx, const double *by, con
 void lp_row_d2_avx2(const double p[4], const double *bx, const double *by, const double *bz, const double *bm,
                     size_t j0, size_t j1, double *out);
 
+/* S^3 angle kernels: out[i] = |u - dir(pts_i)| / 2 for i in [i0, n), u a direction. lp_angle4_batch takes the
+ * arcsine of each through scalar libm, so the kernels agree to the bit and so do the angles. */
+void lp_half_chord_scalar(const double u[4], const double *pts, size_t i0, size_t n, double *out);
+void lp_half_chord_avx2(const double u[4], const double *pts, size_t i0, size_t n, double *out);
+
 /* The standard BLAKE3 hash of an input, its first 16 bytes (identity.c). */
 void lp_hash16(const void *in, size_t len, lp_id *out);
 
