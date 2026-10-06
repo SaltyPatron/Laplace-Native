@@ -387,6 +387,22 @@ LP_API double lp_trust_deviation(double trust);
 /* One attestation as one matchup: the witness plays at rating opponent_rating with the deviation its trust gives;
  * a negative trust flips the outcome; trust 0 changes nothing. The deviation never falls below floor. */
 LP_API void lp_attest(lp_rating *r, double trust, double score, double opponent_rating, double tau, double floor);
+/* A witness's series of games on one claim, played once as one update (no rating period, no linearized step): games
+ * games whose mean outcome is score, from a witness of trust t. Each outcome is pulled toward a draw by the witness's
+ * trust, s_eff = 0.5 + |t| (score - 0.5) (a negative trust flips the outcome first), and played against the anchor
+ * (LP_GLICKO_RATING, weight g = 1). The rating moves to the mode of the claim's standing (the prior) times the games,
+ * found by bisection on the slope of the log posterior (concave, so it always converges), at a cost independent of
+ * games; no repetition takes a claim past its witness's ceiling, the rating where E = s_eff (trust 0.9: 2011.5, trust
+ * 0.2: 1570.4), and refutation mirrors affirmation about the anchor. The deviation is from the information,
+ * 1 / phi'^2 = 1 / phi^2 + games E (1 - E) at the mode, but one witness alone can make a claim no more certain than the
+ * witness is trusted: never below lp_series_floor(t, floor), and never above the deviation the claim had (a deviation
+ * other witnesses took below that floor stays where it is). The volatility is left as it was. Trust 0 or no games
+ * changes nothing. */
+LP_API void lp_attest_series(lp_rating *r, double trust, uint32_t games, double score, double floor);
+/* The least deviation one witness of trust t can bring a claim to: the deviation its trust plays with
+ * (lp_trust_deviation), never below floor and never above the unrated's LP_GLICKO_DEVIATION (trust 0.95: 103.6,
+ * 0.9: 152.6, 0.85: 195.3; trust 0.669 or less: 350, a witness that is noted and adds no certainty). */
+LP_API double lp_series_floor(double trust, double floor);
 /* One matchup, played as it arrives. There are no rating periods: no time passes between matchups, so a standing's
  * deviation is never widened for a period gone by; it changes only by what the matchup tells. */
 LP_API void lp_matchup(lp_rating *r, const lp_rating *opponent, double score, double tau);
