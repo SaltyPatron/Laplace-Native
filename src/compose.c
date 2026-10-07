@@ -6,7 +6,7 @@
 #include <string.h>
 
 lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp){
-    lp_ref r; r.id = t0[cp].id; memcpy(r.c.m, t0[cp].m, sizeof r.c.m); r.tier = 0; r.said = 0; return r;
+    lp_ref r; memset(&r, 0, sizeof r); r.id = t0[cp].id; memcpy(r.c.m, t0[cp].m, sizeof r.c.m); return r;
 }
 
 /* The children's IDs go to the hasher 64 at a time, gathered side by side: the same bytes as lp_id_compose hashes. */

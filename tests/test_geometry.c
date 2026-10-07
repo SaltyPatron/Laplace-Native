@@ -3,6 +3,7 @@
 #include "laplace/laplace.h"
 #include "check.h"
 #include <string.h>
+#include <math.h>
 
 int main(void){
     size_t bad = 0, out = 0;
@@ -45,5 +46,24 @@ int main(void){
       uint8_t pb[256]; size_t pl = lp_ewkb_runs_spare(ids, ms, sp, 3, pb, sizeof pb); lp_vertex pv[3];
       CHECK(lp_path_vertices(pb, pl, pv, 3) == 3 && !memcmp(&pv[0].id, &ids[0], 16) && !memcmp(&pv[2].id, &ids[2], 16) && pv[1].run == 2, "a path with values reads back its IDs and runs");
       CHECK(pv[0].spare == sp[0] && pv[1].spare == 0 && pv[2].spare == sp[2] && lp_spare_tag(pv[2].spare) == 2 && lp_spare_payload(pv[2].spare) == 0xABCDE, "and each vertex's value, tag and payload"); }
+    /* a record's claim vertices: how each was said (outcome, position) above what it is said to be, its score in the
+     * spare bits when it is none of win, draw and loss; a vertex written before any of it reads as a win, at no place */
+    { lp_id ids[4]; for (int i = 0; i < 4; i++) lp_id_codepoint('p' + (uint32_t)i, &ids[i]);
+      uint32_t sp[4] = { 0 }, oc[4]; double score[4] = { 1.0, 0.5, 0.0, 0.7311234 };
+      for (int i = 0; i < 4; i++) oc[i] = lp_outcome_of(score[i], &sp[i]);
+      CHECK(oc[0] == LP_OUTCOME_WIN && oc[1] == LP_OUTCOME_DRAW && oc[2] == LP_OUTCOME_LOSS && oc[3] == LP_OUTCOME_SCORE && !sp[0] && !sp[1] && !sp[2] && lp_spare_tag(sp[3]) == LP_SPARE_SCORE,
+            "win, draw and loss are outcomes alone; any other score is carried in the spare bits");
+      uint64_t ms[4] = { lp_m_full(3, LP_SAID_CLAIM, oc[0], 1), lp_m_full(1, LP_SAID_CLAIM, oc[1], 2), lp_m_full(2, LP_SAID_TUPLE, oc[2], 300000), lp_m_full(1, LP_SAID_CLAIM, oc[3], 0) };
+      uint8_t pb[256]; size_t pl = lp_ewkb_runs_spare(ids, ms, sp, 4, pb, sizeof pb); lp_vertex pv[4];
+      CHECK(lp_path_vertices(pb, pl, pv, 4) == 4, "four vertices");
+      CHECK(pv[0].run == 3 && pv[0].said == LP_SAID_CLAIM && pv[0].outcome == LP_OUTCOME_WIN && pv[0].position == 1, "run, said, outcome and position read back");
+      CHECK(pv[1].outcome == LP_OUTCOME_DRAW && pv[1].position == 2 && pv[2].said == LP_SAID_TUPLE && pv[2].outcome == LP_OUTCOME_LOSS && pv[2].position == LP_M_POSITION_MAX && pv[2].run == 2,
+            "a position past 18 bits is the most they hold; said and run are untouched by what is above them");
+      CHECK(!memcmp(&pv[3].id, &ids[3], 16) && lp_outcome_score(pv[3].outcome, pv[3].spare) == lp_score_carried(score[3]) && fabs(lp_score_carried(score[3]) - score[3]) <= 1.0 / (2.0 * LP_SCORE_ONE),
+            "a score reads back to within half of 2^-24, and its vertex is still its ID");
+      int exact = 1; for (uint32_t k = 1u << 23; k < LP_SCORE_ONE; k += 977) { float f = (float)k / (float)LP_SCORE_ONE; if (lp_score_carried(f) != (double)f) exact = 0; }
+      CHECK(exact, "every float score at or above one half is carried exactly");
+      uint8_t old[64]; lp_id one[1] = { ids[0] }; uint64_t m1[1] = { (uint64_t)lp_m_of(5, LP_SAID_CLAIM) }; size_t ol = lp_ewkb_runs(one, m1, 1, old, sizeof old); lp_vertex ov;
+      CHECK(lp_path_vertices(old, ol, &ov, 1) == 1 && ov.run == 5 && ov.outcome == LP_OUTCOME_WIN && ov.position == 0 && lp_outcome_score(ov.outcome, ov.spare) == 1.0, "a vertex written without them is a win at no place"); }
     DONE("geometry");
 }
