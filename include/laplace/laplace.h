@@ -188,7 +188,7 @@ LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, s
  * reader inside the database hands it over as it lies, and nothing is copied to be read. Every operation on a path's
  * constituents is one of these, for the engine, the extension and every tool alike. */
 typedef struct { const uint8_t *v; size_t n; } lp_path;
-typedef struct { lp_id id; uint32_t run, said, spare; } lp_vertex;           /* spare: the value its spare bits carry, 0 none */
+typedef struct { lp_id id; uint32_t run, said, spare, outcome, position; } lp_vertex;   /* spare: the value its spare bits carry, 0 none; outcome, position: how a claim vertex was said (lp_m_outcome) */
 LP_API lp_path lp_path_of(const uint8_t *ewkb, size_t len);                  /* n = 0 when it is no path */
 static inline lp_path lp_path_block(const void *xyzm, size_t n){ lp_path p = { (const uint8_t *)xyzm, n }; return p; }
 LP_API lp_id    lp_path_id(lp_path, size_t i);                               /* vertex i's ID */
@@ -496,16 +496,23 @@ LP_API int64_t lp_highway_key(const lp_highway *, const lp_list *, const char *k
 
 /* ---------------------------------------------------------------- composition */
 /* An entity as it is composed: its ID, its real coordinate, and its tier. */
-typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; } lp_ref;       /* said: what it is within the path it is put in (LP_SAID_*); never part of its ID */
+/* said, outcome, position, spare: what it is within the path it is put in (LP_SAID_*), and, a claim, how its record said
+ * it (lp_m_full): metadata of its vertex there, never part of its ID. Zero is none. */
+typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; uint8_t outcome; uint32_t position, spare; } lp_ref;
 
 /* M of a path's vertex is that vertex's metadata, as bits: a double holds 53 of them exactly (Storage: Physicality).
  * The low 30 are how many times the vertex is repeated. The 3 above them say what the vertex is within the path it is
- * put in: a claim, witnessed in what the path belongs to; a record, holding claims witnessed in it; a tuple, things
- * that together name one thing; or the metadata of what the path is (a file's, beside its content). */
+ * put in: a claim, said by the record the path is; a record, holding the claims it says (or a claim said alone, its
+ * own record); a tuple, things that together name one thing; the metadata of what the path is (a file's, beside its
+ * content); a part of a content tree that holds records below it (a block of them, a file's content), so a walk down
+ * from a trunk to what its records assert never descends into content that asserts nothing; or who in a record says
+ * the claim after it. */
 #define LP_SAID_CLAIM  1u
 #define LP_SAID_RECORD 2u
 #define LP_SAID_TUPLE  3u      /* the vertex is a path of things that together name one thing: not text, and not a claim */
 #define LP_SAID_METADATA 4u    /* the vertex is the metadata of what the path is: a file's, beside its content */
+#define LP_SAID_HOLDS  5u      /* the vertex is a part of a content tree with records below it */
+#define LP_SAID_VOICE  6u      /* the vertex is who, within a record, says the claim right after it (a speaker, an annotator): content of the record */
 #define LP_M_RUN_BITS  30
 #define LP_M_SAID_BITS 3
 #define LP_M_SAID_MASK ((1ull << LP_M_SAID_BITS) - 1)
@@ -514,6 +521,52 @@ static inline uint32_t lp_m_run(double m){ uint32_t r = (uint32_t)(lp_m_bits(m) 
 static inline uint32_t lp_m_said(double m){ return (uint32_t)((lp_m_bits(m) >> LP_M_RUN_BITS) & LP_M_SAID_MASK); }
 /* M as it is written for a vertex repeated run times that is said to be what said names. */
 static inline double lp_m_of(uint32_t run, uint32_t said){ return (double)(((uint64_t)(said & LP_M_SAID_MASK) << LP_M_RUN_BITS) | (run ? run : 1u)); }
+
+/* Provenance by containment (Semantics: Attestations, Witnesses and Outcomes): a record is a path over the claims it
+ * asserts, each a vertex whose run is how many times the record says it, and whose M says, above what it is said to be,
+ * how the record said it:
+ *   outcome   2 bits: a win (0, an affirmation, and every vertex that is no claim), a draw, a loss, or a score,
+ *             which the vertex's spare bits carry (LP_SPARE_SCORE)
+ *   position  18 bits: its place among the claims its record says together, as the source gave them; 0 none
+ * Neither is part of any ID: the same claim said by another record, or otherwise, is the same entity. */
+#define LP_M_OUTCOME_SHIFT  33
+#define LP_M_OUTCOME_BITS   2
+#define LP_M_POSITION_SHIFT 35
+#define LP_M_POSITION_BITS  18
+#define LP_M_POSITION_MAX   ((1u << LP_M_POSITION_BITS) - 1)
+#define LP_OUTCOME_WIN   0u
+#define LP_OUTCOME_DRAW  1u
+#define LP_OUTCOME_LOSS  2u
+#define LP_OUTCOME_SCORE 3u
+#define LP_SPARE_SCORE   1u    /* the spare bits' tag for a score: the payload is the score times 2^24, the score in (0, 1) */
+#define LP_SCORE_ONE     (1u << 24)
+static inline uint32_t lp_m_outcome(double m){ return (uint32_t)((lp_m_bits(m) >> LP_M_OUTCOME_SHIFT) & ((1u << LP_M_OUTCOME_BITS) - 1)); }
+static inline uint32_t lp_m_position(double m){ return (uint32_t)((lp_m_bits(m) >> LP_M_POSITION_SHIFT) & LP_M_POSITION_MAX); }
+/* M with all of it: a position past what 18 bits hold is written as the most they hold. */
+static inline uint64_t lp_m_full(uint32_t run, uint32_t said, uint32_t outcome, uint32_t position){
+    return ((uint64_t)(position > LP_M_POSITION_MAX ? LP_M_POSITION_MAX : position) << LP_M_POSITION_SHIFT)
+         | ((uint64_t)(outcome & ((1u << LP_M_OUTCOME_BITS) - 1)) << LP_M_OUTCOME_SHIFT)
+         | ((uint64_t)(said & LP_M_SAID_MASK) << LP_M_RUN_BITS) | (run ? run : 1u);
+}
+/* A score in [0, 1] (a loss at 0, a draw at 1/2, a win at 1) as the outcome it is written with, and the spare bits that
+ * carry it when it is none of the three: the score times 2^24, to the nearest (exact for every float at or above 1/2). */
+static inline uint32_t lp_outcome_of(double score, uint32_t *spare){
+    *spare = 0;
+    if (!(score < 1.0)) return LP_OUTCOME_WIN;
+    if (score == 0.5) return LP_OUTCOME_DRAW;
+    if (!(score > 0.0)) return LP_OUTCOME_LOSS;
+    uint32_t p = (uint32_t)(score * (double)LP_SCORE_ONE + 0.5); if (p >= LP_SCORE_ONE) p = LP_SCORE_ONE - 1; if (!p) p = 1;
+    *spare = lp_spare_of(LP_SPARE_SCORE, p); return LP_OUTCOME_SCORE;
+}
+/* The score an outcome and its spare bits say. */
+static inline double lp_outcome_score(uint32_t outcome, uint32_t spare){
+    if (outcome == LP_OUTCOME_WIN) return 1.0;
+    if (outcome == LP_OUTCOME_DRAW) return 0.5;
+    if (outcome == LP_OUTCOME_LOSS) return 0.0;
+    return lp_spare_tag(spare) == LP_SPARE_SCORE ? (double)lp_spare_payload(spare) / (double)LP_SCORE_ONE : 1.0;
+}
+/* A score as the outcome would carry it: what a record's vertex says, read back. */
+static inline double lp_score_carried(double score){ uint32_t sp, o = lp_outcome_of(score, &sp); return lp_outcome_score(o, sp); }
 
 LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
 /* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child

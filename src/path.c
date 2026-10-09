@@ -27,6 +27,7 @@ size_t lp_path_decode(lp_path p, lp_vertex *out, size_t cap){
     for (size_t i = 0; i < p.n && i < cap; i++) {
         double xyz[3], m = m_of(p, i); memcpy(xyz, p.v + i * LP_VERTEX_BYTES, 24);
         lp_xyz_to_id(xyz, &out[i].id); out[i].run = lp_m_run(m); out[i].said = lp_m_said(m); out[i].spare = lp_xyz_spare(xyz);
+        out[i].outcome = lp_m_outcome(m); out[i].position = lp_m_position(m);
     }
     return p.n;
 }
