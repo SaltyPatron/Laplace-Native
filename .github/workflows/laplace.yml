@@ -40,11 +40,12 @@ jobs:
       - name: tests (${{ matrix.preset }})
         run: ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/${{ matrix.preset }}" --output-on-failure
   # The dispatch levels on a processor that has them all: hart-cloud (Sapphire Rapids: AVX2, AVX-VNNI, AVX-512,
-  # AVX-512 VNNI; its runner carries the label production), the icx build's tests run once per level forced through
+  # AVX-512 VNNI; its runner carries the label avx512, the processor's, not the deployment tier's: production is
+  # hart-prod, which has no AVX-512), the icx build's tests run once per level forced through
   # LAPLACE_ISA. hart-server's processor stops at AVX2, so the levels above it are proven only here. The processor and
   # the levels it took are written to the summary.
   isa:
-    runs-on: [self-hosted, laplace, Laplace-Native, production]
+    runs-on: [self-hosted, laplace, Laplace-Native, avx512]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
