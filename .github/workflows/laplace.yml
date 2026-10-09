@@ -10,7 +10,7 @@ on:
   pull_request:
 jobs:
   native:
-    runs-on: [self-hosted, laplace, Laplace-Native]
+    runs-on: [self-hosted, laplace, Laplace-Native, staging]
     strategy:
       matrix: { preset: [icx-release, gcc-release] }
     steps:
@@ -82,7 +82,7 @@ jobs:
   deploy:
     needs: native
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, laplace, Laplace-Native]
+    runs-on: [self-hosted, laplace, Laplace-Native, staging]
     steps:
       - name: hart-server deploys main (Laplace-Operations)
         env:
