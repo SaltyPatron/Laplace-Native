@@ -39,6 +39,44 @@ jobs:
           cmake --build --preset ${{ matrix.preset }}
       - name: tests (${{ matrix.preset }})
         run: ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/${{ matrix.preset }}" --output-on-failure
+  # The dispatch levels on a processor that has them all: hart-cloud (Sapphire Rapids: AVX2, AVX-VNNI, AVX-512,
+  # AVX-512 VNNI; its runner carries the label production), the icx build's tests run once per level forced through
+  # LAPLACE_ISA. hart-server's processor stops at AVX2, so the levels above it are proven only here. The processor and
+  # the levels it took are written to the summary.
+  isa:
+    runs-on: [self-hosted, laplace, Laplace-Native, production]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Operations", path: .operations/Laplace-Operations, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: header-only dependencies at their pins
+        run: |
+          tsv=$GITHUB_WORKSPACE/.operations/Laplace-Operations/dependencies.tsv
+          for name in eigen spectra; do
+            row=$(awk -F'\t' -v n=$name '$1 == n && $7 == "headers"' "$tsv")
+            [ -n "$row" ] || { echo "$name: not in the manifest"; continue; }
+            origin=$(echo "$row" | cut -f4); pin=$(echo "$row" | cut -f6); dir=$LAPLACE_BUILD/deps-src/$name
+            [ -d "$dir/.git" ] || git clone -q --filter=blob:none --no-checkout "$origin" "$dir"
+            git -C "$dir" fetch -q origin "$pin" && git -C "$dir" -c advice.detachedHead=false checkout -q "$pin"
+            test "$(git -C "$dir" rev-parse HEAD)" = "$pin"
+            echo "LAPLACE_$(echo $name | tr a-z A-Z)_DIR=$dir" >> "$GITHUB_ENV"; echo "$name at $pin"
+          done
+      - name: build (icx-release)
+        run: |
+          . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
+          export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc) LAPLACE_OPERATIONS=$GITHUB_WORKSPACE/.operations/Laplace-Operations
+          cmake --preset icx-release
+          cmake --build --preset icx-release
+      - name: the processor
+        run: |
+          { echo "### $(lscpu | sed -n 's/^Model name: *//p')"; echo; echo '`'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512bw|avx512vl|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: tests at every dispatch level
+        run: |
+          for isa in scalar sse2 avx2 avxvnni avx512 avx512vnni; do
+            echo "::group::LAPLACE_ISA=$isa"
+            LAPLACE_ISA=$isa ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/icx-release" --output-on-failure
+            echo "::endgroup::"; echo "- $isa: passed" >> "$GITHUB_STEP_SUMMARY"
+          done
   # Every merge to main that passes deploys hart-server: Laplace-Operations' deployment runs with every repository at its
   # main (its laplace.yml, on a repository_dispatch main-merged; the token is the secret LAPLACE_CHECKOUT, agents.sh's).
   deploy:
