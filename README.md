@@ -25,7 +25,10 @@ cmake --preset gcc-release && cmake --build --preset gcc-release && ctest --pres
 
 CI first builds and tests with Intel and GCC on the local verification host. On main, it then acquires an
 independent lease and starts the configured cloud worker, executes the registered dispatch tests on AVX-512
-hardware, and rejects missing, skipped or failed tests. Deployment to the component installation is dispatched
+hardware, and rejects missing, skipped or failed tests. The exact prepared Tier-0, flags and Highway inputs that
+passed the local tests travel with the run and are checked against their SHA-256 manifest on cloud. The hardware
+comparison therefore does not depend on which knowledge artifacts happen to be installed on that worker.
+Deployment to the component installation is dispatched
 only after both stages pass. The lease is released even on failure; the worker's installed idle timer stops it
 when no other operation is active. JUnit reports and the cloud CPU description are retained with each run.
 

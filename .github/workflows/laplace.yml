@@ -12,6 +12,7 @@ concurrency:
   queue: max
 env:
   LAPLACE_OPERATIONS: ${{ github.workspace }}/.operations/Laplace-Operations
+  LAPLACE_HOST_LOCK: ${{ vars.LAPLACE_HOST_LOCK }}
 jobs:
   native:
     runs-on: [self-hosted, laplace, Laplace-Native, staging]
@@ -29,6 +30,10 @@ jobs:
           path: .operations/Laplace-Operations
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
+      - name: Freeze the selected prepared inputs under the installation lock
+        env:
+          PRESET: ${{ matrix.preset }}
+        run: python3 scripts/ci-inputs.py freeze "$RUNNER_TEMP/native-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$PRESET"
       - name: Build pinned dependencies and Native
         env:
           PRESET: ${{ matrix.preset }}
@@ -45,6 +50,14 @@ jobs:
           name: native-${{ matrix.preset }}-${{ github.sha }}
           path: ${{ runner.temp }}/native-${{ matrix.preset }}.xml
           if-no-files-found: error
+      - name: Publish the inputs that passed local verification
+        if: matrix.preset == 'icx-release'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-prepared-inputs
+          path: ${{ runner.temp }}/native-inputs-${{ github.run_id }}-${{ github.run_attempt }}-icx-release
+          if-no-files-found: error
+          retention-days: 7
   cloud-acquire:
     needs: native
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -67,6 +80,13 @@ jobs:
           path: .operations/Laplace-Operations
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
+      - name: Download the prepared inputs verified on the local target
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: native-prepared-inputs
+          path: ${{ runner.temp }}/native-prepared-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Verify the exact input closure
+        run: python3 scripts/ci-inputs.py verify "$RUNNER_TEMP/native-prepared-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Build native dispatch variants
         run: bash scripts/ci-build.sh icx-release
       - name: Record the processor
