@@ -1,93 +1,108 @@
-# Laplace-Native on its runner: built with icx (the primary compiler) and with gcc (the check that results do not
-# depend on the compiler), its tests run under both. The runner's environment (runner/.env, from agents.sh) names its
-# build root and the machine's dependency sources and ICU. Laplace-Operations is checked out beside the code: the
-# floating-point contract and laplace-math are its.
 name: Laplace-Native
 on:
   workflow_dispatch:
   push:
     branches: [main]
   pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: native-verification
+  cancel-in-progress: false
+  queue: max
+env:
+  LAPLACE_OPERATIONS: ${{ github.workspace }}/.operations/Laplace-Operations
 jobs:
   native:
     runs-on: [self-hosted, laplace, Laplace-Native, staging]
+    timeout-minutes: 60
     strategy:
+      fail-fast: false
       matrix: { preset: [icx-release, gcc-release] }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Operations", path: .operations/Laplace-Operations, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      # The header-only libraries laplace_linalg compiles against (Eigen, Spectra), checked out at the manifest's pins
-      # under the runner's own build root; a row not in the manifest leaves laplace_linalg unbuilt, as before.
-      - name: header-only dependencies at their pins
-        run: |
-          tsv=$GITHUB_WORKSPACE/.operations/Laplace-Operations/dependencies.tsv
-          for name in eigen spectra; do
-            row=$(awk -F'\t' -v n=$name '$1 == n && $7 == "headers"' "$tsv")
-            [ -n "$row" ] || { echo "$name: not in the manifest"; continue; }
-            origin=$(echo "$row" | cut -f4); pin=$(echo "$row" | cut -f6); dir=$LAPLACE_BUILD/deps-src/$name
-            [ -d "$dir/.git" ] || git clone -q --filter=blob:none --no-checkout "$origin" "$dir"
-            git -C "$dir" fetch -q origin "$pin" && git -C "$dir" -c advice.detachedHead=false checkout -q "$pin"
-            test "$(git -C "$dir" rev-parse HEAD)" = "$pin"
-            echo "LAPLACE_$(echo $name | tr a-z A-Z)_DIR=$dir" >> "$GITHUB_ENV"; echo "$name at $pin"
-          done
-      - name: build (${{ matrix.preset }})
-        run: |
-          . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
-          export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc) LAPLACE_OPERATIONS=$GITHUB_WORKSPACE/.operations/Laplace-Operations
-          cmake --preset ${{ matrix.preset }}
-          cmake --build --preset ${{ matrix.preset }}
-      - name: tests (${{ matrix.preset }})
-        run: ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/${{ matrix.preset }}" --output-on-failure
-  # The dispatch levels on a processor that has them all: hart-cloud (Sapphire Rapids: AVX2, AVX-VNNI, AVX-512,
-  # AVX-512 VNNI; its runner carries the label avx512, the processor's, not the deployment tier's: production is
-  # hart-prod, which has no AVX-512), the icx build's tests run once per level forced through
-  # LAPLACE_ISA. hart-server's processor stops at AVX2, so the levels above it are proven only here. The processor and
-  # the levels it took are written to the summary.
-  isa:
-    runs-on: [self-hosted, laplace, Laplace-Native, avx512]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Operations", path: .operations/Laplace-Operations, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - name: header-only dependencies at their pins
-        run: |
-          tsv=$GITHUB_WORKSPACE/.operations/Laplace-Operations/dependencies.tsv
-          for name in eigen spectra; do
-            row=$(awk -F'\t' -v n=$name '$1 == n && $7 == "headers"' "$tsv")
-            [ -n "$row" ] || { echo "$name: not in the manifest"; continue; }
-            origin=$(echo "$row" | cut -f4); pin=$(echo "$row" | cut -f6); dir=$LAPLACE_BUILD/deps-src/$name
-            [ -d "$dir/.git" ] || git clone -q --filter=blob:none --no-checkout "$origin" "$dir"
-            git -C "$dir" fetch -q origin "$pin" && git -C "$dir" -c advice.detachedHead=false checkout -q "$pin"
-            test "$(git -C "$dir" rev-parse HEAD)" = "$pin"
-            echo "LAPLACE_$(echo $name | tr a-z A-Z)_DIR=$dir" >> "$GITHUB_ENV"; echo "$name at $pin"
-          done
-      - name: build (icx-release)
-        run: |
-          . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
-          export OMP_NUM_THREADS=$(nproc) MKL_NUM_THREADS=$(nproc) LAPLACE_OPERATIONS=$GITHUB_WORKSPACE/.operations/Laplace-Operations
-          cmake --preset icx-release
-          cmake --build --preset icx-release
-      - name: the processor
-        run: |
-          { echo "### $(lscpu | sed -n 's/^Model name: *//p')"; echo; echo '`'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512bw|avx512vl|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: tests at every dispatch level
-        run: |
-          for isa in scalar sse2 avx2 avxvnni avx512 avx512vnni; do
-            echo "::group::LAPLACE_ISA=$isa"
-            LAPLACE_ISA=$isa ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/icx-release" --output-on-failure
-            echo "::endgroup::"; echo "- $isa: passed" >> "$GITHUB_STEP_SUMMARY"
-          done
-  # Every merge to main that passes deploys hart-server: Laplace-Operations' deployment runs with every repository at its
-  # main (its laplace.yml, on a repository_dispatch main-merged; the token is the secret LAPLACE_CHECKOUT, agents.sh's).
-  deploy:
-    needs: native
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, laplace, Laplace-Native, staging]
-    steps:
-      - name: hart-server deploys main (Laplace-Operations)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: SaltyPatron/Laplace-Operations
+          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
+          path: .operations/Laplace-Operations
+          token: ${{ secrets.LAPLACE_CHECKOUT }}
+          persist-credentials: false
+      - name: Build pinned dependencies and Native
         env:
-          TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          PRESET: ${{ matrix.preset }}
+        run: bash scripts/ci-build.sh "$PRESET"
+      - name: Verify ISA evidence rejects skipped or missing tests
+        run: python3 scripts/test-verify-isa.py
+      - name: Execute tests on the local verification host
+        env:
+          PRESET: ${{ matrix.preset }}
+        run: ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/$PRESET" --output-on-failure --output-junit "$RUNNER_TEMP/native-$PRESET.xml"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-${{ matrix.preset }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-${{ matrix.preset }}.xml
+          if-no-files-found: error
+  cloud-acquire:
+    needs: native
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions: { contents: read, id-token: write }
+    uses: ./.github/workflows/cloud-lease.yml
+    with: { operation: acquire }
+    secrets:
+      operations-checkout: ${{ secrets.LAPLACE_CHECKOUT }}
+  isa:
+    needs: cloud-acquire
+    runs-on: [self-hosted, laplace, Laplace-Native, avx512]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: SaltyPatron/Laplace-Operations
+          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
+          path: .operations/Laplace-Operations
+          token: ${{ secrets.LAPLACE_CHECKOUT }}
+          persist-credentials: false
+      - name: Build native dispatch variants
+        run: bash scripts/ci-build.sh icx-release
+      - name: Record the processor
+        run: lscpu | tee "$RUNNER_TEMP/native-cpu.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute and verify every native dispatch level
         run: |
-          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository_owner }}/Laplace-Operations/dispatches" -d '{"event_type": "main-merged", "client_payload": {"repository": "${{ github.repository }}", "sha": "${{ github.sha }}"}}'
-          echo "dispatched: Laplace-Operations deploys hart-server with ${{ github.repository }} at ${{ github.sha }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/icx-release" --output-on-failure --output-junit "$RUNNER_TEMP/native-isa.xml"
+          python3 scripts/verify-isa.py "$RUNNER_TEMP/native-isa.xml" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-isa-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/native-isa.xml
+            ${{ runner.temp }}/native-cpu.txt
+          if-no-files-found: error
+  cloud-release:
+    needs: [cloud-acquire, isa]
+    if: always() && needs.cloud-acquire.result != 'skipped'
+    permissions: { contents: read, id-token: write }
+    uses: ./.github/workflows/cloud-lease.yml
+    with: { operation: release }
+    secrets:
+      operations-checkout: ${{ secrets.LAPLACE_CHECKOUT }}
+  deploy:
+    needs: [native, isa]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Deploy the verified Native revision through Operations
+        env:
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          gh api --method POST repos/SaltyPatron/Laplace-Operations/dispatches -f event_type=main-merged -f "client_payload[repository]=$SOURCE_REPOSITORY" -f "client_payload[sha]=$SOURCE_SHA"
+          echo "Dispatched Operations with $SOURCE_REPOSITORY at $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"

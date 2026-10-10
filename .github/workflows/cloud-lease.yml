@@ -1,0 +1,36 @@
+name: Cloud worker lease
+on:
+  workflow_call:
+    inputs:
+      operation:
+        type: string
+        required: true
+    secrets:
+      operations-checkout:
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Public repositories cannot call private reusable workflows. Use the same pinned Operations action
+      # through the authenticated checkout that Native already needs for its floating-point contract.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: SaltyPatron/Laplace-Operations
+          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
+          token: ${{ secrets.operations-checkout }}
+          persist-credentials: false
+          path: .operations
+          sparse-checkout: cloud
+      - uses: ./.operations/cloud
+        with:
+          operation: ${{ inputs.operation }}
+          project: ${{ vars.LAPLACE_GCP_PROJECT }}
+          instance: ${{ vars.LAPLACE_CLOUD_INSTANCE }}
+          zone: ${{ vars.LAPLACE_CLOUD_ZONE }}
+          provider: ${{ vars.LAPLACE_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.LAPLACE_GCP_SERVICE_ACCOUNT }}
