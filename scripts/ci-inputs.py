@@ -13,8 +13,11 @@ NAMES = ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway',
 
 
 def digest(path):
+    result = hashlib.sha256()
     with path.open('rb') as source:
-        return hashlib.file_digest(source, 'sha256').hexdigest()
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            result.update(chunk)
+    return result.hexdigest()
 
 
 def main():
