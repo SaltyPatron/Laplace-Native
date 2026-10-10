@@ -23,6 +23,17 @@ cmake --preset gcc-release && cmake --build --preset gcc-release && ctest --pres
 
 ## Checks
 
+CI first builds and tests with Intel and GCC on the local verification host. On main, it then acquires an
+independent lease and starts the configured cloud worker, executes the registered dispatch tests on AVX-512
+hardware, and rejects missing, skipped or failed tests. Deployment to the component installation is dispatched
+only after both stages pass. The lease is released even on failure; the worker's installed idle timer stops it
+when no other operation is active. JUnit reports and the cloud CPU description are retained with each run.
+
+To repeat this verification without deploying a revision, run
+`gh workflow run laplace.yml --repo SaltyPatron/Laplace-Native --ref main`, then
+`gh run list --repo SaltyPatron/Laplace-Native`. The cloud target is declared by repository variables installed
+through Operations' `cloud/configure-ci.ps1`; it is independent of the public application's production host.
+
 The checks reproduce what the prototype established and what the documentation states:
 
 - every codepoint's ID and Hilbert value against the tier-0 table
