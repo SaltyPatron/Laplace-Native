@@ -22,5 +22,6 @@ if [[ "$preset" = icx-* ]]; then
   set -u
 fi
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-$(nproc)} MKL_NUM_THREADS=${MKL_NUM_THREADS:-$(nproc)}
-cmake --preset "$preset"
+: "${LAPLACE_TIER0:?The verification job must select its prepared inputs}"
+cmake --preset "$preset" -DLAPLACE_TIER0="$LAPLACE_TIER0"
 cmake --build --preset "$preset"
