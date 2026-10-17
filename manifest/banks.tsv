@@ -12,3 +12,4 @@ upos	upos	lexical	entity	32
 lexfile	lexfile	lexical	entity	64
 deprel	deprel	structural	occurrence	64
 vnrole	vnrole	structural	occurrence	64
+wnframe	wnframe	lexical	entity	64
