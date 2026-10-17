@@ -30,6 +30,9 @@ int main(void){
     CHECK(kb && !kb->list && !strcmp(kb->carrier, "row") && kb->width == 8, "kind: the row's own bank, no list");
     CHECK(ub && ub->list == upos && !strcmp(ub->group, "lexical") && !strcmp(ub->carrier, "entity"), "upos: a lexical bank on the entity");
     CHECK(db && !strcmp(db->group, "structural") && !strcmp(db->carrier, "occurrence"), "deprel: a structural bank on the occurrence");
+    const lp_bank *fb = lp_highway_bank(h, "wnframe"); const lp_list *wnframe = lp_highway_list(h, "wnframe");     /* WordNet's verb frames: what a verb sense is used in */
+    CHECK(fb && !strcmp(fb->group, "lexical") && !strcmp(fb->carrier, "entity") && fb->width == 64, "wnframe: a lexical bank on the entity");
+    if (wnframe) { CHECK(fb && fb->list == wnframe && wnframe->count == 35 && wnframe->count <= fb->width, "WordNet's 35 verb frames, inside their bank: %u", wnframe->count); }
     int32_t bit; const lp_bank *nb = lp_highway_bank_of(h, &noun, &bit);
     CHECK(nb == ub && bit == 7, "NOUN is bit 7 of the upos bank: its frozen slot");
     lp_id none; memset(&none, 0x5a, 16);
