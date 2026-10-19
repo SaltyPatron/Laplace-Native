@@ -456,22 +456,23 @@ LP_API bool lp_name_same(const char *a, size_t al, const char *b, size_t bl);
  * What a curated resource says in its enumerations is a type, not content (Semantics: Claims). Each list of types is
  * the resource's own, in the order it writes it: UD's parts of speech and relations, WordNet's lexicographer files,
  * CILI's concepts, VerbNet's classes, FrameNet's frames, PropBank's rolesets, and so on. A type's record is the ID
- * and real coordinate of its content (the text NOUN as UD writes it; an ILI's definition as CILI gives it), in the
+ * and real coordinate of its identifier text (NOUN, i46360), never a prose definition, in the
  * form of a tier-0 record with its slot as the rank; and the mappings the highway sources draw between lists are
  * edges, pairs of slots. laplace highway (Laplace-Engine) generates highway.bin and its layout beside it. */
 typedef struct { char name[32], say[64]; uint32_t first, count; } lp_list;          /* first: its first record; count: how many */
 typedef struct { uint32_t from, to; } lp_edge;
 typedef struct { char a[32], b[32]; uint32_t first, count; } lp_edges;              /* edges from list a to list b, sorted by from */
-typedef struct { char name[32], group[16], carrier[16]; uint16_t width; const lp_list *list; } lp_bank;   /* a mask of its own: a value's bit is its frozen slot in the list (none for kind) */
+typedef struct { char name[32], group[16], carrier[16]; uint16_t width; const lp_list *list;
+                 uint16_t offset; bool flags; } lp_bank;
 typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
                  lp_bank *bank; size_t nbanks; lp_idindex *by_id; char path[4096]; lp_strmap *keys; } lp_highway;
-/* The banks (manifest/banks.tsv): one mask per semantic group, on the row the group describes (carrier: entity, occurrence,
- * row). "kind" is the row's own bank: bits 0 to 7 say what a row is. */
+/* manifest/banks.tsv assigns disjoint fields in one 64-bit carrier. Kind's field holds row-role flags;
+ * closed enums encode slot+1, reserving zero for absence. Unicode property records remain 256 bits. */
 #define LP_KIND_CLAIM    0
 #define LP_KIND_RECORD   1
 #define LP_KIND_TUPLE    2
 #define LP_KIND_FILE     3
-#define LP_MASK_BITS     256
+#define LP_MASK_BITS     64
 /* Where the highway is: $LAPLACE_HIGHWAY, or tier 0's path with .highway in place of its ending. */
 LP_API const char *lp_highway_path(void);
 /* Memory-map the highway and read its layout (path.layout); NULL or "" maps lp_highway_path(). NULL if either is missing. */
@@ -488,7 +489,7 @@ LP_API size_t lp_highway_edges(const lp_highway *, const char *a, uint32_t slot,
 LP_API void lp_highway_fingerprint(const lp_highway *, uint8_t out[32]);
 /* A bank by its name; NULL if there is none. */
 LP_API const lp_bank *lp_highway_bank(const lp_highway *, const char *name);
-/* The bank a type is a value of, by its content's ID, and its bit there (its frozen slot); NULL when the ID is no type
+/* The bank a type is a value of, by its content's ID, and its frozen slot; NULL when the ID is no type
  * or its list is no bank. O(1). */
 LP_API const lp_bank *lp_highway_bank_of(const lp_highway *, const lp_id *id, int32_t *bit);
 /* The slot of a list a source's own key points at (CILI's i46360, PropBank's abandon.01, a VerbNet class number):
