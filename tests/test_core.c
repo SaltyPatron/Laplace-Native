@@ -1,7 +1,7 @@
 /* The shared core against brute force: arrays, buffers and hexadecimal; the stable sort; the maps; every reading of a
  * path (constituents, keys, holds, times, middle, continuations over long runs); tuples; PostgreSQL's binary forms;
  * text as one composition of its codepoints; the one centroid. */
-#include "laplace/laplace.h"
+#include "laplace/tier0.h"
 #include "check.h"
 #include <string.h>
 
@@ -117,7 +117,7 @@ int main(void){
         for (int w = 0; w < 5; w++) {
             bool ok; lp_ref x = lp_ref_codepoints(t0, (const uint8_t *)words[w], strlen(words[w]), &ok); lp_id id;
             CHECK(ok && lp_id_codepoints_utf8(words[w], strlen(words[w]), &id) && lp_id_eq(&id, &x.id), "%s: the ID of its codepoints", words[w]);
-            lp_coord cs[16]; size_t nc = 0, i = 0; uint32_t cp; while (i < strlen(words[w])) { lp_utf8_next((const uint8_t *)words[w], strlen(words[w]), &i, &cp); memcpy(cs[nc++].m, t0[cp].m, 32); }
+            lp_coord cs[16]; size_t nc = 0, i = 0; uint32_t cp; while (i < strlen(words[w])) { lp_utf8_next((const uint8_t *)words[w], strlen(words[w]), &i, &cp); memcpy(cs[nc++].m, lp_tier0_at(t0, cp)->m, 32); }
             lp_coord cc; lp_coord_centroid(cs, nc, &cc); CHECK(!memcmp(&cc, &x.c, 32), "%s: the centroid of its codepoints", words[w]);
             double pts[64], out[4], want4[4]; for (size_t k = 0; k < nc; k++) lp_coord_xyzm(&cs[k], pts + 4 * k);
             CHECK(lp_centroid4_exact(pts, nc, out), "%s: points on the grid", words[w]); lp_coord_xyzm(&cc, want4);
