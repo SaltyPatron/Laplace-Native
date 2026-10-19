@@ -74,7 +74,13 @@ uint32_t lp_hilbert4_axis(double x){
 
 uint64_t lp_hilbert4(const lp_coord *c){
     uint32_t g[4];
-    for (int d = 0; d < 4; d++) g[d] = lp_hilbert4_axis((double)c->m[d] / LP_FIXED_ONE);
+    /* floor((m / 2^53 + 1) * 2^15) = floor((m + 2^53) / 2^38).
+     * Keep it integral: the double addition rounds a point immediately below a
+     * positive grid boundary onto the boundary, and depends on the caller's FP mode. */
+    const int64_t one = INT64_C(1) << 53;
+    for (int d = 0; d < 4; d++)
+        g[d] = c->m[d] <= -one ? 0 : c->m[d] >= one ? 65535u
+             : (uint32_t)((uint64_t)(c->m[d] + one) >> 38);
     return lp_hilbert4_grid(g);
 }
 
