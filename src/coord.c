@@ -28,7 +28,12 @@ void lp_coord_trunc(const double x[4], lp_coord *out){
 
 bool lp_coord_inside(const lp_coord *c){
     unsigned __int128 s = 0;
-    for (int d = 0; d < 4; d++) { __int128 v = c->m[d]; s += (unsigned __int128)(v * v); }
+    for (int d = 0; d < 4; d++) {
+        /* Reject an axis outside the cube before squaring. Four INT64_MIN axes otherwise wrap the
+         * unsigned 128-bit sum to zero and incorrectly pass the wall check. */
+        if (c->m[d] < -(INT64_C(1) << 53) || c->m[d] > (INT64_C(1) << 53)) return false;
+        __int128 v = c->m[d]; s += (unsigned __int128)(v * v);
+    }
     return s <= ((unsigned __int128)1 << 106);
 }
 

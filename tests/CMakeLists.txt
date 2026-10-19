@@ -7,6 +7,11 @@ foreach(name identity geometry coord follows consensus shape s3 pull flags highw
   add_test(NAME ${name} COMMAND test_${name})
 endforeach()
 
+add_executable(test_tier0 test_tier0.c)
+target_link_libraries(test_tier0 PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
+target_compile_options(test_tier0 PRIVATE ${LP_C_FLAGS})
+add_test(NAME test_tier0 COMMAND test_tier0 "${LAPLACE_TIER0}")
+
 # The kernels must agree with each other at every dispatch level: every test of a dispatched kernel (the vertex scan,
 # the distance rows under the shape measures with Hausdorff checked bit for bit against its definition, the S^3 angle
 # batch checked against lp_angle4 one point at a time, the Hilbert interleave, the int8 dot) runs again at every level.
