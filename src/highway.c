@@ -1,5 +1,6 @@
 /* The highway: the types' records memory-mapped read-only, their lists and edges read once from the layout beside them. */
 #include "laplace/laplace.h"
+#include "laplace/highway.h"
 #include "internal.h"
 #include "blake3.h"
 #include <stddef.h>
@@ -9,36 +10,83 @@
 
 const char *lp_highway_path(void){ static char path[4096]; return lp_tier0_sibling("LAPLACE_HIGHWAY", ".highway", path, sizeof path); }
 
-/* The layout: "records N", "edges-count N", "list NAME SAY FIRST COUNT", "bank NAME LIST GROUP CARRIER WIDTH" and
+/* The layout: "records N", "edges-count N", "list NAME SAY FIRST COUNT",
+ * "bank NAME LIST GROUP CARRIER WIDTH OFFSET ENCODING" and
  * "edges A B FIRST COUNT" lines; the records are the file, and the edges follow them as 8-byte pairs. A bank names its
  * list as it is read: the layout writes the banks after the lists. */
-typedef struct { lp_highway *h; size_t lc, ec; uint64_t nrec, nedges; } Reading;
+typedef struct { lp_highway *h; size_t lc, ec; uint64_t nrec, nedges; bool bad; } Reading;
+static bool number(const char *text, uint64_t limit, uint64_t *out){
+    if (!text || !*text) return false;
+    uint64_t n = 0;
+    for (; *text; text++) {
+        if (*text < '0' || *text > '9') return false;
+        unsigned digit = (unsigned)(*text - '0');
+        if (digit > limit || n > (limit - digit) / 10) return false;
+        n = 10 * n + digit;
+    }
+    *out = n; return true;
+}
 static void layout_line(void *ctx, char **f, int n){
     Reading *r = ctx; lp_highway *h = r->h; const char *kind = f[0];
-    if (!strcmp(kind, "records") && n > 1) r->nrec = strtoull(f[1], NULL, 10);
-    else if (!strcmp(kind, "edges-count") && n > 1) r->nedges = strtoull(f[1], NULL, 10);
-    else if (!strcmp(kind, "list") && n > 4) {
-        if (h->nlists == r->lc) { r->lc = r->lc ? r->lc * 2 : 32; h->list = realloc(h->list, r->lc * sizeof(lp_list)); }
+    if (r->bad) return;
+    if (!strcmp(kind, "records")) r->bad = n != 2 || !number(f[1], SIZE_MAX / sizeof(lp_tier0_record), &r->nrec);
+    else if (!strcmp(kind, "edges-count")) r->bad = n != 2 || !number(f[1], SIZE_MAX / sizeof(lp_edge), &r->nedges);
+    else if (!strcmp(kind, "list")) {
+        if (n != 5) { r->bad = true; return; }
+        if (h->nbanks) { r->bad = true; return; } /* banks keep pointers into the completed list array */
+        uint64_t first, count;
+        if (strlen(f[1]) >= sizeof h->list[0].name || strlen(f[2]) >= sizeof h->list[0].say
+            || !number(f[3], UINT32_MAX, &first) || !number(f[4], UINT32_MAX, &count)) { r->bad = true; return; }
+        if (h->nlists == r->lc) {
+            size_t cap = r->lc ? r->lc * 2 : 32; lp_list *lists = realloc(h->list, cap * sizeof *lists);
+            if (!lists) { r->bad = true; return; } h->list = lists; r->lc = cap;
+        }
         lp_list *x = &h->list[h->nlists++]; memset(x, 0, sizeof *x);
-        snprintf(x->name, sizeof x->name, "%s", f[1]); snprintf(x->say, sizeof x->say, "%s", f[2]); x->first = (uint32_t)strtoul(f[3], NULL, 10); x->count = (uint32_t)strtoul(f[4], NULL, 10);
+        snprintf(x->name, sizeof x->name, "%s", f[1]); snprintf(x->say, sizeof x->say, "%s", f[2]); x->first = (uint32_t)first; x->count = (uint32_t)count;
     }
-    else if (!strcmp(kind, "bank") && n > 5) {
-        h->bank = realloc(h->bank, (h->nbanks + 1) * sizeof(lp_bank)); lp_bank *x = &h->bank[h->nbanks++]; memset(x, 0, sizeof *x);
+    else if (!strcmp(kind, "bank")) {
+        uint64_t width, offset;
+        if (n != 8 || strlen(f[1]) >= sizeof h->bank[0].name || strlen(f[3]) >= sizeof h->bank[0].group
+            || strlen(f[4]) >= sizeof h->bank[0].carrier || !number(f[5], 64, &width) || !width
+            || !number(f[6], 63, &offset) || offset + width > 64
+            || (strcmp(f[7], "enum") && strcmp(f[7], "flags"))) { r->bad = true; return; }
+        lp_bank *banks = realloc(h->bank, (h->nbanks + 1) * sizeof *banks);
+        if (!banks) { r->bad = true; return; } h->bank = banks;
+        lp_bank *x = &h->bank[h->nbanks]; memset(x, 0, sizeof *x);
         snprintf(x->name, sizeof x->name, "%s", f[1]); snprintf(x->group, sizeof x->group, "%s", f[3]); snprintf(x->carrier, sizeof x->carrier, "%s", f[4]);
-        x->width = (uint16_t)atoi(f[5]); x->list = NULL;
-        if (strcmp(f[2], "-")) for (size_t i = 0; i < h->nlists; i++) if (!strcmp(h->list[i].name, f[2])) x->list = &h->list[i];
+        x->width = (uint16_t)width; x->offset = (uint16_t)offset; x->flags = !strcmp(f[7], "flags");
+        for (size_t i = 0; i < h->nlists; i++) if (!strcmp(h->list[i].name, f[2])) x->list = &h->list[i];
+        if (!x->list || !x->list->count || (x->flags ? x->list->count > width
+            : (uint64_t)x->list->count > (lp_mask_field(x) >> offset))) { r->bad = true; return; }
+        for (size_t i = 0; i < h->nbanks; i++)
+            if (!strcmp(x->name, h->bank[i].name) || (lp_mask_field(x) & lp_mask_field(h->bank + i))) { r->bad = true; return; }
+        h->nbanks++;
     }
-    else if (!strcmp(kind, "edges") && n > 4) {
-        if (h->nedgelists == r->ec) { r->ec = r->ec ? r->ec * 2 : 32; h->edges = realloc(h->edges, r->ec * sizeof(lp_edges)); }
+    else if (!strcmp(kind, "edges")) {
+        if (n != 5) { r->bad = true; return; }
+        uint64_t first, count;
+        if (strlen(f[1]) >= sizeof h->edges[0].a || strlen(f[2]) >= sizeof h->edges[0].b
+            || !number(f[3], UINT32_MAX, &first) || !number(f[4], UINT32_MAX, &count)) { r->bad = true; return; }
+        if (h->nedgelists == r->ec) {
+            size_t cap = r->ec ? r->ec * 2 : 32; lp_edges *edges = realloc(h->edges, cap * sizeof *edges);
+            if (!edges) { r->bad = true; return; } h->edges = edges; r->ec = cap;
+        }
         lp_edges *x = &h->edges[h->nedgelists++]; memset(x, 0, sizeof *x);
-        snprintf(x->a, sizeof x->a, "%s", f[1]); snprintf(x->b, sizeof x->b, "%s", f[2]); x->first = (uint32_t)strtoul(f[3], NULL, 10); x->count = (uint32_t)strtoul(f[4], NULL, 10);
+        snprintf(x->a, sizeof x->a, "%s", f[1]); snprintf(x->b, sizeof x->b, "%s", f[2]); x->first = (uint32_t)first; x->count = (uint32_t)count;
     }
 }
 static const void *highway_open(const char *path){
     size_t size; const uint8_t *m = lp_map_file(path, 0, &size); if (!m || size < sizeof(lp_tier0_record)) return NULL;
     char lp[4200]; lp_beside(path, ".layout", lp, sizeof lp);
-    Reading r = { calloc(1, sizeof(lp_highway)), 0, 0, 0, 0 }; lp_highway *h = r.h; if (!h) return NULL;
-    if (!lp_lines(lp, 6, layout_line, &r) || r.nrec * sizeof(lp_tier0_record) + r.nedges * sizeof(lp_edge) > size) { free(h->list); free(h->bank); free(h->edges); free(h); return NULL; }
+    Reading r = { .h = calloc(1, sizeof(lp_highway)) }; lp_highway *h = r.h; if (!h) return NULL;
+    bool ok = lp_lines(lp, 8, layout_line, &r) && !r.bad && r.nrec
+           && r.nrec <= size / sizeof(lp_tier0_record)
+           && r.nedges <= (size - r.nrec * sizeof(lp_tier0_record)) / sizeof(lp_edge);
+    for (size_t i = 0; ok && i < h->nlists; i++)
+        ok = h->list[i].first <= r.nrec && h->list[i].count <= r.nrec - h->list[i].first;
+    for (size_t i = 0; ok && i < h->nedgelists; i++)
+        ok = h->edges[i].first <= r.nedges && h->edges[i].count <= r.nedges - h->edges[i].first;
+    if (!ok) { free(h->list); free(h->bank); free(h->edges); free(h); return NULL; }
     snprintf(h->path, sizeof h->path, "%s", path);
     h->rec = (const lp_tier0_record *)m; h->nrec = r.nrec; h->edge = (const lp_edge *)(m + r.nrec * sizeof(lp_tier0_record)); h->nedges = r.nedges;
     return h;
@@ -93,14 +141,21 @@ void lp_highway_fingerprint(const lp_highway *h, uint8_t out[32]){
 }
 
 const lp_bank *lp_highway_bank(const lp_highway *h, const char *name){
+    if (!h || !name) return NULL;
     for (size_t i = 0; i < h->nbanks; i++) if (!strcmp(h->bank[i].name, name)) return &h->bank[i];
     return NULL;
 }
 const lp_bank *lp_highway_bank_of(const lp_highway *h, const lp_id *id, int32_t *bit){
-    int64_t i = record_of(h, NULL, id); if (bit) *bit = -1; if (i < 0) return NULL;
-    for (size_t k = 0; k < h->nbanks; k++) { const lp_list *l = h->bank[k].list; if (!l) continue;
-        if ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count) { uint32_t slot = (uint32_t)i - l->first;
-            if (slot >= h->bank[k].width) return NULL; if (bit) *bit = (int32_t)slot; return &h->bank[k]; } }
+    if (bit) *bit = -1;
+    if (!h || !id) return NULL;
+    const lp_idindex *index = by_id(h); uint64_t probe = 0;
+    for (int64_t i; (i = lp_idindex_find(index, id, &probe)) >= 0; ) {
+        for (size_t k = 0; k < h->nbanks; k++) { const lp_list *l = h->bank[k].list; if (!l) continue;
+            if ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count) { uint32_t slot = (uint32_t)i - l->first;
+                const lp_bank *bank = h->bank + k;
+                if (bank->flags ? slot >= bank->width : (uint64_t)slot + 1 > (lp_mask_field(bank) >> bank->offset)) continue;
+                if (bit) *bit = (int32_t)slot; return bank; } }
+    }
     return NULL;
 }
 

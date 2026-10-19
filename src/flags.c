@@ -1,5 +1,6 @@
 /* The flags that go with tier 0: the records memory-mapped read-only, and their layout read once. */
 #include "laplace/laplace.h"
+#include "laplace/highway.h"
 #include "internal.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -62,4 +63,81 @@ int32_t lp_flags_value(const lp_layout *l, const lp_field *f, const char *value)
     if (!f->nvalues) return lp_name_same("Y", 1, value, vl) || lp_name_same("Yes", 3, value, vl) || lp_name_same("true", 4, value, vl) ? 1
                           : lp_name_same("N", 1, value, vl) || lp_name_same("No", 2, value, vl) || lp_name_same("false", 5, value, vl) ? 0 : -1;
     return (int32_t)lp_name_find(&l->value[f->first], f->nvalues, sizeof(lp_value), offsetof(lp_value, name), offsetof(lp_value, say), value);
+}
+
+lp_mask lp_mask_field(const lp_bank *bank){
+    if (!bank || !bank->width || bank->width > 64 || bank->offset > 64 - bank->width) return 0;
+    return (bank->width == 64 ? UINT64_MAX : (UINT64_C(1) << bank->width) - 1) << bank->offset;
+}
+
+static bool mask_slot(const lp_bank *bank, uint32_t slot, lp_mask *encoded){
+    lp_mask field = lp_mask_field(bank);
+    if (!field || !bank->list || slot >= bank->list->count) return false;
+    if (bank->flags) {
+        if (slot >= bank->width) return false;
+        *encoded = UINT64_C(1) << (bank->offset + slot);
+    } else {
+        uint64_t value = (uint64_t)slot + 1;
+        if (value > (field >> bank->offset)) return false;
+        *encoded = value << bank->offset;
+    }
+    return true;
+}
+
+bool lp_mask_put(lp_mask *mask, const lp_bank *bank, uint32_t slot){
+    lp_mask value;
+    if (!mask || !mask_slot(bank, slot, &value)) return false;
+    if (bank->flags) *mask |= value;
+    else *mask = (*mask & ~lp_mask_field(bank)) | value;
+    return true;
+}
+
+bool lp_mask_has(lp_mask mask, const lp_bank *bank, uint32_t slot){
+    lp_mask value;
+    return mask_slot(bank, slot, &value) && (bank->flags ? (mask & value) != 0 : (mask & lp_mask_field(bank)) == value);
+}
+
+int64_t lp_mask_get(lp_mask mask, const lp_bank *bank){
+    lp_mask field = lp_mask_field(bank);
+    if (!field || !bank->list || !bank->list->count
+        || (bank->flags ? bank->list->count > bank->width : (uint64_t)bank->list->count > (field >> bank->offset))) return -1;
+    uint64_t value = (mask & field) >> bank->offset;
+    if (!value) return -1;
+    if (!bank->flags) return value <= bank->list->count ? (int64_t)(value - 1) : -1;
+    uint64_t allowed = bank->list->count >= 64 ? UINT64_MAX : (UINT64_C(1) << bank->list->count) - 1;
+    if (value & ~allowed) return -1;
+    if (value & (value - 1)) return -2;
+    uint32_t slot = 0; while (!(value & 1)) { value >>= 1; slot++; }
+    return slot;
+}
+
+bool lp_mask_clear(lp_mask *mask, const lp_bank *bank){
+    lp_mask field = lp_mask_field(bank);
+    if (!mask || !field) return false;
+    *mask &= ~field; return true;
+}
+
+bool lp_mask_merge(const lp_highway *h, lp_mask a, lp_mask b, lp_mask *out){
+    if (!h || !out || !h->nbanks) return false;
+    lp_mask known = 0;
+    for (size_t i = 0; i < h->nbanks; i++) {
+        const lp_bank *bank = h->bank + i; lp_mask field = lp_mask_field(bank);
+        if (!field || (known & field) || !bank->list) return false;
+        known |= field;
+        lp_mask x = a & field, y = b & field;
+        if ((x && lp_mask_get(a, bank) == -1) || (y && lp_mask_get(b, bank) == -1)) return false;
+        if (!bank->flags && x && y && x != y) return false;
+    }
+    if ((a | b) & ~known) return false;
+    *out = a | b; return true;
+}
+
+bool lp_mask_add_id(const lp_highway *h, lp_mask *mask, const lp_id *id){
+    if (!h || !mask || !id) return false;
+    int32_t slot; const lp_bank *bank = lp_highway_bank_of(h, id, &slot);
+    lp_mask value;
+    if (!bank || slot < 0 || !mask_slot(bank, (uint32_t)slot, &value)) return false;
+    lp_mask current = *mask & lp_mask_field(bank);
+    if (!bank->flags && current && current != value) return false;
+    return lp_mask_put(mask, bank, (uint32_t)slot);
 }

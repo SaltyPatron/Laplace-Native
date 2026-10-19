@@ -1,38 +1,38 @@
 # The frozen slots of the highway list wnframe (WordNet generic verb sentence frame). A slot never moves: a type no resource lists any longer is
 # retired and keeps its slot; a new type takes the next. Written by laplace highway; never edited by hand.
 slot	id	status	key
-0	7ef05098d54a80c5c1c7b7b90d5d3f43	live	1	Something ----s
-1	030c9e6b3a6b0ff6f24758f417cf13f5	live	2	Somebody ----s
-2	240e69717e743af4fecc5d2d660ee50a	live	3	It is ----ing
-3	4cb2299d2fa84ad67b6278a0d4b29a00	live	4	Something is ----ing PP
-4	3b9912b97e998d51785ea3689b199d45	live	5	Something ----s something Adjective/Noun
-5	cded319328c5f38290304862aba24b67	live	6	Something ----s Adjective/Noun
-6	416e8a60b041812aba1ef2a42eca256e	live	7	Somebody ----s Adjective
-7	cc0a2dccbe34afb670ec7e7c96527bfc	live	8	Somebody ----s something
-8	85229a6114fcb76ab6abeb6849aa50d8	live	9	Somebody ----s somebody
-9	581949c0f69354aad314984105b1b5ff	live	10	Something ----s somebody
-10	724fc516832804e412b5e8294ca668a2	live	11	Something ----s something
-11	a5a6863b4e84298a49ff0648900a4694	live	12	Something ----s to somebody
-12	4c1c42e89ca5715ee780e176869007e8	live	13	Somebody ----s on something
-13	8f22939bf0b22e82a43493f1aca19a04	live	14	Somebody ----s somebody something
-14	6fbbaaa23f5a47989be8aa42c7fe7e48	live	15	Somebody ----s something to somebody
-15	5030dd01b990910c608f1d2ae9c2418c	live	16	Somebody ----s something from somebody
-16	571e12f0d65f2ed2c90419ce0cc463ea	live	17	Somebody ----s somebody with something
-17	e4f3a88604938d8e22f5163472f5f812	live	18	Somebody ----s somebody of something
-18	f347d14224b5321e137a177ee5858ed4	live	19	Somebody ----s something on somebody
-19	c9184adedbef42cb4f368d2a6bbd3c4b	live	20	Somebody ----s somebody PP
-20	59cc00e75e850d82b634a4a911c9a2d2	live	21	Somebody ----s something PP
-21	740116128cb20a68646f97350d49b8ec	live	22	Somebody ----s PP
-22	6e3967beba7c1ee153c0d8417ea51e33	live	23	Somebody's (body part) ----s
-23	c19b080d6224c88ca0791066793f1446	live	24	Somebody ----s somebody to INFINITIVE
-24	c09b2ed062ea4c996b866f7627720e7d	live	25	Somebody ----s somebody INFINITIVE
-25	fbfcfab3331ce864e88d22f13d6038bc	live	26	Somebody ----s that CLAUSE
-26	927ba4ff2f76fec0911bdbf2f77d130a	live	27	Somebody ----s to somebody
-27	bf5f75b546d90d864270fe8c42282bea	live	28	Somebody ----s to INFINITIVE
-28	aeab92439f030eda56c5a8d23ed367d7	live	29	Somebody ----s whether INFINITIVE
-29	80ce513f218dfe8bfad1722e9ae0f41c	live	30	Somebody ----s somebody into V-ing something
-30	c4eb3589279f1554747e0f8124c5b9bd	live	31	Somebody ----s something with something
-31	d475595249fe2eca8cdadb16e83d053f	live	32	Somebody ----s INFINITIVE
-32	30eb17f193eec2a46b2e9504d6f4bd26	live	33	Somebody ----s VERB-ing
-33	600ccdc74d2f159fa6ce56f8164d47ee	live	34	It ----s that CLAUSE
-34	ab2e74bdb7d035f5e3065ffb8d49a769	live	35	Something ----s INFINITIVE
+0	d63bd9a826af91c1fea371965a64e11e	live	1
+1	813e9b729141e7f385afa0a2d0df3e6c	live	2
+2	58d6fd3dc609068615d66b6a2616cce5	live	3
+3	e67a9c4536256f1ec7495a146b5442fa	live	4
+4	b3372b584dc0df6ce757fa43f459ca1f	live	5
+5	b748b4ebf53795686930b718fd46066d	live	6
+6	22f36339ae3058eeaf19a52949cfb9eb	live	7
+7	658325b1f32c8396999ae42cb87c35f3	live	8
+8	026ed82c4fff0dc3c84dc96cf999e005	live	9
+9	f3e447c375799bfd43d1337196e8c01d	live	10
+10	b8914f44fbed81366c39baa9d292dd21	live	11
+11	3fc8d35fa177b934c772e1e6566eae6b	live	12
+12	05d29ad38eb74abde736c36b6e6424b3	live	13
+13	a0654c3f158f4947e854157af297bd6b	live	14
+14	4ac07763f90990dc438fd743fece5d67	live	15
+15	0e647fcd89b03758a50ba77763a39768	live	16
+16	10725118973dc46c38b4e06fe091fbbc	live	17
+17	847b5a774047a18e2f7d8c3356cf3c98	live	18
+18	ff03344fbc3229a37f515b9169b4df45	live	19
+19	ca2e4f53818c6d8c74891678c14945d9	live	20
+20	9066f2b6f2c15a3bb856ea328a9b93f2	live	21
+21	e06762720eb649f2b7bc4ae6df89685b	live	22
+22	522e9c0599570cce6dece8d1cfaa7a72	live	23
+23	6aa96dbe0fdc3e0959c270a4096e3d06	live	24
+24	62ca377c1cc6b8e59ce362491be3d6d2	live	25
+25	efb07e52e4fbb5a2b13d8c9dd34c3b02	live	26
+26	55bdd767ed130a35b3ff428f7a5978b3	live	27
+27	30e00d2035b7f047647de2bcf0a50230	live	28
+28	5d1d661016fafb973941458b842beebd	live	29
+29	471102112846045b8bcc13919af25ebc	live	30
+30	9c8beabc8f95c5e5ce9f496fd8b45f16	live	31
+31	358b0d8c8c56a105c1bbef3b9e785f75	live	32
+32	520a2f41bb710751347bd8afb67ee372	live	33
+33	98b097d4d374cbf47e6fe1df1e940a2f	live	34
+34	7fcb7e105c73ee7b7934e0fa1b613e69	live	35
