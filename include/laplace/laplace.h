@@ -172,7 +172,8 @@ LP_API void lp_xyz_spare_set(double xyz[3], uint32_t v);
 /* A POINT ZM of real 4D coordinates, as EWKB (37 bytes). */
 LP_API size_t lp_ewkb_point4(const double xyzm[4], uint8_t *out, size_t cap);
 static inline size_t lp_ewkb_coord(const lp_coord *c, uint8_t *out, size_t cap){ double x[4]; lp_coord_xyzm(c, x); return lp_ewkb_point4(x, out, cap); }
-/* Parse a POINT ZM / LINESTRING ZM path (little-endian EWKB, optional SRID). Returns the vertex count and points
+/* Read a contiguous POINT ZM / LINESTRING ZM body in native byte order (optional SRID). For polygons, collections
+ * and other byte orders use geometry.h's span visitor. Returns the vertex count and points
  * *vertices at the first vertex (32 bytes each: X, Y, Z, M), or 0 on malformed input. */
 LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **vertices);
 
@@ -517,7 +518,7 @@ typedef struct { lp_id id; lp_coord c; uint8_t tier; uint8_t said; uint8_t outco
 #define LP_M_RUN_BITS  30
 #define LP_M_SAID_BITS 3
 #define LP_M_SAID_MASK ((1ull << LP_M_SAID_BITS) - 1)
-static inline uint64_t lp_m_bits(double m){ return m < 1 ? 1ull : (uint64_t)m; }
+static inline uint64_t lp_m_bits(double m){ return m >= 1 && m < 0x1p64 ? (uint64_t)m : 1ull; }
 static inline uint32_t lp_m_run(double m){ uint32_t r = (uint32_t)(lp_m_bits(m) & ((1ull << LP_M_RUN_BITS) - 1)); return r ? r : 1u; }
 static inline uint32_t lp_m_said(double m){ return (uint32_t)((lp_m_bits(m) >> LP_M_RUN_BITS) & LP_M_SAID_MASK); }
 /* M as it is written for a vertex repeated run times that is said to be what said names. */
@@ -599,6 +600,9 @@ LP_API size_t lp_factor(const lp_ref *children, size_t n, lp_ref *out, lp_compos
 typedef struct lp_text lp_text;
 LP_API lp_text *lp_text_new(const lp_tier0_record *t0);
 LP_API void     lp_text_free(lp_text *);
+/* Canonical UAX #29 tree identity, using the same decomposer as the Engine recording callback. Context belongs
+ * to the calling thread. Empty or noncanonical UTF-8 is rejected before decomposition. */
+LP_API bool lp_text_id(lp_text *context, const char *utf8, size_t len, lp_id *out);
 LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_compose_fn compose, void *sink);
 /* The same, also giving the trunk's own constituents in order, repeats included (at most cap are written; the count
  * is returned in *nparts). A trunk that is one codepoint has itself as its only part. */

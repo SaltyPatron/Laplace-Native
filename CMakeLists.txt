@@ -85,7 +85,7 @@ endif()
 # laplace_text: the one decomposition of text (UAX #29), which needs ICU for the Unicode version tier 0 was built from.
 # ICU's symbols carry its version, so it loads beside the ICU a PostgreSQL server was built with.
 if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
-  add_library(laplace_text STATIC src/text.c)
+  add_library(laplace_text STATIC src/text.c src/ids.c)
   target_include_directories(laplace_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
   if(WIN32)                                         # ICU's Windows release: lib64, and its own library names

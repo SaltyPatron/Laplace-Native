@@ -31,8 +31,6 @@ size_t lp_path_decode(lp_path p, lp_vertex *out, size_t cap){
     }
     return p.n;
 }
-size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap){ return lp_path_expand(lp_path_of(ewkb, len), out, cap); }
-size_t lp_path_vertices(const uint8_t *ewkb, size_t len, lp_vertex *out, size_t cap){ return lp_path_decode(lp_path_of(ewkb, len), out, cap); }
 
 size_t lp_ids_unique(lp_id *ids, size_t n){
     if (n < 2) return n;
@@ -99,9 +97,6 @@ size_t lp_path_follows(lp_path p, const lp_id *phrase, size_t np, lp_id *out, si
     }
     if (key != stack) lp_free(key);
     return found;
-}
-size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap){
-    return lp_path_follows(lp_path_of(ewkb, len), phrase, np, out, cap);
 }
 
 /* ---- tuples */
