@@ -28,7 +28,12 @@ void lp_coord_trunc(const double x[4], lp_coord *out){
 
 bool lp_coord_inside(const lp_coord *c){
     unsigned __int128 s = 0;
-    for (int d = 0; d < 4; d++) { __int128 v = c->m[d]; s += (unsigned __int128)(v * v); }
+    for (int d = 0; d < 4; d++) {
+        /* Reject an axis outside the cube before squaring. Four INT64_MIN axes otherwise wrap the
+         * unsigned 128-bit sum to zero and incorrectly pass the wall check. */
+        if (c->m[d] < -(INT64_C(1) << 53) || c->m[d] > (INT64_C(1) << 53)) return false;
+        __int128 v = c->m[d]; s += (unsigned __int128)(v * v);
+    }
     return s <= ((unsigned __int128)1 << 106);
 }
 
@@ -60,16 +65,26 @@ uint64_t lp_hilbert4_grid(const uint32_t g[4]){
     return lp_kernels()->interleave(X);
 }
 
-/* The grid is taken in IEEE double exactly as tier 0 was generated: floor((x + 1) / 2 * 65536), clamped to
- * [0, 65535], with x = m / 2^53. Built without FP contraction, so these bits are the same on every CPU. */
+/* floor((x + 1) * 32768), clamped to [0, 65535]. Scaling by a power of two is exact here. Split the integer
+ * and fractional parts before adding the offset: x + 1 would erase small negative values and round points
+ * immediately below a positive cell boundary onto it. This also leaves the result independent of FP mode. */
 uint32_t lp_hilbert4_axis(double x){
-    double v = (x + 1.0) / 2.0 * 65536.0;
-    return !(v >= 0) ? 0 : v > 65535.0 ? 65535u : (uint32_t)v;
+    if (!(x > -1.0)) return 0;
+    if (x >= 1.0) return 65535u;
+    double scaled = x * 32768.0;
+    int32_t whole = (int32_t)scaled;
+    return (uint32_t)(32768 + whole - (scaled < (double)whole));
 }
 
 uint64_t lp_hilbert4(const lp_coord *c){
     uint32_t g[4];
-    for (int d = 0; d < 4; d++) g[d] = lp_hilbert4_axis((double)c->m[d] / LP_FIXED_ONE);
+    /* floor((m / 2^53 + 1) * 2^15) = floor((m + 2^53) / 2^38).
+     * Keep it integral: the double addition rounds a point immediately below a
+     * positive grid boundary onto the boundary, and depends on the caller's FP mode. */
+    const int64_t one = INT64_C(1) << 53;
+    for (int d = 0; d < 4; d++)
+        g[d] = c->m[d] <= -one ? 0 : c->m[d] >= one ? 65535u
+             : (uint32_t)((uint64_t)(c->m[d] + one) >> 38);
     return lp_hilbert4_grid(g);
 }
 

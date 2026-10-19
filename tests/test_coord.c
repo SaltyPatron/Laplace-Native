@@ -1,6 +1,6 @@
 /* Coordinates against the prototype: every tier-0 point is inside the wall, its Hilbert value equals tier 0's,
  * and centroids are exact integer averages truncated toward zero. */
-#include "laplace/laplace.h"
+#include "laplace/tier0.h"
 #include "check.h"
 #include "../src/internal.h"
 #include <string.h>
@@ -10,7 +10,7 @@ int main(void){
     CHECK(t0 != NULL, "cannot map tier 0");
     if (!t0) DONE("coord");
     size_t outside = 0, hbad = 0;
-    for (uint32_t cp = 0; cp < LP_NCP; cp++) {
+    for (uint32_t cp = 0; cp < LP_TIER0_COUNT; cp++) {
         lp_coord c; memcpy(c.m, t0[cp].m, 32);
         outside += !lp_coord_inside(&c);
         hbad += lp_hilbert4(&c) != t0[cp].hilbert;
@@ -37,7 +37,7 @@ int main(void){
 
     /* Hilbert decode is the encode's inverse: on every tier-0 point and on a million grid cells */
     { size_t bad = 0;
-      for (uint32_t cp = 0; cp < LP_NCP; cp++) {
+      for (uint32_t cp = 0; cp < LP_TIER0_COUNT; cp++) {
           uint32_t g[4], e[4]; lp_hilbert4_decode(t0[cp].hilbert, g);
           for (int d = 0; d < 4; d++) e[d] = lp_hilbert4_axis((double)t0[cp].m[d] / LP_FIXED_ONE);
           bad += memcmp(g, e, sizeof g) != 0;

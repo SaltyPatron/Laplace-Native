@@ -1,12 +1,15 @@
 /* Composition: an entity from its constituents. Its ID is the hash of their IDs in order; its real coordinate is the
  * exact integer average of theirs, truncated toward zero, so it can never leave the 4-ball they lie in. */
-#include "laplace/laplace.h"
+#include "laplace/tier0.h"
 #include "internal.h"
 #include "blake3.h"
 #include <string.h>
 
 lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp){
-    lp_ref r; memset(&r, 0, sizeof r); r.id = t0[cp].id; memcpy(r.c.m, t0[cp].m, sizeof r.c.m); return r;
+    lp_ref r; memset(&r, 0, sizeof r);
+    const lp_tier0_record *atom = lp_tier0_at(t0, cp);
+    if (atom) { r.id = atom->id; memcpy(r.c.m, atom->m, sizeof r.c.m); }
+    return r;
 }
 
 /* The children's IDs go to the hasher 64 at a time, gathered side by side: the same bytes as lp_id_compose hashes. */
@@ -35,8 +38,10 @@ lp_ref lp_ref_codepoints(const lp_tier0_record *t0, const uint8_t *s, size_t n, 
     blake3_hasher h; blake3_hasher_init(&h); lp_coord_sum a = { { 0, 0, 0, 0 }, 0 }; size_t i = 0; uint32_t cp, first = 0;
     while (i < n) {
         if (!lp_utf8_next(s, n, &i, &cp)) return r;
+        const lp_tier0_record *atom = lp_tier0_at(t0, cp);
+        if (!atom) return r;
         if (!a.n) first = cp;
-        blake3_hasher_update(&h, t0[cp].id.b, 16); lp_coord_add(&a, t0[cp].m);
+        blake3_hasher_update(&h, atom->id.b, 16); lp_coord_add(&a, atom->m);
     }
     if (!a.n) return r;
     if (a.n == 1) { *ok = true; return lp_ref_atom(t0, first); }               /* one codepoint is that codepoint */
