@@ -514,6 +514,10 @@ const lp_tier0_record *lp_tier0_find(const lp_tier0_record *table, const lp_id *
     return slot < 0 ? NULL : table + slot;
 }
 
+bool lp_tier0_contains(const lp_tier0_record *table, const lp_id *id){
+    return lp_tier0_find(table, id) != NULL;
+}
+
 int64_t lp_tier0_codepoint(const lp_tier0_record *table, const lp_id *id){
     const Tier0Index *x = index_for(table);
     if (!x || !id) return -1;
