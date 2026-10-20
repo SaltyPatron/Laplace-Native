@@ -89,9 +89,17 @@ static const void *highway_open(const char *path){
     if (!ok) { free(h->list); free(h->bank); free(h->edges); free(h); return NULL; }
     snprintf(h->path, sizeof h->path, "%s", path);
     h->rec = (const lp_tier0_record *)m; h->nrec = r.nrec; h->edge = (const lp_edge *)(m + r.nrec * sizeof(lp_tier0_record)); h->nedges = r.nedges;
+    h->by_id = lp_idindex_build(h->rec, h->nrec, sizeof *h->rec);
+    if (!h->by_id) { free(h->list); free(h->bank); free(h->edges); free(h); lp_unmap_file(m, size); return NULL; }
     return h;
 }
 const lp_highway *lp_highway_map(const char *path){ return lp_cached("highway", path && *path ? path : lp_highway_path(), highway_open); }
+
+bool lp_highway_contains(const lp_highway *h, const lp_id *id){
+    if (!h || !id) return false;
+    uint64_t probe = 0;
+    return lp_idindex_find(h->by_id, id, &probe) >= 0;
+}
 
 const lp_list *lp_highway_list(const lp_highway *h, const char *name){
     int64_t i = lp_name_find(h->list, h->nlists, sizeof(lp_list), offsetof(lp_list, name), offsetof(lp_list, say), name);
@@ -102,17 +110,10 @@ const lp_tier0_record *lp_highway_at(const lp_highway *h, const lp_list *l, uint
     return &h->rec[l->first + slot];
 }
 
-/* What is built over a highway the first time it is asked, once for the process: the index of its records by ID, and
- * its keys. A mapped highway is shared by every caller, so the building is under a lock. */
-static lp_lock build_mu = LP_LOCK_INIT;
-static const lp_idindex *by_id(const lp_highway *hc){
-    lp_highway *h = (lp_highway *)hc; lp_idindex *x = __atomic_load_n(&h->by_id, __ATOMIC_ACQUIRE);
-    if (x) return x;
-    lp_lock_take(&build_mu);
-    if (!(x = h->by_id)) __atomic_store_n(&h->by_id, x = lp_idindex_build(h->rec, h->nrec, sizeof *h->rec), __ATOMIC_RELEASE);
-    lp_lock_give(&build_mu);
-    return x;
-}
+/* Published mappings already own their immutable ID index. Queries never
+ * allocate or take an initialization lock while record workers are running. */
+static const lp_idindex *by_id(const lp_highway *h){ return h->by_id; }
+static lp_lock build_mu = LP_LOCK_INIT; /* the separate, lazy textual-key index */
 /* The record's place among all the highway's records, in list l (any list when l is NULL), or -1. */
 static int64_t record_of(const lp_highway *h, const lp_list *l, const lp_id *id){
     const lp_idindex *x = by_id(h); uint64_t probe = 0;
