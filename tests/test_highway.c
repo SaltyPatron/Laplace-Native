@@ -127,6 +127,15 @@ int main(void){
     int32_t bit; const lp_bank *nb = lp_highway_bank_of(h, &noun, &bit);
     CHECK(nb == ub && bit == 7, "NOUN is frozen slot 7 of the upos field");
     lp_id none; memset(&none, 0x5a, 16);
+    CHECK(lp_highway_contains(h, &noun), "membership includes a listed identifier");
+    CHECK(!lp_highway_contains(h, &none) && !lp_highway_contains(NULL, &noun)
+          && !lp_highway_contains(h, NULL), "membership rejects absent IDs and mappings");
+    const lp_list *memberships[] = {upos, deprel, ili, pb, vn};
+    for (size_t i = 0; i < sizeof memberships / sizeof *memberships; i++) {
+        const lp_list *list = memberships[i];
+        const lp_tier0_record *first = list ? lp_highway_at(h, list, 0) : NULL;
+        CHECK(first && lp_highway_contains(h, &first->id), "membership spans every tested namespace %zu", i);
+    }
     CHECK(lp_highway_bank_of(h, &none, &bit) == NULL && bit == -1, "no type, no bank");
     uint8_t fp[32]; lp_highway_fingerprint(h, fp); int zero = 1; for (int i = 0; i < 32; i++) zero &= fp[i] == 0;
     CHECK(!zero, "a fingerprint");
