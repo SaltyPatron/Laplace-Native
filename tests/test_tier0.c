@@ -135,6 +135,14 @@ int main(int argc, char **argv){
           "surrogates are not Tier-0 atoms");
     CHECK(lp_tier0_at(t0, LP_NCP) == NULL && lp_tier0_at(NULL, 'a') == NULL,
           "invalid codepoints and unknown mappings are rejected");
+    lp_id missing; memset(&missing, 0x5a, sizeof missing);
+    CHECK(!lp_tier0_contains(NULL, &missing) && !lp_tier0_contains(t0, NULL)
+          && !lp_tier0_contains(t0, &missing), "membership rejects missing mappings and IDs");
+    const uint32_t members[] = {0, 0xd7ffu, 0xe000u, 0x10ffffu};
+    for (size_t i = 0; i < sizeof members / sizeof *members; i++) {
+        lp_id id; lp_id_codepoint(members[i], &id);
+        CHECK(lp_tier0_contains(t0, &id), "membership includes scalar boundary U+%04X", members[i]);
+    }
 
     if (!absent && !rank_bad) {
         lp_tier0_record *rebuilt = malloc((size_t)LP_TIER0_COUNT * sizeof *rebuilt);
