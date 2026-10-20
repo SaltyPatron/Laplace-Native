@@ -19,6 +19,7 @@ static inline bool lp_unicode_scalar(uint32_t cp){
  * is an atom. The returned records belong to the read-only mapped file. */
 LP_API const lp_tier0_record *lp_tier0_at(const lp_tier0_record *table, uint32_t cp);
 LP_API const lp_tier0_record *lp_tier0_find(const lp_tier0_record *table, const lp_id *id);
+LP_API bool lp_tier0_contains(const lp_tier0_record *table, const lp_id *id);
 
 /* Build the complete cache from the UCD/DUCET scalar order. The caller provides
  * LP_TIER0_COUNT output records. Native owns projection, quantization, identities
