@@ -8,6 +8,10 @@ extern "C" {
 
 typedef uint64_t lp_mask;
 
+/* Membership in any list, through the cache's map-time ID index. No lookup
+ * allocation, name scan, coordinate computation or database call. */
+LP_API bool lp_highway_contains(const lp_highway *highway, const lp_id *id);
+
 /* Field bits in the one 64-bit carrier; zero for an invalid descriptor. */
 LP_API lp_mask lp_mask_field(const lp_bank *bank);
 /* Set an enum's slot, or add a row-role flag. Invalid slots leave the mask unchanged. */
