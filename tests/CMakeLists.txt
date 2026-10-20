@@ -4,7 +4,7 @@ foreach(name identity geometry coord follows consensus shape s3 pull flags highw
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
   target_compile_definitions(test_${name} PRIVATE LAPLACE_TIER0="${LAPLACE_TIER0}")
-  if(name STREQUAL "geometry" OR name STREQUAL "highway")
+  if(name STREQUAL "geometry" OR name STREQUAL "highway" OR name STREQUAL "consensus")
     add_test(NAME test_${name} COMMAND test_${name})
   else()
     add_test(NAME ${name} COMMAND test_${name})

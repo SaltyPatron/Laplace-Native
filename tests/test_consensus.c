@@ -1,14 +1,119 @@
 /* Consensus: Glickman's worked Glicko-2 example, the trust-to-deviation mapping, signed trust, and a witness's series
  * solved as one update. */
 #include "laplace/laplace.h"
+#include "laplace/consensus.h"
 #include "check.h"
 #include <math.h>
 #include <string.h>
+#include <errno.h>
+#include <float.h>
+
+static int standing_equal(const lp_standing *a, const lp_standing *b){
+    return !memcmp(&a->rating, &b->rating, sizeof(double))
+        && !memcmp(&a->deviation, &b->deviation, sizeof(double))
+        && !memcmp(&a->volatility, &b->volatility, sizeof(double))
+        && a->matches == b->matches && a->witnesses == b->witnesses && a->iterations == b->iterations;
+}
+
+static lp_series_entry observation(unsigned root, uint64_t games, double wins, double trust){
+    lp_id id; lp_id_codepoint(root, &id); return lp_series_observation(id, games, wins, trust);
+}
+
+static void rooted_series(void){
+    const double trusts[] = {0.5,0.85,0.99};
+    const uint64_t counts[] = {1,10,1000,1000000};
+    for (size_t t = 0; t < 3; t++) {
+        double precision = lp_witness_precision(trusts[t], LP_ATTEST_FLOOR);
+        double phi = LP_GLICKO_DEVIATION / LP_GLICKO_SCALE;
+        double performance = log((1 + trusts[t]) / (1 - trusts[t]));
+        double asymptote = LP_GLICKO_RATING + LP_GLICKO_SCALE * precision * performance / (1 / (phi * phi) + precision);
+        double last = LP_GLICKO_RATING, last_rd = LP_GLICKO_DEVIATION + 1; lp_standing out = {0};
+        for (size_t c = 0; c < 4; c++) {
+            lp_series_entry e = observation('a', counts[c], (double)counts[c], trusts[t]);
+            bool ok = lp_series(&e, 1, &out);
+            CHECK(ok && isfinite(out.rating) && isfinite(out.deviation) && isfinite(out.volatility),
+                  "rooted series t=%g n=%llu converges", trusts[t], (unsigned long long)counts[c]);
+            CHECK(out.rating > last && out.rating <= asymptote + 1e-9 && out.deviation < last_rd,
+                  "more games approach the joint-posterior ceiling %.9f: %.9f / %.9f", asymptote, out.rating, out.deviation);
+            CHECK(out.iterations <= 64 && out.matches == counts[c] && out.witnesses == 1,
+                  "series is solved in bounded iterations, not per game");
+            last = out.rating; last_rd = out.deviation;
+        }
+        CHECK(fabs(out.rating - asymptote) < 0.05, "million-game result matches the analytical source/prior asymptote");
+        lp_series_entry e[2] = {observation('a', 1000000, 1000000, trusts[t]), observation('b', 1000000, 1000000, trusts[t])};
+        lp_standing corroborated;
+        CHECK(lp_series(e, 2, &corroborated), "independent corroboration solves");
+        CHECK(corroborated.rating > asymptote && corroborated.deviation < out.deviation && corroborated.witnesses == 2,
+              "independent sources exceed one source's certainty-limited rating ceiling: %.9f > %.9f, RD %.9f < %.9f",
+              corroborated.rating, asymptote, corroborated.deviation, out.deviation);
+        double independent_limit = LP_GLICKO_RATING + LP_GLICKO_SCALE * 2 * precision * performance / (1 / (phi * phi) + 2 * precision);
+        CHECK(fabs(corroborated.rating - independent_limit) < 0.05, "two-root asymptote follows summed independent precision");
+        if (trusts[t] == .85) {
+            /* Independent 28-digit decimal solution of the joint stationary
+             * equations and volatility root, using bisection throughout. */
+            CHECK(fabs(out.rating - 1832.827344606) < 1e-8 && fabs(out.deviation - 170.547513798) < 1e-8
+                  && fabs(corroborated.rating - 1877.652957569) < 1e-8 && fabs(corroborated.deviation - 128.453983205) < 1e-8,
+                  "Native matches independently computed decimal reference standings");
+        }
+    }
+    lp_series_entry dependent[] = {observation('a', 1000, 600, .5), observation('a', 10000, 10000, .85)};
+    lp_series_entry combined = observation('a', 11000, 10600, .85);
+    lp_standing folded, one;
+    CHECK(lp_series(dependent, 2, &folded) && lp_series(&combined, 1, &one) && standing_equal(&folded, &one),
+          "one dependence root is bit-identical to summed games/wins and maximum trust");
+    lp_series_entry entries[] = {observation('a', 1000, 600, .5), observation('b', 17, 4.5, .9),
+                               observation('a', 2000, 1500, .85), observation('c', 200, 175, .95)};
+    lp_standing expected; CHECK(lp_series(entries, 4, &expected), "mixed source result solves");
+    unsigned random = 17;
+    for (int pass = 0; pass < 128; pass++) {
+        for (size_t i = 3; i > 0; i--) {
+            random = random * 1664525u + 1013904223u; size_t j = random % (i + 1);
+            lp_series_entry tmp = entries[i]; entries[i] = entries[j]; entries[j] = tmp;
+        }
+        lp_standing actual;
+        CHECK(lp_series(entries, 4, &actual) && standing_equal(&expected, &actual), "permutation %d has identical standing bits", pass);
+    }
+    lp_series_entry zero = observation('a', 1000000, 1000000, 0); lp_standing out;
+    CHECK(lp_series(&zero, 1, &out) && out.rating == LP_GLICKO_RATING && out.deviation == LP_GLICKO_DEVIATION
+          && out.volatility == LP_GLICKO_VOLATILITY && out.witnesses == 0, "zero trust carries no information however many games");
+    lp_series_entry good[4];
+    for (unsigned i = 0; i < 3; i++) good[i] = observation('a' + i, 1000, 1000, .85);
+    CHECK(lp_series(good, 3, &expected), "three independent curated sources solve");
+    good[3] = observation('z', 1000000, 0, .001);
+    CHECK(lp_series(good, 4, &out) && fabs(out.rating - expected.rating) < .01,
+          "one low-trust dependence root cannot overwhelm independent corroboration by repeating a million times");
+    lp_series_entry hard = observation('a', 1000000, 1000000, 1);
+    CHECK(lp_series(&hard, 1, &out) && isfinite(out.rating) && out.rating > LP_GLICKO_RATING, "fully trusted decisive evidence stays finite without a rating clamp");
+    lp_standing win = out; hard.wins = 0;
+    CHECK(lp_series(&hard, 1, &out) && fabs(win.rating + out.rating - 2 * LP_GLICKO_RATING) < 1e-8
+          && fabs(win.deviation - out.deviation) < 1e-8, "affirmation/refutation symmetry: %.17g / %.17g vs %.17g / %.17g",
+          win.rating, win.deviation, out.rating, out.deviation);
+    lp_standing sentinel = {123,456,.07,89,10,11}; out = sentinel;
+    lp_series_entry bad = observation('a', 1, 2, .85);
+    CHECK(!lp_series(&bad, 1, &out) && standing_equal(&out, &sentinel), "invalid outcomes do not mutate the output");
+    bad.wins = 1; bad.trust = NAN;
+    CHECK(!lp_series(&bad, 1, &out) && standing_equal(&out, &sentinel), "NaN trust is rejected");
+    bad.trust = -.5;
+    CHECK(!lp_series(&bad, 1, &out) && standing_equal(&out, &sentinel), "rooted reliability is validated in [0,1]");
+    lp_series_entry inconsistent[] = {observation('a',10,10,.85),observation('a',10,10,.85)};
+    inconsistent[1].opponent.rating = 1600; out = sentinel;
+    CHECK(!lp_series(inconsistent, 2, &out) && standing_equal(&out, &sentinel),
+          "one dependence root cannot silently mix different comparison anchors");
+    lp_series_entry wide = observation('a',1000000,1000000,.85); wide.opponent.deviation = DBL_MAX;
+    CHECK(lp_series(&wide,1,&out) && out.rating == LP_GLICKO_RATING && out.deviation == LP_GLICKO_DEVIATION,
+          "an uninformative comparison contributes no numerical artifact");
+    CHECK(lp_series(NULL, 0, &out) && out.rating == LP_GLICKO_RATING && !out.matches && !out.witnesses,
+          "an empty witness set is the stock unknown standing");
+    CHECK(lp_witness_precision(0,30) == 0 && lp_witness_precision(.1,30) < lp_witness_precision(.5,30)
+          && lp_witness_precision(.5,30) < lp_witness_precision(.85,30) && isfinite(lp_witness_precision(1,30)),
+          "source certainty increases with trust and always has a nonzero deviation floor");
+}
 
 /* A stock claim (1500/350) after one witness's series. */
 static lp_rating series(double t, uint32_t n, double s){ lp_rating r = lp_rating_stock(); lp_attest_series(&r, t, n, s, LP_ATTEST_FLOOR); return r; }
 
 int main(void){
+    rooted_series();
     /* Glickman, "Example of the Glicko-2 system": 1500/200/0.06 plays 1400/30 (win), 1550/100 (loss),
      * 1700/300 (loss) with tau 0.5, and ends at 1464.06 / 151.52 / 0.05999. */
     lp_rating r = { 1500, 200, 0.06 };

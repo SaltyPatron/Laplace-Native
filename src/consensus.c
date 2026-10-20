@@ -1,7 +1,12 @@
 /* Consensus: Glicko-2 (Glickman, "Example of the Glicko-2 system"), and attestations played as matchups whose
  * opponent weight g(phi) equals the witness's trust; and a witness's series of games, solved as one update. */
 #include "laplace/laplace.h"
+#include "laplace/consensus.h"
+#include <errno.h>
+#include <float.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define PI 3.14159265358979323846
 
@@ -100,3 +105,194 @@ static double reading(const lp_rating *r, double k){ return (r->rating - LP_GLIC
 /* A claim's chance of beating the anchor, so read. */
 double lp_confidence(const lp_rating *r, double k){ return 1.0 / (1.0 + exp(-reading(r, k))); }
 double lp_cost(const lp_rating *r, double k, double per_hop){ return log1p(exp(-reading(r, k))) + per_hop; }   /* -ln(1 / (1 + e^-x)) */
+
+/* Rooted series use a shared source uncertainty. Repeating an observation may
+ * estimate that source's performance, but cannot manufacture independent
+ * knowledge of the claim. See consensus.h for the joint concave posterior. */
+lp_series_entry lp_series_observation(lp_id root, uint64_t games, double wins, double trust){
+    return (lp_series_entry){ .dependence_root = root, .games = games, .wins = wins, .trust = trust,
+                             .opponent = { LP_GLICKO_RATING, 0, LP_GLICKO_VOLATILITY } };
+}
+
+typedef struct { double games, score, anchor, weight, precision, performance; } SeriesRoot;
+
+static void series_likelihood(const SeriesRoot *r, double x, double *score, double *information){
+    double z = r->weight * (x - r->anchor), tail = exp(-fabs(z)), denominator = 1 + tail;
+    /* Compute the small tail directly: 1-logistic(z) loses significant bits
+     * for decisive long series and breaks affirmation/refutation symmetry. */
+    double residual = z >= 0 ? (r->score - 1) + tail / denominator : r->score - tail / denominator;
+    *score = r->games * r->weight * residual;
+    *information = r->games * r->weight * r->weight * tail / (denominator * denominator);
+}
+static int compare_number(double a, double b){ return a < b ? -1 : a > b; }
+static int series_order(const void *a, const void *b){
+    const lp_series_entry *x = a, *y = b; int c = lp_id_cmp(&x->dependence_root, &y->dependence_root);
+    if (c) return c;
+    if (x->games != y->games) return x->games < y->games ? -1 : 1;
+    if ((c = compare_number(x->wins, y->wins))) return c;
+    if ((c = compare_number(x->trust, y->trust))) return c;
+    if ((c = compare_number(x->witness_deviation, y->witness_deviation))) return c;
+    if ((c = compare_number(x->opponent.rating, y->opponent.rating))) return c;
+    return compare_number(x->opponent.deviation, y->opponent.deviation);
+}
+
+/* Solve one source's latent performance at a fixed claim rating. The slope is
+ * strictly decreasing; safeguarded Newton stays in the analytical bracket. */
+static bool source_mode(SeriesRoot *r, double mu, double *score, double *information){
+    double p = r->precision, n = r->games, w = r->weight, lo, hi;
+    if (p == 0 || w == 0) { *score = *information = 0; return true; }
+    double target;
+    if (r->score > 0 && r->score < 1) {
+        target = r->anchor + (log(r->score) - log1p(-r->score)) / w;
+        lo = fmin(mu, target); hi = fmax(mu, target);
+    } else {
+        double reach = n * w / p;
+        if (!isfinite(reach)) return false;
+        lo = r->score == 0 ? mu - reach : mu;
+        hi = r->score == 1 ? mu + reach : mu;
+    }
+    if (!isfinite(lo) || !isfinite(hi)) return false;
+    double x = r->performance;
+    if (!(x >= lo && x <= hi)) x = mu;
+    bool converged = lo == hi;
+    for (unsigned i = 0; !converged && i < 64; i++) {
+        double data_score, j; series_likelihood(r, x, &data_score, &j);
+        double slope = p * (mu - x) + data_score;
+        if (slope > 0) lo = x; else if (slope < 0) hi = x; else { converged = true; break; }
+        double next = x + slope / (p + j);
+        if (next == x) { converged = true; break; }
+        if (!(next > lo && next < hi)) next = lo + (hi - lo) * 0.5;
+        if (hi - lo <= 1e-13 || next == x || next == lo || next == hi) { x = next; converged = true; break; }
+        x = next;
+    }
+    if (!converged) return false;
+    double data_score, j; series_likelihood(r, x, &data_score, &j);
+    r->performance = x;
+    *score = p * (x - mu);
+    *information = j > 0 ? 1 / (1 / j + 1 / p) : 0;
+    return isfinite(*score) && isfinite(*information);
+}
+
+static bool posterior(SeriesRoot *roots, size_t n, double mu, double mu0, double prior_precision,
+                      double *slope, double *information, double *data_score){
+    double score = 0, info = 0;
+    for (size_t i = 0; i < n; i++) {
+        double s, j; if (!source_mode(roots + i, mu, &s, &j)) return false;
+        score += s; info += j;
+    }
+    *slope = (mu0 - mu) * prior_precision + score; *information = info; *data_score = score;
+    return isfinite(*slope) && isfinite(info) && isfinite(score);
+}
+
+static double volatility_slope(double x, double a, double phi2, double v, double delta, double tau){
+    double ex = exp(x), denominator = phi2 + v + ex;
+    return ex / denominator * ((delta * delta - phi2 - v - ex) / denominator) * 0.5 - (x - a) / (tau * tau);
+}
+static bool series_volatility(double sigma, double phi2, double v, double delta, double *out){
+    double a = 2 * log(sigma), A = a, B, tau = LP_ATTEST_TAU;
+    if (delta * delta > phi2 + v) B = log(delta * delta - phi2 - v);
+    else {
+        unsigned k;
+        for (k = 1; k <= 64; k++) if (volatility_slope(a - k * tau, a, phi2, v, delta, tau) >= 0) break;
+        if (k > 64) return false;
+        B = a - k * tau;
+    }
+    double fA = volatility_slope(A, a, phi2, v, delta, tau), fB = volatility_slope(B, a, phi2, v, delta, tau);
+    if (!isfinite(fA) || !isfinite(fB)) return false;
+    for (unsigned i = 0; i < 64; i++) {
+        if (fabs(B - A) <= 1e-12) { *out = exp(A * 0.5); return isfinite(*out) && *out > 0; }
+        double C = A + (A - B) * fA / (fB - fA);
+        if (!isfinite(C) || C <= fmin(A, B) || C >= fmax(A, B)) C = A + (B - A) * 0.5;
+        double fC = volatility_slope(C, a, phi2, v, delta, tau);
+        if (!isfinite(fC)) return false;
+        if (fC == 0) { *out = exp(C * 0.5); return isfinite(*out) && *out > 0; }
+        if ((fC < 0) != (fB < 0)) { A = B; fA = fB; } else fA *= 0.5;
+        B = C; fB = fC;
+    }
+    return false;
+}
+
+bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, size_t n, lp_standing *out){
+    if (!prior || !out || (n && !entries) || n > SIZE_MAX / sizeof(lp_series_entry)
+        || !isfinite(prior->rating) || !isfinite(prior->deviation) || prior->deviation <= 0
+        || !isfinite(prior->volatility) || prior->volatility <= 0) { errno = EINVAL; return false; }
+    lp_standing result = { .rating = prior->rating, .deviation = prior->deviation, .volatility = prior->volatility };
+    for (size_t i = 0; i < n; i++) {
+        const lp_series_entry *e = entries + i;
+        if (e->games > UINT64_C(9007199254740992) || !isfinite(e->wins) || e->wins < 0 || e->wins > (double)e->games
+            || !isfinite(e->trust) || e->trust < 0 || e->trust > 1
+            || !isfinite(e->witness_deviation) || e->witness_deviation < 0
+            || !isfinite(e->opponent.rating) || !isfinite(e->opponent.deviation) || e->opponent.deviation < 0) { errno = EINVAL; return false; }
+        if (e->games > UINT64_MAX - result.matches) { errno = EOVERFLOW; return false; }
+        result.matches += e->games;
+    }
+    if (!n) { *out = result; return true; }
+    lp_series_entry *sorted = lp_alloc(n * sizeof *sorted); memcpy(sorted, entries, n * sizeof *sorted);
+    qsort(sorted, n, sizeof *sorted, series_order);
+    SeriesRoot *roots = lp_zalloc(n * sizeof *roots); size_t nr = 0; bool ok = false; int failure = ERANGE;
+    for (size_t i = 0; i < n;) {
+        lp_series_entry folded = sorted[i++];
+        while (i < n && lp_id_eq(&folded.dependence_root, &sorted[i].dependence_root)) {
+            const lp_series_entry *e = sorted + i++;
+            if (e->opponent.rating != folded.opponent.rating || e->games > UINT64_C(9007199254740992) - folded.games) { failure = EINVAL; goto done; }
+            folded.games += e->games; folded.wins += e->wins;
+            folded.trust = fmax(folded.trust, e->trust);
+            folded.witness_deviation = fmax(folded.witness_deviation, e->witness_deviation);
+            folded.opponent.deviation = fmax(folded.opponent.deviation, e->opponent.deviation);
+        }
+        if (!folded.games || folded.trust == 0) continue;
+        double precision = lp_witness_precision(folded.trust, fmax(LP_ATTEST_FLOOR, folded.witness_deviation));
+        double weight = g(folded.opponent.deviation / LP_GLICKO_SCALE);
+        if (precision == 0 || weight == 0) continue;
+        roots[nr++] = (SeriesRoot){ .games = (double)folded.games,
+            .score = 0.5 + folded.trust * (folded.wins / (double)folded.games - 0.5),
+            .anchor = (folded.opponent.rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE,
+            .weight = weight, .precision = precision,
+            .performance = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE };
+    }
+    result.witnesses = (uint64_t)nr;
+    if (!nr) { ok = true; goto done; }
+    double mu0 = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE;
+    double phi = prior->deviation / LP_GLICKO_SCALE, phi2 = phi * phi, pp = 1 / phi2;
+    double lo = mu0 - 1, hi = mu0 + 1, slope, info, score;
+    unsigned k;
+    for (k = 0; k < 64; k++) {
+        if (!posterior(roots, nr, lo, mu0, pp, &slope, &info, &score)) goto done;
+        if (slope >= 0) break;
+        lo = mu0 - 2 * (mu0 - lo);
+    }
+    if (k == 64) goto done;
+    for (k = 0; k < 64; k++) {
+        if (!posterior(roots, nr, hi, mu0, pp, &slope, &info, &score)) goto done;
+        if (slope <= 0) break;
+        hi = mu0 + 2 * (hi - mu0);
+    }
+    if (k == 64) goto done;
+    double mu = mu0;
+    for (k = 0; k < 64; k++) {
+        if (!posterior(roots, nr, mu, mu0, pp, &slope, &info, &score)) goto done;
+        result.iterations = k + 1;
+        if (slope == 0) break;
+        if (slope > 0) lo = mu; else hi = mu;
+        double next = mu + slope / (pp + info);
+        if (next == mu) break;
+        if (!(next > lo && next < hi)) next = lo + (hi - lo) * 0.5;
+        if (hi - lo <= 1e-12 || next == mu || next == lo || next == hi) { mu = next; break; }
+        mu = next;
+    }
+    if (k == 64 || !posterior(roots, nr, mu, mu0, pp, &slope, &info, &score) || info <= 0) goto done;
+    double sigma;
+    if (!series_volatility(prior->volatility, phi2, 1 / info, score / info, &sigma)) goto done;
+    result.rating = LP_GLICKO_RATING + LP_GLICKO_SCALE * mu;
+    result.deviation = LP_GLICKO_SCALE / sqrt(1 / (phi2 + sigma * sigma) + info);
+    result.volatility = sigma;
+    ok = isfinite(result.rating) && isfinite(result.deviation) && result.deviation > 0;
+done:
+    lp_free(roots); lp_free(sorted);
+    if (ok) *out = result; else errno = failure;
+    return ok;
+}
+
+bool lp_series(const lp_series_entry *entries, size_t n, lp_standing *out){
+    lp_rating prior = lp_rating_stock(); return lp_series_update(&prior, entries, n, out);
+}
