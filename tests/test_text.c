@@ -1,5 +1,6 @@
 /* Text: the documented decompositions, and the trunk's parts. */
 #include "laplace/laplace.h"
+#include "laplace/consensus.h"
 #include "check.h"
 #include <string.h>
 
@@ -55,6 +56,13 @@ int main(void){
     const char *height_cases[]={"Holmes","Sherlock Holmes","banana","mississippi","aaaa","abababab","e\xcc\x81","First sentence. Another sentence.\n\nA paragraph."};
     for (size_t i=0; i<sizeof height_cases/sizeof *height_cases; i++)
         lp_text_decompose(tx,(const uint8_t *)height_cases[i],strlen(height_cases[i]),height_sink,NULL);
+    for (size_t i=0; i<lp_trust_class_count(); i++) {
+        const lp_trust_class *c=lp_trust_class_at(i); lp_id id;
+        CHECK(lp_text_id(tx,c->label,strlen(c->label),&id) && lp_trust_class_for_id(tx,&id)==c,
+              "persisted class %s resolves from its canonical text ID",c->label);
+    }
+    lp_id unknown_class; lp_id_codepoint('!',&unknown_class);
+    CHECK(!lp_trust_class_for_id(tx,&unknown_class),"an undeclared dependence class fails closed");
     lp_text_free(tx);
     DONE("text");
 }
