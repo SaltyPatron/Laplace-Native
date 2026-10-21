@@ -7,6 +7,13 @@
 extern "C" {
 #endif
 
+/* A record vertex immediately before a claim names its declared shared
+ * dependence class. Its entity is the canonical text of a registry label;
+ * it changes the observation's root and trust, never the corpus witness.
+ * Role 6 remains reserved; append this role in the existing three-bit field. */
+#define LP_SAID_DEPENDENCE 7u
+LP_API const lp_trust_class *lp_trust_class_for_id(lp_text *text, const lp_id *id);
+
 typedef struct {
     lp_id dependence_root;
     uint64_t games;

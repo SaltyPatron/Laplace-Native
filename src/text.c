@@ -12,6 +12,7 @@
  * This is the one decomposition of text in Laplace. The engine records what it composes; the database composes without
  * recording, to compute the ID and coordinate of a text in place. */
 #include "laplace/laplace.h"
+#include "laplace/consensus.h"
 #include <unicode/ubrk.h>
 #include <unicode/utext.h>
 #include <unicode/uchar.h>
@@ -151,4 +152,13 @@ lp_ref lp_text_parts(lp_text *c, const uint8_t *s, size_t n, lp_ref *parts, size
     for (size_t i = 0; i < c->pn && i < cap; i++) parts[i] = c->parts[i];
     *nparts = c->pn;
     return trunk;
+}
+
+const lp_trust_class *lp_trust_class_for_id(lp_text *text,const lp_id *id){
+    if (!text || !id) return NULL;
+    for (size_t i=0; i<lp_trust_class_count(); i++) {
+        const lp_trust_class *c=lp_trust_class_at(i); lp_id key;
+        if (lp_text_id(text,c->label,strlen(c->label),&key) && lp_id_eq(&key,id)) return c;
+    }
+    return NULL;
 }
