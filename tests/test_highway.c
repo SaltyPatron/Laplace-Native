@@ -15,10 +15,14 @@ static void identifiers_check(const lp_highway *h,const lp_tier0_record *t0){
             if (!record) { retired++; CHECK(!identifier,"retired slot has no fabricated identifier"); continue; }
             active++; CHECK(identifier && *identifier,"%s:%u contains its identifier",list->name,slot);
             if (!identifier) continue;
-            lp_ref value=lp_text_decompose(text,(const uint8_t *)identifier,strlen(identifier),NULL,NULL);
+            const char *const *parts; size_t np=lp_highway_identifier_parts(h,list,slot,&parts);
+            CHECK(np>0,"active identifier has components"); if (!np) continue;
+            lp_ref *children=malloc(np*sizeof *children); CHECK(children,"identifier components"); if (!children) continue;
+            for (size_t i=0; i<np; i++) children[i]=lp_text_decompose(text,(const uint8_t *)parts[i],strlen(parts[i]),NULL,NULL);
+            lp_ref value=np==1 ? children[0] : lp_ref_compose(children,np,lp_tier_above(children,np)); free(children);
             CHECK(lp_id_eq(&record->id,&value.id) && !memcmp(record->m,value.c.m,sizeof record->m)
-                && record->pad==value.tier && record->hilbert==lp_hilbert4(&value.c),"%s:%u is canonical text %s",list->name,slot,identifier);
-            CHECK(lp_highway_key(h,list,identifier)==slot && lp_highway_slot(h,list,&value.id)==slot,
+                && record->pad==value.tier && record->hilbert==lp_hilbert4(&value.c),"%s:%u is its canonical identifier composition %s",list->name,slot,identifier);
+            CHECK((np>1 || lp_highway_key(h,list,identifier)==slot) && lp_highway_slot(h,list,&value.id)==slot,
                 "%s:%u resolves by identifier and ID",list->name,slot);
         }
     }
@@ -27,6 +31,16 @@ static void identifiers_check(const lp_highway *h,const lp_tier0_record *t0){
     const char *names[]={"i46360","abandon.01","va:0001f","leave-51.2","NOUN","eng"};
     for (size_t i=0; i<sizeof names/sizeof *names; i++)
         CHECK(lp_highway_key(h,lp_highway_list(h,lists[i]),names[i])>=0,"required identifier %s",names[i]);
+    const char *fnlists[]={"fnframe","fnfe","fnlu"}, *fnkeys[]={"2031","12338","14839"};
+    const char *fnnames[]={"Abandonment","Agent","abandon.v"};
+    lp_ref frame=lp_text_decompose(text,(const uint8_t *)fnnames[0],strlen(fnnames[0]),NULL,NULL);
+    for (size_t i=0; i<3; i++) {
+        const lp_list *list=lp_highway_list(h,fnlists[i]); int64_t slot=lp_highway_key(h,list,fnkeys[i]);
+        lp_ref wanted=frame;
+        if (i) { lp_ref p[]={frame,lp_text_decompose(text,(const uint8_t *)fnnames[i],strlen(fnnames[i]),NULL,NULL)}; wanted=lp_ref_compose(p,2,lp_tier_above(p,2)); }
+        const lp_tier0_record *record=slot<0 ? NULL : lp_highway_at(h,list,(uint32_t)slot);
+        CHECK(record && lp_id_eq(&record->id,&wanted.id),"FrameNet numeric %s resolves to its named/composite identifier",fnkeys[i]);
+    }
     const lp_list *ili=lp_highway_list(h,"ili"), *synsets=lp_highway_list(h,"Synset");
     int64_t dog=lp_highway_key(h,ili,"i46360"); const lp_edge *edges=NULL;
     size_t n=dog<0 ? 0 : lp_highway_edges(h,"ili",(uint32_t)dog,"Synset",&edges);
@@ -45,7 +59,8 @@ static void envelope_check(const lp_highway *h){
     lp_tier0_record records[2]={*lp_highway_at(h,upos,7),*lp_highway_at(h,upos,15)};
     records[0].rank=0; records[1].rank=1;
     const char layout[]="records\t2\nedges-count\t1\nlist\tpos\tPart of speech\t0\t2\nedges\tpos\tpos\t0\t1\n";
-    const char keys[]="pos\tNOUN\t0\npos\tVERB\t1\n", ids[]="NOUN\0VERB";
+    const char keys[]="pos\tNOUN\t0\npos\tVERB\t1\n";
+    const char ids[]={1,0,0,0,'N','O','U','N',0,1,0,0,0,'V','E','R','B',0};
     lp_edge edge={0,1}; const char *path="highway-envelope-valid.bin";
     CHECK(lp_highway_write(path,records,2,&edge,1,layout,sizeof layout-1,keys,sizeof keys-1,ids,sizeof ids),"write a complete envelope");
     const lp_highway *roundtrip=lp_highway_map(path);
@@ -63,12 +78,16 @@ static void envelope_check(const lp_highway *h){
     edge.to=1; const char bad_keys[]="pos\tNOUN\t2\n";
     CHECK(lp_highway_write("highway-envelope-bad-key.bin",records,2,&edge,1,layout,sizeof layout-1,bad_keys,sizeof bad_keys-1,ids,sizeof ids)
         && !lp_highway_map("highway-envelope-bad-key.bin"),"out-of-range textual keys are rejected");
+    char bad_ids[sizeof ids]; memcpy(bad_ids,ids,sizeof ids); bad_ids[0]=0;
+    CHECK(lp_highway_write("highway-envelope-bad-identifier.bin",records,2,&edge,1,layout,sizeof layout-1,keys,sizeof keys-1,bad_ids,sizeof bad_ids)
+        && !lp_highway_map("highway-envelope-bad-identifier.bin"),"a live slot cannot have an empty identifier even with a valid checksum");
     in=fopen(path,"rb"); out=fopen("highway-envelope-truncated.bin","wb");
     if (in && out) for (size_t i=0; i<100; i++) { int c=fgetc(in); if (c==EOF) break; fputc(c,out); }
     if (in) fclose(in); if (out) fclose(out);
     CHECK(!lp_highway_map("highway-envelope-truncated.bin"),"truncation fails before cache publication");
     remove("highway-envelope-corrupt.bin"); remove("highway-envelope-bad-edge.bin");
     remove("highway-envelope-bad-key.bin"); remove("highway-envelope-truncated.bin");
+    remove("highway-envelope-bad-identifier.bin");
     remove(path); /* Windows removes mapped files after process exit. */
 }
 

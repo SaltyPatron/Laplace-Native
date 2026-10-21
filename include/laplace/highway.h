@@ -12,14 +12,21 @@ typedef uint64_t lp_mask;
 /* Versioned, checksummed, single-file cache. All descriptors, textual lookup
  * keys, identifier bytes and crosswalk edges travel with the mapped records.
  * layout/keys are tab-separated descriptor rows, parsed only at map time.
- * identifiers has exactly nrec NUL-terminated strings in record order.
+ * identifiers contains nrec entries: a little-endian uint32 part count followed
+ * by that many nonempty NUL-terminated UTF-8 text components. One component is
+ * an identifier string; multiple components compose an ordered identifier
+ * tuple (a FrameNet frame and FE/LU name). Zero parts denotes a retired slot.
  * The caller publishes the completed file atomically. No side files are used. */
 LP_API bool lp_highway_write(const char *path,
     const lp_tier0_record *records, size_t nrec, const lp_edge *edges, size_t nedges,
     const char *layout, size_t layout_bytes, const char *keys, size_t key_bytes,
     const char *identifiers, size_t identifier_bytes);
-/* Canonical identifier text, owned by the mapping; NULL outside the list. */
+/* Display text, owned by the mapping; NULL outside the list. A tuple's display
+ * is not its decomposition: use its ordered components below for identity. */
 LP_API const char *lp_highway_identifier(const lp_highway *, const lp_list *, uint32_t slot);
+/* Ordered identifier components, owned by the mapping. Decompose each with
+ * Tier-0, then compose the resulting refs when the count exceeds one. */
+LP_API size_t lp_highway_identifier_parts(const lp_highway *, const lp_list *, uint32_t slot, const char *const **parts);
 
 /* Membership in any list, through the cache's map-time ID index. No lookup
  * allocation, name scan, coordinate computation or database call. */
