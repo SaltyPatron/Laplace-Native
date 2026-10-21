@@ -37,6 +37,8 @@ static void rooted_series(void){
                   "more games approach the joint-posterior ceiling %.9f: %.9f / %.9f", asymptote, out.rating, out.deviation);
             CHECK(out.iterations <= 64 && out.matches == counts[c] && out.witnesses == 1,
                   "series is solved in bounded iterations, not per game");
+            printf("series: trust=%.2f roots=1 games=%llu rating=%.9f RD=%.9f iterations=%u limit=%.9f\n",
+                   trusts[t], (unsigned long long)counts[c], out.rating, out.deviation, out.iterations, asymptote);
             last = out.rating; last_rd = out.deviation;
         }
         CHECK(fabs(out.rating - asymptote) < 0.05, "million-game result matches the analytical source/prior asymptote");
@@ -48,6 +50,8 @@ static void rooted_series(void){
               corroborated.rating, asymptote, corroborated.deviation, out.deviation);
         double independent_limit = LP_GLICKO_RATING + LP_GLICKO_SCALE * 2 * precision * performance / (1 / (phi * phi) + 2 * precision);
         CHECK(fabs(corroborated.rating - independent_limit) < 0.05, "two-root asymptote follows summed independent precision");
+        printf("series: trust=%.2f roots=2 games=2000000 rating=%.9f RD=%.9f iterations=%u limit=%.9f\n",
+               trusts[t], corroborated.rating, corroborated.deviation, corroborated.iterations, independent_limit);
         if (trusts[t] == .85) {
             /* Independent 28-digit decimal solution of the joint stationary
              * equations and volatility root, using bisection throughout. */
