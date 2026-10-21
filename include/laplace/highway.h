@@ -7,6 +7,19 @@ extern "C" {
 #endif
 
 typedef uint64_t lp_mask;
+#define LP_HIGHWAY_RETIRED UINT32_MAX
+
+/* Versioned, checksummed, single-file cache. All descriptors, textual lookup
+ * keys, identifier bytes and crosswalk edges travel with the mapped records.
+ * layout/keys are tab-separated descriptor rows, parsed only at map time.
+ * identifiers has exactly nrec NUL-terminated strings in record order.
+ * The caller publishes the completed file atomically. No side files are used. */
+LP_API bool lp_highway_write(const char *path,
+    const lp_tier0_record *records, size_t nrec, const lp_edge *edges, size_t nedges,
+    const char *layout, size_t layout_bytes, const char *keys, size_t key_bytes,
+    const char *identifiers, size_t identifier_bytes);
+/* Canonical identifier text, owned by the mapping; NULL outside the list. */
+LP_API const char *lp_highway_identifier(const lp_highway *, const lp_list *, uint32_t slot);
 
 /* Membership in any list, through the cache's map-time ID index. No lookup
  * allocation, name scan, coordinate computation or database call. */
