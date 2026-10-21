@@ -4,6 +4,74 @@
 #include "check.h"
 #include <string.h>
 
+static void identifiers_check(const lp_highway *h,const lp_tier0_record *t0){
+    lp_text *text=lp_text_new(t0); CHECK(text,"identifier decomposer"); if (!text) return;
+    size_t active=0,retired=0;
+    for (size_t li=0; li<h->nlists; li++) {
+        const lp_list *list=h->list+li;
+        for (uint32_t slot=0; slot<list->count; slot++) {
+            const lp_tier0_record *record=lp_highway_at(h,list,slot);
+            const char *identifier=lp_highway_identifier(h,list,slot);
+            if (!record) { retired++; CHECK(!identifier,"retired slot has no fabricated identifier"); continue; }
+            active++; CHECK(identifier && *identifier,"%s:%u contains its identifier",list->name,slot);
+            if (!identifier) continue;
+            lp_ref value=lp_text_decompose(text,(const uint8_t *)identifier,strlen(identifier),NULL,NULL);
+            CHECK(lp_id_eq(&record->id,&value.id) && !memcmp(record->m,value.c.m,sizeof record->m)
+                && record->pad==value.tier && record->hilbert==lp_hilbert4(&value.c),"%s:%u is canonical text %s",list->name,slot,identifier);
+            CHECK(lp_highway_key(h,list,identifier)==slot && lp_highway_slot(h,list,&value.id)==slot,
+                "%s:%u resolves by identifier and ID",list->name,slot);
+        }
+    }
+    CHECK(active+retired==h->nrec,"every frozen slot is accounted for");
+    const char *lists[]={"ili","pbroleset","vaframe","vnclass","upos","language"};
+    const char *names[]={"i46360","abandon.01","va:0001f","leave-51.2","NOUN","eng"};
+    for (size_t i=0; i<sizeof names/sizeof *names; i++)
+        CHECK(lp_highway_key(h,lp_highway_list(h,lists[i]),names[i])>=0,"required identifier %s",names[i]);
+    const lp_list *ili=lp_highway_list(h,"ili"), *synsets=lp_highway_list(h,"Synset");
+    int64_t dog=lp_highway_key(h,ili,"i46360"); const lp_edge *edges=NULL;
+    size_t n=dog<0 ? 0 : lp_highway_edges(h,"ili",(uint32_t)dog,"Synset",&edges);
+    CHECK(n && synsets,"ILI has real WN-LMF Synset crosswalks");
+    for (size_t i=0; i<n; i++) {
+        const lp_edge *back=NULL; size_t count=lp_highway_edges(h,"Synset",edges[i].to,"ili",&back); bool found=false;
+        for (size_t j=0; j<count; j++) found|=back[j].to==(uint32_t)dog;
+        CHECK(found,"Synset interchange is bidirectional");
+    }
+    lp_text_free(text);
+    printf("highway identifiers: %zu canonical, %zu reserved\n",active,retired);
+}
+
+static void envelope_check(const lp_highway *h){
+    const lp_list *upos=lp_highway_list(h,"upos"); if (!upos) return;
+    lp_tier0_record records[2]={*lp_highway_at(h,upos,7),*lp_highway_at(h,upos,15)};
+    records[0].rank=0; records[1].rank=1;
+    const char layout[]="records\t2\nedges-count\t1\nlist\tpos\tPart of speech\t0\t2\nedges\tpos\tpos\t0\t1\n";
+    const char keys[]="pos\tNOUN\t0\npos\tVERB\t1\n", ids[]="NOUN\0VERB";
+    lp_edge edge={0,1}; const char *path="highway-envelope-valid.bin";
+    CHECK(lp_highway_write(path,records,2,&edge,1,layout,sizeof layout-1,keys,sizeof keys-1,ids,sizeof ids),"write a complete envelope");
+    const lp_highway *roundtrip=lp_highway_map(path);
+    CHECK(roundtrip && lp_highway_key(roundtrip,lp_highway_list(roundtrip,"pos"),"VERB")==1,
+        "a standalone file retains its keys and list metadata");
+    if (roundtrip) { const lp_edge *out=NULL; CHECK(lp_highway_edges(roundtrip,"pos",0,"pos",&out)==1 && out->to==1,"standalone CSR edge"); }
+    FILE *in=fopen(path,"rb"), *out=fopen("highway-envelope-corrupt.bin","wb");
+    CHECK(in && out,"open corruption probe");
+    if (in && out) { int c; size_t i=0; while ((c=fgetc(in))!=EOF) { if (i++==110) c^=1; fputc(c,out); } }
+    if (in) fclose(in); if (out) fclose(out);
+    CHECK(!lp_highway_map("highway-envelope-corrupt.bin"),"payload corruption fails checksum validation");
+    edge.to=2;
+    CHECK(lp_highway_write("highway-envelope-bad-edge.bin",records,2,&edge,1,layout,sizeof layout-1,keys,sizeof keys-1,ids,sizeof ids)
+        && !lp_highway_map("highway-envelope-bad-edge.bin"),"a valid checksum cannot admit an out-of-range edge");
+    edge.to=1; const char bad_keys[]="pos\tNOUN\t2\n";
+    CHECK(lp_highway_write("highway-envelope-bad-key.bin",records,2,&edge,1,layout,sizeof layout-1,bad_keys,sizeof bad_keys-1,ids,sizeof ids)
+        && !lp_highway_map("highway-envelope-bad-key.bin"),"out-of-range textual keys are rejected");
+    in=fopen(path,"rb"); out=fopen("highway-envelope-truncated.bin","wb");
+    if (in && out) for (size_t i=0; i<100; i++) { int c=fgetc(in); if (c==EOF) break; fputc(c,out); }
+    if (in) fclose(in); if (out) fclose(out);
+    CHECK(!lp_highway_map("highway-envelope-truncated.bin"),"truncation fails before cache publication");
+    remove("highway-envelope-corrupt.bin"); remove("highway-envelope-bad-edge.bin");
+    remove("highway-envelope-bad-key.bin"); remove("highway-envelope-truncated.bin");
+    remove(path); /* Windows removes mapped files after process exit. */
+}
+
 static void banks_check(const lp_highway *h, const lp_tier0_record *t0){
     char manifest[4096]; snprintf(manifest, sizeof manifest, "%s/banks.tsv", LAPLACE_MANIFEST);
     FILE *registry = fopen(manifest, "r"); CHECK(registry, "open the canonical bank manifest");
@@ -140,5 +208,7 @@ int main(void){
     uint8_t fp[32]; lp_highway_fingerprint(h, fp); int zero = 1; for (int i = 0; i < 32; i++) zero &= fp[i] == 0;
     CHECK(!zero, "a fingerprint");
     banks_check(h, t0);
+    identifiers_check(h,t0);
+    envelope_check(h);
     DONE("highway");
 }

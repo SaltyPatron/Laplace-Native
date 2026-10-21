@@ -1,4 +1,4 @@
-/* The highway: the types' records memory-mapped read-only, their lists and edges read once from the layout beside them. */
+/* A single immutable mapping owns records, identifiers, banks, keys and edges. */
 #include "laplace/laplace.h"
 #include "laplace/highway.h"
 #include "internal.h"
@@ -74,71 +74,224 @@ static void layout_line(void *ctx, char **f, int n){
         lp_edges *x = &h->edges[h->nedgelists++]; memset(x, 0, sizeof *x);
         snprintf(x->a, sizeof x->a, "%s", f[1]); snprintf(x->b, sizeof x->b, "%s", f[2]); x->first = (uint32_t)first; x->count = (uint32_t)count;
     }
+    else r->bad = true;
+}
+/* All integers in the envelope are little endian. The existing fixed-width
+ * scalar-cache records and edge pairs use that same on-disk representation. */
+enum { HW_HEADER = 96 };
+typedef struct {
+    lp_highway public; const uint8_t *mapping; size_t size; const char **identifier;
+    uint8_t fingerprint[32]; lp_strmap *lists,*relations; uint32_t **row;
+} Highway;
+static uint64_t read64(const uint8_t *p){
+    uint64_t n = 0; for (unsigned i = 0; i < 8; i++) n |= (uint64_t)p[i] << (8 * i); return n;
+}
+static void write64(uint8_t *p, uint64_t n){ for (unsigned i = 0; i < 8; i++) p[i] = (uint8_t)(n >> (8 * i)); }
+static bool bytes_add(size_t *total, size_t count, size_t stride){
+    if (count > (SIZE_MAX - *total) / stride) return false;
+    *total += count * stride; return true;
+}
+static void digest(const uint8_t *header, const void *body, size_t bytes, uint8_t out[32]){
+    blake3_hasher hash; blake3_hasher_init(&hash);
+    blake3_hasher_update(&hash, header, 64); blake3_hasher_update(&hash, body, bytes);
+    blake3_hasher_finalize(&hash, out, 32);
+}
+bool lp_highway_write(const char *path, const lp_tier0_record *records, size_t nrec,
+    const lp_edge *edges, size_t nedges, const char *layout, size_t nl,
+    const char *keys_text, size_t nk, const char *identifiers, size_t ni){
+    size_t size = HW_HEADER;
+    if (!path || !records || !nrec || nrec > UINT32_MAX || nedges > UINT32_MAX
+        || (nedges && !edges) || !layout || !nl || (nk && !keys_text) || !identifiers || !ni
+        || !bytes_add(&size,nrec,sizeof *records) || !bytes_add(&size,nedges,sizeof *edges)
+        || !bytes_add(&size,nl,1) || !bytes_add(&size,nk,1) || !bytes_add(&size,ni,1)) return false;
+    uint8_t header[HW_HEADER] = {0}; memcpy(header,"LPHW0001",8);
+    write64(header+16,nrec); write64(header+24,nedges); write64(header+32,nl);
+    write64(header+40,nk); write64(header+48,ni); write64(header+56,size);
+    blake3_hasher hash; blake3_hasher_init(&hash); blake3_hasher_update(&hash,header,64);
+    blake3_hasher_update(&hash,records,nrec*sizeof *records);
+    blake3_hasher_update(&hash,edges,nedges*sizeof *edges);
+    blake3_hasher_update(&hash,layout,nl); blake3_hasher_update(&hash,keys_text,nk);
+    blake3_hasher_update(&hash,identifiers,ni); blake3_hasher_finalize(&hash,header+64,32);
+    FILE *file = fopen(path,"wb"); if (!file) return false;
+    bool ok = fwrite(header,1,sizeof header,file)==sizeof header
+        && fwrite(records,sizeof *records,nrec,file)==nrec
+        && (!nedges || fwrite(edges,sizeof *edges,nedges,file)==nedges)
+        && fwrite(layout,1,nl,file)==nl && (!nk || fwrite(keys_text,1,nk,file)==nk)
+        && fwrite(identifiers,1,ni,file)==ni;
+    if (fclose(file)) ok = false;
+    if (!ok) remove(path);
+    return ok;
+}
+static bool lines(const char *bytes, size_t size, int fields, void (*visit)(void *,char **,int), void *ctx){
+    if (!size) return true;
+    if (bytes[size-1]!='\n' || memchr(bytes,0,size)) return false;
+    char *copy = malloc(size+1); if (!copy) return false; memcpy(copy,bytes,size); copy[size]=0;
+    char *line = copy;
+    while (*line) {
+        char *end = strchr(line,'\n'); if (!end) { free(copy); return false; } *end=0;
+        if (end>line && end[-1]=='\r') end[-1]=0;
+        if (*line && *line!='#') {
+            char *f[9]; int n=0; f[n++]=line;
+            for (char *p=line; *p; p++) if (*p=='\t') { *p=0; if (n==fields) { free(copy); return false; } f[n++]=p+1; }
+            visit(ctx,f,n);
+        }
+        line=end+1;
+    }
+    free(copy); return true;
+}
+typedef struct { lp_highway *h; bool bad; } KeyReading;
+static void key_line(void *ctx, char **f, int n){
+    KeyReading *r=ctx; if (r->bad) return;
+    if (n!=3 || !*f[1] || strlen(f[1])>1000) { r->bad=true; return; }
+    uint32_t li=0; while (li<r->h->nlists && strcmp(r->h->list[li].name,f[0])) li++;
+    uint64_t slot;
+    if (li==r->h->nlists || !number(f[2],UINT32_MAX,&slot) || slot>=r->h->list[li].count) { r->bad=true; return; }
+    char key[1004]; size_t len=strlen(f[1]); memcpy(key,&li,4); memcpy(key+4,f[1],len);
+    bool fresh; uint32_t *value=lp_strmap_get(r->h->keys,key,4+len,&fresh);
+    if (!fresh && *value!=slot) r->bad=true;
+    *value=(uint32_t)slot;
 }
 static const void *highway_open(const char *path){
-    size_t size; const uint8_t *m = lp_map_file(path, 0, &size); if (!m || size < sizeof(lp_tier0_record)) return NULL;
-    char lp[4200]; lp_beside(path, ".layout", lp, sizeof lp);
-    Reading r = { .h = calloc(1, sizeof(lp_highway)) }; lp_highway *h = r.h; if (!h) return NULL;
-    bool ok = lp_lines(lp, 8, layout_line, &r) && !r.bad && r.nrec
-           && r.nrec <= size / sizeof(lp_tier0_record)
-           && r.nedges <= (size - r.nrec * sizeof(lp_tier0_record)) / sizeof(lp_edge);
-    for (size_t i = 0; ok && i < h->nlists; i++)
-        ok = h->list[i].first <= r.nrec && h->list[i].count <= r.nrec - h->list[i].first;
-    for (size_t i = 0; ok && i < h->nedgelists; i++)
-        ok = h->edges[i].first <= r.nedges && h->edges[i].count <= r.nedges - h->edges[i].first;
-    if (!ok) { free(h->list); free(h->bank); free(h->edges); free(h); return NULL; }
-    snprintf(h->path, sizeof h->path, "%s", path);
-    h->rec = (const lp_tier0_record *)m; h->nrec = r.nrec; h->edge = (const lp_edge *)(m + r.nrec * sizeof(lp_tier0_record)); h->nedges = r.nedges;
-    h->by_id = lp_idindex_build(h->rec, h->nrec, sizeof *h->rec);
-    if (!h->by_id) { free(h->list); free(h->bank); free(h->edges); free(h); lp_unmap_file(m, size); return NULL; }
-    return h;
+    size_t size; const uint8_t *m=lp_map_file(path,0,&size); if (!m) return NULL;
+    Highway *mapped=NULL; bool ok=size>=HW_HEADER && !memcmp(m,"LPHW0001",8) && !read64(m+8);
+    uint64_t nr=0,ne=0,nl=0,nk=0,ni=0; size_t expected=HW_HEADER; uint8_t fp[32];
+    if (ok) {
+        nr=read64(m+16); ne=read64(m+24); nl=read64(m+32); nk=read64(m+40); ni=read64(m+48);
+        ok=nr && nr<=UINT32_MAX && ne<=UINT32_MAX && nl && ni && nl<=SIZE_MAX && nk<=SIZE_MAX && ni<=SIZE_MAX
+            && bytes_add(&expected,(size_t)nr,sizeof(lp_tier0_record)) && bytes_add(&expected,(size_t)ne,sizeof(lp_edge))
+            && bytes_add(&expected,(size_t)nl,1) && bytes_add(&expected,(size_t)nk,1) && bytes_add(&expected,(size_t)ni,1)
+            && expected==size && read64(m+56)==size;
+    }
+    if (ok) { digest(m,m+HW_HEADER,size-HW_HEADER,fp); ok=!memcmp(fp,m+64,32); }
+    if (ok) { mapped=calloc(1,sizeof *mapped); ok=mapped!=NULL; }
+    lp_highway *h=mapped ? &mapped->public : NULL;
+    if (ok) {
+        mapped->mapping=m; mapped->size=size; memcpy(mapped->fingerprint,fp,32);
+        h->rec=(const lp_tier0_record *)(m+HW_HEADER); h->nrec=(size_t)nr;
+        h->edge=(const lp_edge *)(h->rec+nr); h->nedges=(size_t)ne;
+        const char *layout=(const char *)(h->edge+ne);
+        Reading r={.h=h}; ok=lines(layout,(size_t)nl,8,layout_line,&r) && !r.bad && r.nrec==nr && r.nedges==ne;
+        size_t covered=0;
+        for (size_t i=0; ok && i<h->nlists; i++) {
+            const lp_list *list=h->list+i;
+            ok=list->count && list->first==covered && list->count<=nr-covered;
+            for (size_t j=0; ok && j<i; j++) ok=strcmp(list->name,h->list[j].name)!=0;
+            for (uint32_t j=0; ok && j<list->count; j++) ok=h->rec[covered+j].rank==j;
+            covered+=list->count;
+        }
+        ok=ok && covered==nr; covered=0;
+        if (ok) {
+            mapped->lists=lp_strmap_lasting(sizeof(uint32_t));
+            mapped->relations=lp_strmap_lasting(sizeof(uint32_t));
+            mapped->row=calloc(h->nedgelists+1,sizeof *mapped->row); ok=mapped->row!=NULL;
+            for (size_t i=0; ok && i<h->nlists; i++) {
+                const lp_list *list=h->list+i; bool fresh;
+                uint32_t *at=lp_strmap_get(mapped->lists,list->name,strlen(list->name),&fresh);
+                if (!fresh && *at!=i) { ok=false; break; } *at=(uint32_t)i;
+                at=lp_strmap_get(mapped->lists,list->say,strlen(list->say),&fresh);
+                if (!fresh && *at!=i) { ok=false; break; } *at=(uint32_t)i;
+            }
+        }
+        for (size_t i=0; ok && i<h->nedgelists; i++) {
+            const lp_edges *e=h->edges+i; const lp_list *a=lp_highway_list(h,e->a), *b=lp_highway_list(h,e->b);
+            ok=a && b && e->count && e->first==covered && e->count<=ne-covered;
+            for (size_t j=0; ok && j<i; j++) ok=strcmp(e->a,h->edges[j].a) || strcmp(e->b,h->edges[j].b);
+            for (size_t j=0; ok && j<e->count; j++) {
+                const lp_edge *edge=h->edge+covered+j;
+                ok=edge->from<a->count && edge->to<b->count
+                    && (!j || edge[-1].from<edge->from || (edge[-1].from==edge->from && edge[-1].to<edge->to));
+            }
+            if (ok) {
+                mapped->row[i]=calloc((size_t)a->count+1,sizeof(uint32_t)); ok=mapped->row[i]!=NULL;
+                if (ok) {
+                    for (size_t j=0; j<e->count; j++) mapped->row[i][h->edge[covered+j].from+1]++;
+                    for (size_t j=1; j<=a->count; j++) mapped->row[i][j]+=mapped->row[i][j-1];
+                    char key[65]; size_t na=strlen(e->a),nb=strlen(e->b); memcpy(key,e->a,na); key[na]='\t'; memcpy(key+na+1,e->b,nb);
+                    bool fresh; uint32_t *at=lp_strmap_get(mapped->relations,key,na+1+nb,&fresh);
+                    if (!fresh) ok=false; *at=(uint32_t)i;
+                }
+            }
+            covered+=e->count;
+        }
+        ok=ok && covered==ne;
+        if (ok) {
+            h->keys=lp_strmap_lasting(sizeof(uint32_t)); KeyReading r={h,false};
+            ok=lines(layout+nl,(size_t)nk,3,key_line,&r) && !r.bad;
+        }
+        const char *text=layout+nl+nk, *end=text+ni;
+        if (ok) { mapped->identifier=calloc((size_t)nr,sizeof *mapped->identifier); ok=mapped->identifier!=NULL; }
+        for (size_t i=0; ok && i<nr; i++) {
+            const char *zero=memchr(text,0,(size_t)(end-text));
+            ok=zero && (zero>text || h->rec[i].pad==LP_HIGHWAY_RETIRED);
+            if (ok) { mapped->identifier[i]=text; text=zero+1; }
+        }
+        ok=ok && text==end;
+        if (ok) { h->by_id=lp_idindex_build(h->rec,h->nrec,sizeof *h->rec); ok=h->by_id!=NULL; }
+    }
+    if (!ok) {
+        if (h) {
+            if (mapped->row) for (size_t i=0; i<h->nedgelists; i++) free(mapped->row[i]);
+            free(mapped->row); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
+            free(h->list); free(h->bank); free(h->edges); lp_strmap_free(h->keys); lp_idindex_free(h->by_id); free(mapped->identifier); free(mapped);
+        }
+        lp_unmap_file(m,size); return NULL;
+    }
+    snprintf(h->path,sizeof h->path,"%s",path); return h;
+}
+const char *lp_highway_identifier(const lp_highway *h,const lp_list *list,uint32_t slot){
+    if (!h || !list || list<h->list || list>=h->list+h->nlists || slot>=list->count) return NULL;
+    const char *text=((const Highway *)h)->identifier[(size_t)list->first+slot];
+    return *text ? text : NULL;
 }
 const lp_highway *lp_highway_map(const char *path){ return lp_cached("highway", path && *path ? path : lp_highway_path(), highway_open); }
 
 bool lp_highway_contains(const lp_highway *h, const lp_id *id){
     if (!h || !id) return false;
     uint64_t probe = 0;
-    return lp_idindex_find(h->by_id, id, &probe) >= 0;
+    for (int64_t at; (at=lp_idindex_find(h->by_id,id,&probe))>=0; )
+        if (h->rec[at].pad!=LP_HIGHWAY_RETIRED) return true;
+    return false;
 }
 
 const lp_list *lp_highway_list(const lp_highway *h, const char *name){
-    int64_t i = lp_name_find(h->list, h->nlists, sizeof(lp_list), offsetof(lp_list, name), offsetof(lp_list, say), name);
-    return i < 0 ? NULL : &h->list[i];
+    if (!h || !name) return NULL;
+    const uint32_t *at=lp_strmap_lookup(((const Highway *)h)->lists,name,strlen(name));
+    return at ? h->list+*at : NULL;
 }
 const lp_tier0_record *lp_highway_at(const lp_highway *h, const lp_list *l, uint32_t slot){
     if (!l || slot >= l->count || (size_t)l->first + slot >= h->nrec) return NULL;
-    return &h->rec[l->first + slot];
+    const lp_tier0_record *record=&h->rec[l->first+slot];
+    return record->pad==LP_HIGHWAY_RETIRED ? NULL : record;
 }
 
 /* Published mappings already own their immutable ID index. Queries never
  * allocate or take an initialization lock while record workers are running. */
 static const lp_idindex *by_id(const lp_highway *h){ return h->by_id; }
-static lp_lock build_mu = LP_LOCK_INIT; /* the separate, lazy textual-key index */
+
 /* The record's place among all the highway's records, in list l (any list when l is NULL), or -1. */
 static int64_t record_of(const lp_highway *h, const lp_list *l, const lp_id *id){
     const lp_idindex *x = by_id(h); uint64_t probe = 0;
     for (int64_t i; (i = lp_idindex_find(x, id, &probe)) >= 0; )
-        if (!l || ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count)) return i;
+        if (h->rec[i].pad!=LP_HIGHWAY_RETIRED && (!l || ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count))) return i;
     return -1;
 }
 int64_t lp_highway_slot(const lp_highway *h, const lp_list *l, const lp_id *id){
     int64_t i = record_of(h, l, id); return i < 0 ? -1 : i - (l ? (int64_t)l->first : 0);
 }
 size_t lp_highway_edges(const lp_highway *h, const char *a, uint32_t slot, const char *b, const lp_edge **out){
-    for (size_t i = 0; i < h->nedgelists; i++) {
-        const lp_edges *e = &h->edges[i]; if (strcmp(e->a, a) || strcmp(e->b, b)) continue;
-        const lp_edge *p = h->edge + e->first; size_t lo = 0, hi = e->count;              /* sorted by from: binary search to the first */
-        while (lo < hi) { size_t mid = (lo + hi) / 2; if (p[mid].from < slot) lo = mid + 1; else hi = mid; }
-        size_t n = 0; while (lo + n < e->count && p[lo + n].from == slot) n++;
-        *out = p + lo; return n;
-    }
-    *out = NULL; return 0;
+    if (!out) return 0; *out=NULL;
+    if (!h || !a || !b) return 0;
+    size_t na=strlen(a),nb=strlen(b); if (na>=32 || nb>=32) return 0;
+    char key[65]; memcpy(key,a,na); key[na]='\t'; memcpy(key+na+1,b,nb);
+    const Highway *mapped=(const Highway *)h;
+    const uint32_t *at=lp_strmap_lookup(mapped->relations,key,na+1+nb);
+    if (!at) return 0;
+    const lp_list *list=lp_highway_list(h,a); if (!list || slot>=list->count) return 0;
+    const uint32_t *row=mapped->row[*at];
+    *out=h->edge+h->edges[*at].first+row[slot]; return row[slot+1]-row[slot];
 }
 void lp_highway_fingerprint(const lp_highway *h, uint8_t out[32]){
-    blake3_hasher hs; blake3_hasher_init(&hs);
-    blake3_hasher_update(&hs, h->rec, h->nrec * sizeof(lp_tier0_record));
-    blake3_hasher_update(&hs, h->edge, h->nedges * sizeof(lp_edge));
-    blake3_hasher_finalize(&hs, out, 32);
+    memcpy(out, ((const Highway *)h)->fingerprint, 32);
 }
 
 const lp_bank *lp_highway_bank(const lp_highway *h, const char *name){
@@ -160,28 +313,11 @@ const lp_bank *lp_highway_bank_of(const lp_highway *h, const lp_id *id, int32_t 
     return NULL;
 }
 
-/* The keys: "list\tkey\tslot" lines beside the highway, read once. A key is looked up with its list: the map's key is
- * the list's place (4 bytes) and the key's bytes. */
-typedef struct { lp_highway *h; lp_strmap *m; } KeyReading;
-static void key_line(void *ctx, char **f, int n){
-    KeyReading *r = ctx; if (n < 3) return;
-    uint32_t li = 0; while (li < r->h->nlists && strcmp(r->h->list[li].name, f[0])) li++; if (li == r->h->nlists) return;
-    size_t kl = strlen(f[1]); char k[4 + 512]; if (kl > 512) return; memcpy(k, &li, 4); memcpy(k + 4, f[1], kl);
-    bool fresh; uint32_t *slot = lp_strmap_get(r->m, k, 4 + kl, &fresh); if (fresh) *slot = (uint32_t)strtoul(f[2], NULL, 10);
-}
-static lp_strmap *keys(const lp_highway *hc){
-    lp_highway *h = (lp_highway *)hc; lp_strmap *m = __atomic_load_n(&h->keys, __ATOMIC_ACQUIRE);
-    if (m) return m;
-    lp_lock_take(&build_mu);
-    if (!(m = h->keys)) { KeyReading r = { h, lp_strmap_lasting(sizeof(uint32_t)) }; char kp[4200]; lp_beside(h->path, ".keys", kp, sizeof kp);
-        lp_lines(kp, 3, key_line, &r); __atomic_store_n(&h->keys, m = r.m, __ATOMIC_RELEASE); }
-    lp_lock_give(&build_mu);
-    return m;
-}
-int64_t lp_highway_key(const lp_highway *h, const lp_list *l, const char *key){
-    if (!l) return -1;
-    size_t kl = strlen(key); char k[4 + 512]; if (kl > 512) return -1;
-    uint32_t li = (uint32_t)(l - h->list); memcpy(k, &li, 4); memcpy(k + 4, key, kl);
-    int64_t i = lp_strmap_find(keys(h), k, 4 + kl);
-    return i < 0 ? -1 : (int64_t)*(uint32_t *)lp_strmap_at(keys(h), (size_t)i);
+/* The immutable textual-key index is built and validated before publication. */
+int64_t lp_highway_key(const lp_highway *h,const lp_list *l,const char *key){
+    if (!h || !l || !key || l<h->list || l>=h->list+h->nlists) return -1;
+    size_t kl=strlen(key); char k[1004]; if (!kl || kl>1000) return -1;
+    uint32_t li=(uint32_t)(l-h->list); memcpy(k,&li,4); memcpy(k+4,key,kl);
+    int64_t i=lp_strmap_find(h->keys,k,4+kl);
+    return i<0 ? -1 : (int64_t)*(uint32_t *)lp_strmap_at(h->keys,(size_t)i);
 }
