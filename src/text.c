@@ -80,14 +80,16 @@ static void separators(const uint8_t *src, size_t n, Bounds *wb){
     if (wb->n) { if (o.n == o.cap) { o.cap = o.cap * 2 + 4; o.b = grow(o.b, o.cap * 4); } o.b[o.n++] = wb->b[wb->n - 1]; }
     free(wb->b); *wb = o;
 }
-static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t tier){
+static lp_ref made(lp_text *c, const lp_ref *ch, size_t n){
     if (n == 1) return ch[0];
     if (n >= 4) {                                                             /* repeated blocks become entities of their own */
         if (n > c->fcap) { c->fcap = n * 2; c->f = grow(c->f, c->fcap * sizeof(lp_ref)); }
         size_t m = lp_factor(ch, n, c->f, c->compose, c->sink);
         if (m != n) { ch = c->f; n = m; if (n == 1) return ch[0]; }
     }
-    uint8_t up = lp_tier_above(ch, n); if (up > tier) tier = up;                         /* a block lifts what holds it */
+    /* UAX boundaries determine composition, while tier measures the resulting
+     * DAG height. Collapsing a one-child level must not leave an empty tier. */
+    uint8_t tier=lp_tier_above(ch,n);
     lp_ref r = c->compose ? c->compose(c->sink, ch, (uint32_t)n, tier) : lp_ref_compose(ch, n, tier);
     if (c->want_parts) {                            /* the trunk is the last composition of more than one child */
         if (n > c->pcap) { c->pcap = n * 2; c->parts = grow(c->parts, c->pcap * sizeof(lp_ref)); }
@@ -123,21 +125,21 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
                 while (gi < c->gb.n && c->gb.b[gi] <= g0) gi++;
                 int32_t g1 = (gi < c->gb.n && c->gb.b[gi] < w1) ? c->gb.b[gi] : w1; size_t i = (size_t)g0; uint32_t cp; c->cps.n = 0;
                 while (i < (size_t)g1) { if (!lp_utf8_next(src, n, &i, &cp)) { cp = 0xFFFD; i++; } push(&c->cps, lp_ref_atom(c->t0, cp)); }
-                push(&c->g, made(c, c->cps.v, c->cps.n, 1)); g0 = g1;
+                push(&c->g, made(c, c->cps.v, c->cps.n)); g0 = g1;
             }
-            push(&c->segs, made(c, c->g.v, c->g.n, 2)); w0 = w1;
+            push(&c->segs, made(c, c->g.v, c->g.n)); w0 = w1;
         }
-        push(&c->sents, made(c, c->segs.v, c->segs.n, 3));
+        push(&c->sents, made(c, c->segs.v, c->segs.n));
         int end_para = (si + 2 == c->sb.n);
         for (int32_t z = s1 - 1; z >= s0 && !end_para; z--) {
             if (src[z] != '\n' && src[z] != '\r' && src[z] != ' ' && src[z] != '\t') break;
             if ((src[z] == '\n' || src[z] == '\r') && cpy[z] != ' ') end_para = 1;
         }
-        if (end_para) { push(&c->paras, made(c, c->sents.v, c->sents.n, 4)); c->sents.n = 0; }
+        if (end_para) { push(&c->paras, made(c, c->sents.v, c->sents.n)); c->sents.n = 0; }
     }
-    if (c->sents.n) push(&c->paras, made(c, c->sents.v, c->sents.n, 4));
+    if (c->sents.n) push(&c->paras, made(c, c->sents.v, c->sents.n));
     utext_close(ut);
-    return made(c, c->paras.v, c->paras.n, 5);
+    return made(c, c->paras.v, c->paras.n);
 }
 
 lp_ref lp_text_parts(lp_text *c, const uint8_t *s, size_t n, lp_ref *parts, size_t cap, size_t *nparts){

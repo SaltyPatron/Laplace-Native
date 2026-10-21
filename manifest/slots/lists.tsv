@@ -1,0 +1,17 @@
+list	label
+ili	Interlingual index concept
+wnframe	WordNet generic verb sentence frame
+lexfile	WordNet lexicographer file
+wnsentence	WordNet verb example sentence template
+pbroleset	PropBank roleset
+vnclass	VerbNet class
+fnframe	FrameNet frame
+vnrole	VerbNet thematic role
+fnfe	FrameNet frame element
+fnlu	FrameNet lexical unit
+vaframe	VerbAtlas frame
+deprel	Universal dependency relation
+upos	Universal part of speech
+kind	kind
+Synset	WordNet synset identifier
+language	ISO 639 language identifier
