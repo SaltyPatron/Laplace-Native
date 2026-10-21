@@ -51,6 +51,15 @@ LP_API lp_series_entry lp_series_observation(lp_id root, uint64_t games, double 
  * A finite source uncertainty changes the single-source asymptote: it is the
  * prior/source precision-weighted performance, not the unregularized logit
  * target. Independent corroboration can exceed that single-source asymptote.
+ * For identical roots with 0 < s_eff < 1, let a = mu_opponent +
+ * logit(s_eff)/g(phi_opponent), p0 = 1/phi0^2, and p = 1/omega^2.
+ * As games -> infinity, k independent roots give
+ *   mu_limit(k) = (p0*mu0 + k*p*a)/(p0 + k*p).
+ * Copies folded into one root retain k=1. The source-information limit is
+ * k*p; a flat repeated-game likelihood would instead give unbounded source
+ * precision and the same target a for every k, violating that distinction.
+ * This shared-source model is Laplace's adaptation; lp_glicko2 separately
+ * implements Glickman's conventional rating-period update and worked example.
  *
  * Fold identical roots by summing games/wins, maximum trust, and conservative
  * maximum source/opponent uncertainty. Opponent ratings in one root must agree.
