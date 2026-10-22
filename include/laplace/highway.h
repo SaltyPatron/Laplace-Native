@@ -31,6 +31,9 @@ LP_API size_t lp_highway_identifier_parts(const lp_highway *, const lp_list *, u
 /* Membership in any list, through the cache's map-time ID index. No lookup
  * allocation, name scan, coordinate computation or database call. */
 LP_API bool lp_highway_contains(const lp_highway *highway, const lp_id *id);
+/* Canonical coordinates and tier for any active identifier or cached closure
+ * entity. The immutable mapping owns the record; NULL means absent. */
+LP_API const lp_tier0_record *lp_highway_find(const lp_highway *highway, const lp_id *id);
 
 /* Field bits in the one 64-bit carrier; zero for an invalid descriptor. */
 LP_API lp_mask lp_mask_field(const lp_bank *bank);

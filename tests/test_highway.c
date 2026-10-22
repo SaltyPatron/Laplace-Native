@@ -217,6 +217,12 @@ int main(void){
     CHECK(lp_highway_contains(h, &noun), "membership includes a listed identifier");
     CHECK(!lp_highway_contains(h, &none) && !lp_highway_contains(NULL, &noun)
           && !lp_highway_contains(h, NULL), "membership rejects absent IDs and mappings");
+    CHECK(!lp_highway_find(h,&none) && !lp_highway_find(NULL,&noun) && !lp_highway_find(h,NULL),"record lookup rejects absent IDs and mappings");
+    for (size_t i=0;i<h->nrec;i++) if (h->rec[i].pad!=LP_HIGHWAY_RETIRED) {
+        const lp_tier0_record *record=lp_highway_find(h,&h->rec[i].id);
+        CHECK(record && lp_id_eq(&record->id,&h->rec[i].id) && record->pad==h->rec[i].pad &&
+              !memcmp(record->m,h->rec[i].m,sizeof record->m),"ID lookup preserves coordinates and tier at cache record %zu",i);
+    }
     const lp_list *memberships[] = {upos, deprel, ili, pb, vn};
     for (size_t i = 0; i < sizeof memberships / sizeof *memberships; i++) {
         const lp_list *list = memberships[i];
