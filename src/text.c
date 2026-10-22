@@ -28,6 +28,7 @@ struct lp_text {
     Refs cps, g, segs, sents, paras;
     uint8_t *cpy; size_t ccap;
     lp_compose_fn compose; void *sink;
+    lp_text_segment_fn segment; void *segment_sink;
     lp_ref *parts; size_t pcap, pn; lp_id parts_of; int want_parts;   /* the constituents of the last composition made */
     lp_ref *f; size_t fcap;                                                /* room for a composition's factored children */
 };
@@ -128,7 +129,10 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
                 while (i < (size_t)g1) { if (!lp_utf8_next(src, n, &i, &cp)) { cp = 0xFFFD; i++; } push(&c->cps, lp_ref_atom(c->t0, cp)); }
                 push(&c->g, made(c, c->cps.v, c->cps.n)); g0 = g1;
             }
-            push(&c->segs, made(c, c->g.v, c->g.n)); w0 = w1;
+            lp_ref segment = made(c, c->g.v, c->g.n);
+            push(&c->segs, segment);
+            if (c->segment) c->segment(c->segment_sink, (size_t)w0, (size_t)(w1 - w0), &segment);
+            w0 = w1;
         }
         push(&c->sents, made(c, c->segs.v, c->segs.n));
         int end_para = (si + 2 == c->sb.n);
@@ -141,6 +145,13 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
     if (c->sents.n) push(&c->paras, made(c, c->sents.v, c->sents.n));
     utext_close(ut);
     return made(c, c->paras.v, c->paras.n);
+}
+
+lp_ref lp_text_segments(lp_text *c, const uint8_t *s, size_t n, lp_text_segment_fn visit, void *sink){
+    c->segment = visit; c->segment_sink = sink;
+    lp_ref root = lp_text_decompose(c, s, n, NULL, NULL);
+    c->segment = NULL; c->segment_sink = NULL;
+    return root;
 }
 
 lp_ref lp_text_parts(lp_text *c, const uint8_t *s, size_t n, lp_ref *parts, size_t cap, size_t *nparts){
