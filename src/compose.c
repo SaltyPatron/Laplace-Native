@@ -50,10 +50,18 @@ lp_ref lp_ref_codepoints(const lp_tier0_record *t0, const uint8_t *s, size_t n, 
 }
 static int same(const lp_ref *a, const lp_ref *b, size_t L){ for (size_t i = 0; i < L; i++) if (memcmp(&a[i].id, &b[i].id, 16)) return 0; return 1; }
 size_t lp_factor(const lp_ref *ch, size_t n, lp_ref *out, lp_compose_fn compose, void *sink){
-    size_t m = 0;
+    size_t m = 0, run_end = 0;
     for (size_t i = 0; i < n; ) {
+        /* A non-uniform repeated block cannot be shorter than the initial
+         * run: it would either be homogeneous or cross the run boundary in
+         * only its second copy. Keep that boundary while consuming the run. */
+        if (run_end <= i) {
+            run_end = i + 1;
+            while (run_end < n && !memcmp(&ch[i].id, &ch[run_end].id, 16)) run_end++;
+        }
+        size_t first = run_end - i; if (first < 2) first = 2;
         size_t best = 0, k = 0;
-        for (size_t L = 2; L <= (n - i) / 2 && !best; L++) {                   /* the shortest block that repeats here: the period */
+        for (size_t L = first; L <= (n - i) / 2 && !best; L++) {               /* the shortest non-uniform block that repeats here */
             if (memcmp(&ch[i].id, &ch[i + L].id, 16) || !same(&ch[i], &ch[i + L], L)) continue;
             { size_t d = 1; while (d < L && !memcmp(&ch[i].id, &ch[i + d].id, 16)) d++; if (d == L) continue; }   /* one constituent over and over is a run, not a block */
             k = 2; while (i + (k + 1) * L <= n && same(&ch[i], &ch[i + k * L], L)) k++;
