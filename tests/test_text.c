@@ -10,12 +10,27 @@ static lp_ref height_sink(void *context,const lp_ref *children,uint32_t count,ui
     CHECK(count>=2 && tier==lp_tier_above(children,count),"every emitted text composition has its actual recursive height");
     return lp_ref_compose(children,count,tier);
 }
+typedef struct { const char *bytes; size_t offset, count; lp_text *reader; } Segments;
+static void check_segment(void *context, size_t offset, size_t length, const lp_ref *value){
+    Segments *s = context; lp_id independent;
+    CHECK(offset == s->offset && length > 0, "segments cover original bytes in order");
+    CHECK(lp_text_id(s->reader,s->bytes+offset,length,&independent)
+          && lp_id_eq(&independent,&value->id), "segment has its standalone Native content ID");
+    s->offset += length; s->count++;
+}
 
 int main(void){
     const lp_tier0_record *t0 = lp_tier0_map(LAPLACE_TIER0);
     CHECK(t0 != NULL, "cannot map tier 0 at %s", LAPLACE_TIER0);
     if (!t0) DONE("text");
     lp_text *tx = lp_text_new(t0); CHECK(tx != NULL, "ICU break iterators");
+    const char *segment_text = "a banana cafe\xcc\x81 microsoft.com";
+    Segments segments = {segment_text,0,0,lp_text_new(t0)};
+    lp_ref segmented = lp_text_segments(tx,(const uint8_t *)segment_text,strlen(segment_text),check_segment,&segments);
+    lp_id ordinary;
+    CHECK(segments.count == 9 && segments.offset == strlen(segment_text), "actual segments include atoms, factored words and separators");
+    CHECK(lp_text_id(tx,segment_text,strlen(segment_text),&ordinary) && lp_id_eq(&ordinary,&segmented.id), "visiting segments preserves the root and clears callback state");
+    lp_text_free(segments.reader);
     lp_ref parts[16]; size_t n;
 
     lp_ref r = lp_text_parts(tx, (const uint8_t *)"Holmes", 6, parts, 16, &n);             /* a word fills every tier above it */

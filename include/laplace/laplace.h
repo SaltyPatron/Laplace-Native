@@ -605,6 +605,11 @@ LP_API void     lp_text_free(lp_text *);
  * to the calling thread. Empty or noncanonical UTF-8 is rejected before decomposition. */
 LP_API bool lp_text_id(lp_text *context, const char *utf8, size_t len, lp_id *out);
 LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_compose_fn compose, void *sink);
+/* Visit the decomposer's actual word segments in source order, including
+ * punctuation and whitespace. Input must be valid nonempty UTF-8, as for
+ * lp_text_decompose. The callback must not reuse this same context. */
+typedef void (*lp_text_segment_fn)(void *sink, size_t offset, size_t length, const lp_ref *value);
+LP_API lp_ref lp_text_segments(lp_text *, const uint8_t *s, size_t n, lp_text_segment_fn, void *sink);
 /* The same, also giving the trunk's own constituents in order, repeats included (at most cap are written; the count
  * is returned in *nparts). A trunk that is one codepoint has itself as its only part. */
 LP_API lp_ref   lp_text_parts(lp_text *, const uint8_t *s, size_t n, lp_ref *parts, size_t cap, size_t *nparts);
