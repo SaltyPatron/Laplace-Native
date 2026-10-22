@@ -285,13 +285,14 @@ size_t lp_highway_identifier_parts(const lp_highway *h,const lp_list *list,uint3
 }
 const lp_highway *lp_highway_map(const char *path){ return lp_cached("highway", path && *path ? path : lp_highway_path(), highway_open); }
 
-bool lp_highway_contains(const lp_highway *h, const lp_id *id){
-    if (!h || !id) return false;
+const lp_tier0_record *lp_highway_find(const lp_highway *h, const lp_id *id){
+    if (!h || !id) return NULL;
     uint64_t probe = 0;
     for (int64_t at; (at=lp_idindex_find(h->by_id,id,&probe))>=0; )
-        if (h->rec[at].pad!=LP_HIGHWAY_RETIRED) return true;
-    return false;
+        if (h->rec[at].pad!=LP_HIGHWAY_RETIRED) return h->rec+at;
+    return NULL;
 }
+bool lp_highway_contains(const lp_highway *h, const lp_id *id){ return lp_highway_find(h,id)!=NULL; }
 
 const lp_list *lp_highway_list(const lp_highway *h, const char *name){
     if (!h || !name) return NULL;
