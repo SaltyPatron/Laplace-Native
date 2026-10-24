@@ -575,6 +575,13 @@ LP_API lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp);
 /* The composition of n children in order: its ID from theirs, its coordinate the exact average of theirs. One child
  * is that child. */
 LP_API lp_ref lp_ref_compose(const lp_ref *children, size_t n, uint8_t tier);
+/* Compose ordered run-length children without expanding their references.
+ * Positive runs weight both the repeated ID bytes and the exact centroid.
+ * The result equals ordinary composition of the expanded sequence, including
+ * single-child collapse. False clears out for invalid pointers, zero runs or
+ * an overflowing logical byte count. Empty input is valid; out may alias a child. */
+LP_API bool lp_ref_compose_runs(const lp_ref *children, const uint64_t *runs,
+                               size_t n, uint8_t tier, lp_ref *out);
 /* The tier a composition of these children takes at the least: one above the highest of them. */
 static inline uint8_t lp_tier_above(const lp_ref *r, size_t n){ uint8_t t = 0; for (size_t i = 0; i < n; i++) if (r[i].tier > t) t = r[i].tier; return (uint8_t)(t < 255 ? t + 1 : 255); }
 /* UTF-8 taken as one composition of its codepoints, with no tier between (lp_id_codepoints_utf8's ID): its ID and
