@@ -199,6 +199,11 @@ LP_API size_t   lp_path_len(lp_path);                                        /* 
 LP_API size_t lp_path_expand(lp_path, lp_id *out, size_t cap);
 /* Its vertices as stored: ID, run, what each is said to be, and its spare bits' value. Returns the vertex count; at most cap are written. */
 LP_API size_t lp_path_decode(lp_path, lp_vertex *out, size_t cap);
+/* Merge optional said annotations over the same ordered constituent sequence.
+ * An absent annotation may become known; distinct nonzero annotations, scores,
+ * outcomes or positions conflict. Identity and run counts never change.
+ * Returns the EWKB size (also when out is NULL), or zero for a conflict. */
+LP_API size_t lp_ewkb_enrich_path(lp_path recorded, lp_path incoming, uint8_t *out, size_t cap);
 /* The distinct IDs it holds, in byte order (the keys of the container index): out holds n; returns how many. */
 LP_API size_t lp_path_keys(lp_path, lp_id *out);
 /* Whether it holds every one of ids (all) or any of them. */
