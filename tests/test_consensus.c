@@ -19,7 +19,34 @@ static lp_series_entry observation(unsigned root, uint64_t games, double wins, d
     lp_id id; lp_id_codepoint(root, &id); return lp_series_observation(id, games, wins, trust);
 }
 
+static void relabelled_roots(void){
+    lp_series_entry entries[64];
+    for(unsigned i=0;i<32;i++){
+        uint64_t first=8*(i+1)*17,second=8*(i+1)*100;
+        entries[2*i]=observation('a'+i,first,(double)first*(i%9)/8,.3+.1*(i%6));
+        entries[2*i+1]=observation('a'+i,second,(double)second*((i*3+1)%9)/8,.6+.05*(i%7));
+        entries[2*i].opponent.rating=entries[2*i+1].opponent.rating=1200+19*i;
+        entries[2*i].opponent.deviation=entries[2*i+1].opponent.deviation=30+4*i;
+    }
+    lp_standing expected={0};int ready=lp_series(entries,64,&expected);
+    CHECK(ready,"mixed dependence partitions solve before relabeling");
+    if(!ready)return;
+    for(unsigned pass=0;pass<128;pass++){
+        for(unsigned i=0;i<32;i++){
+            lp_id root;lp_id_codepoint(0x400+((i*(2*pass+1)+pass)%32),&root);
+            entries[2*i].dependence_root=entries[2*i+1].dependence_root=root;
+        }
+        lp_standing actual={0};
+        int equal=lp_series(entries,64,&actual) && standing_equal(&expected,&actual);
+        CHECK(equal,"root labels preserve standing bits (pass %u): %.17g/%.17g/%.17g iterations %u versus %.17g/%.17g/%.17g iterations %u",
+              pass,actual.rating,actual.deviation,actual.volatility,actual.iterations,
+              expected.rating,expected.deviation,expected.volatility,expected.iterations);
+        if(!equal)return;
+    }
+}
+
 static void rooted_series(void){
+    relabelled_roots();
     const double trusts[] = {0.5,0.85,0.99};
     const uint64_t counts[] = {1,10,1000,1000000};
     for (size_t t = 0; t < 3; t++) {
