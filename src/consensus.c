@@ -125,6 +125,14 @@ static void series_likelihood(const SeriesRoot *r, double x, double *score, doub
     *information = r->games * r->weight * r->weight * tail / (denominator * denominator);
 }
 static int compare_number(double a, double b){ return a < b ? -1 : a > b; }
+static int root_order(const void *a, const void *b){
+    const SeriesRoot *x=a,*y=b;int c;
+    if((c=compare_number(x->games,y->games)))return c;
+    if((c=compare_number(x->score,y->score)))return c;
+    if((c=compare_number(x->anchor,y->anchor)))return c;
+    if((c=compare_number(x->weight,y->weight)))return c;
+    return compare_number(x->precision,y->precision);
+}
 static int series_order(const void *a, const void *b){
     const lp_series_entry *x = a, *y = b; int c = lp_id_cmp(&x->dependence_root, &y->dependence_root);
     if (c) return c;
@@ -250,6 +258,9 @@ bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, si
             .weight = weight, .precision = precision,
             .performance = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE };
     }
+    /* IDs decide dependence membership, never numerical summation order.
+     * Publishing the same partition under its final trunk must preserve bits. */
+    qsort(roots,nr,sizeof *roots,root_order);
     result.witnesses = (uint64_t)nr;
     if (!nr) { ok = true; goto done; }
     double mu0 = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE;
