@@ -12,25 +12,54 @@ lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp){
     return r;
 }
 
-/* The children's IDs go to the hasher 64 at a time, gathered side by side: the same bytes as lp_id_compose hashes. */
-lp_ref lp_ref_compose(const lp_ref *ch, size_t n, uint8_t tier){
-    if (n == 1) return ch[0];
-    lp_ref r; memset(&r, 0, sizeof r); r.tier = tier;
-    if (n == 0) return r;
-    lp_coord_sum a = { { 0, 0, 0, 0 }, 0 }; lp_id run[64];
-    if (n <= 64) {                                         /* one chunk: the IDs side by side, hashed at once (lp_hash16) */
-        for (size_t i = 0; i < n; i++) { run[i] = ch[i].id; lp_coord_add(&a, ch[i].c.m); }
-        lp_hash16(run, 16 * n, &r.id);
-    } else {                                               /* more: the hasher, 64 IDs a call */
-        blake3_hasher h; blake3_hasher_init(&h);
-        for (size_t i = 0; i < n; ) {
-            size_t k = 0; for (; k < 64 && i < n; k++, i++) { run[k] = ch[i].id; lp_coord_add(&a, ch[i].c.m); }
-            blake3_hasher_update(&h, run, 16 * k);
-        }
-        blake3_hasher_finalize(&h, r.id.b, 16);
+/* One kernel for ordinary and run-compressed paths. Counts weight the integer
+ * centroid, while BLAKE3 sees precisely the ordered, repeated ID bytes. */
+static bool compose_refs(const lp_ref *ch, const uint64_t *runs, size_t n, uint8_t tier, lp_ref *out){
+    if (!out) return false;
+    memset(out, 0, sizeof *out);
+    if (n && !ch) return false;
+    uint64_t total = runs ? 0 : n;
+    if (runs) for (size_t i = 0; i < n; i++) {
+        if (!runs[i] || runs[i] > SIZE_MAX / sizeof(lp_id) - total) return false;
+        total += runs[i];
     }
-    lp_coord_mean(&a, &r.c);
-    return r;
+    if (total > SIZE_MAX / sizeof(lp_id)) return false;
+    out->tier = tier;
+    if (!total) return true;
+    if (total == 1) { *out = ch[0]; return true; }
+    lp_coord_sum sum = {{0, 0, 0, 0}, total};
+    lp_id block[64]; size_t used = 0;
+    blake3_hasher hash;
+    if (total > 64) blake3_hasher_init(&hash);
+    for (size_t i = 0; i < n; i++) {
+        uint64_t copies = runs ? runs[i] : 1;
+        for (unsigned d = 0; d < 4; d++) sum.s[d] += (__int128)ch[i].c.m[d] * copies;
+        while (copies) {
+            size_t take = copies < 64 - used ? (size_t)copies : 64 - used;
+            for (size_t j = 0; j < take; j++) block[used + j] = ch[i].id;
+            used += take; copies -= take;
+            if (used == 64 && total > 64) {
+                blake3_hasher_update(&hash, block, sizeof block); used = 0;
+            }
+        }
+    }
+    if (total <= 64) lp_hash16(block, used * sizeof *block, &out->id);
+    else {
+        if (used) blake3_hasher_update(&hash, block, used * sizeof *block);
+        blake3_hasher_finalize(&hash, out->id.b, sizeof out->id.b);
+    }
+    lp_coord_mean(&sum, &out->c);
+    return true;
+}
+lp_ref lp_ref_compose(const lp_ref *ch, size_t n, uint8_t tier){
+    lp_ref out; compose_refs(ch, NULL, n, tier, &out); return out;
+}
+bool lp_ref_compose_runs(const lp_ref *ch, const uint64_t *runs, size_t n, uint8_t tier, lp_ref *out){
+    if (!out) return false;
+    if (n && !runs) { memset(out, 0, sizeof *out); return false; }
+    lp_ref value;
+    bool valid = compose_refs(ch, runs, n, tier, &value);
+    *out = value; return valid;
 }
 
 lp_ref lp_ref_codepoints(const lp_tier0_record *t0, const uint8_t *s, size_t n, bool *ok){

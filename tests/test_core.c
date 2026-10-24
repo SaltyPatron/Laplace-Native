@@ -13,7 +13,58 @@ static int by_key(const void *a, const void *b){ uint32_t x = ((const Pair *)a)-
 
 static int flush_into(void *ctx, const uint8_t *b, size_t n){ lp_buf_put((lp_buf *)ctx, b, n); return 1; }
 
+static void composition_runs(void){
+    lp_ref children[3] = {0}, expanded[260], actual;
+    for (size_t i = 0; i < 3; i++) {
+        lp_id_codepoint((uint32_t)('a' + i), &children[i].id);
+        children[i].tier = (uint8_t)i;
+        children[i].said = (uint8_t)(i + 1); children[i].outcome = 2;
+        children[i].position = (uint32_t)(7 + i); children[i].spare = (uint32_t)(11 + i);
+        for (size_t d = 0; d < 4; d++) children[i].c.m[d] = (int64_t)((i + 1) * (d + 3) * 101) * (d & 1 ? -1 : 1) + (int64_t)i;
+    }
+    const uint64_t cases[][3] = {{1,1,1},{62,1,1},{63,1,1},{64,1,1},{65,2,1},{129,1,67}};
+    for (size_t c = 0; c < sizeof cases / sizeof *cases; c++) {
+        size_t n = 0;
+        for (size_t i = 0; i < 3; i++) for (uint64_t j = 0; j < cases[c][i]; j++) expanded[n++] = children[i];
+        lp_ref expected = lp_ref_compose(expanded, n, 7);
+        lp_id ids[260], independent;
+        lp_coord coords[260], mean;
+        for (size_t i = 0; i < n; i++) { ids[i] = expanded[i].id; coords[i] = expanded[i].c; }
+        lp_id_compose(ids, n, &independent); lp_coord_centroid(coords, n, &mean);
+        CHECK(lp_ref_compose_runs(children, cases[c], 3, 7, &actual), "run composition accepts case %zu", c);
+        CHECK(!memcmp(&actual, &expected, sizeof actual) && lp_id_eq(&actual.id, &independent) && !memcmp(&actual.c, &mean, sizeof mean),
+              "run composition %zu equals expanded identity, centroid and cleared metadata", c);
+    }
+    lp_ref alias = children[0], expected = lp_ref_compose(children, 3, 7);
+    lp_ref blocks[6] = {children[0],children[1],children[0],children[1],children[0],children[1]};
+    uint64_t block_runs[6] = {31,2,31,2,31,2}; size_t block_count = 0;
+    for (size_t i = 0; i < 6; i++) for (uint64_t j = 0; j < block_runs[i]; j++) expanded[block_count++] = blocks[i];
+    lp_ref block_expected = lp_ref_compose(expanded, block_count, 7);
+    CHECK(lp_ref_compose_runs(blocks, block_runs, 6, 7, &actual) && !memcmp(&actual, &block_expected, sizeof actual), "repeated complete blocks retain ordered identity and centroid");
+    uint64_t once[3] = {1,1,1};
+    CHECK(lp_ref_compose_runs(children, once, 3, 7, &children[0]) && !memcmp(&children[0], &expected, sizeof expected), "run output may alias a child");
+    children[0] = alias;
+    CHECK(lp_ref_compose_runs(children, once, 1, 9, &actual) && !memcmp(&actual, &children[0], sizeof actual), "one logical child preserves its complete reference");
+    uint64_t repeated = 65; for (size_t i = 0; i < repeated; i++) expanded[i] = children[0];
+    expected = lp_ref_compose(expanded, (size_t)repeated, 4);
+    CHECK(lp_ref_compose_runs(children, &repeated, 1, 4, &actual) && !memcmp(&actual, &expected, sizeof actual), "one repeated child spans hash blocks without collapsing");
+    expected = lp_ref_compose(NULL, 0, 4);
+    CHECK(lp_ref_compose_runs(NULL, NULL, 0, 4, &actual) && !memcmp(&actual, &expected, sizeof actual), "empty run composition equals ordinary empty composition");
+    uint64_t invalid[][3] = {{0,1,1},{UINT64_MAX,1,1},{SIZE_MAX / sizeof(lp_id),1,1}};
+    const lp_ref zero = {0};
+    for (size_t i = 0; i < sizeof invalid / sizeof *invalid; i++) {
+        memset(&actual, 0xa5, sizeof actual);
+        CHECK(!lp_ref_compose_runs(children, invalid[i], 3, 4, &actual) && !memcmp(&actual, &zero, sizeof actual), "invalid run case %zu clears output", i);
+    }
+    memset(&actual, 0xa5, sizeof actual);
+    CHECK(!lp_ref_compose_runs(NULL, once, 1, 4, &actual) && !memcmp(&actual, &zero, sizeof actual), "missing children clear output");
+    memset(&actual, 0xa5, sizeof actual);
+    CHECK(!lp_ref_compose_runs(children, NULL, 1, 4, &actual) && !memcmp(&actual, &zero, sizeof actual), "missing runs clear output");
+    CHECK(!lp_ref_compose_runs(children, once, 1, 4, NULL), "missing output is refused");
+}
+
 int main(void){
+    composition_runs();
     /* ---- arrays, buffers, hexadecimal */
     lp_vec(uint32_t) v = { 0 }; for (uint32_t i = 0; i < 100000; i++) lp_push(&v, i * 3);
     int bad = 0; for (uint32_t i = 0; i < 100000; i++) bad += v.v[i] != i * 3;
