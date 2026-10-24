@@ -131,7 +131,9 @@ int main(void){
         size_t ng = lp_path_follows(p, phrase, np, got, 40000);
         CHECK(ng == nw && !memcmp(got, want, 16 * nw), "trial %d: %zu continuations, expected %zu", trial, ng, nw);
         /* holds, keys, times, middle */
-        lp_id keys[5]; size_t nk = lp_path_keys(p, keys); bool hold[5] = { 0 }; uint64_t tw[5] = { 0 };
+        /* Extraction writes every stored vertex before sorting/deduplicating.
+         * The output needs p.n slots, even when there are only five values. */
+        lp_id *keys = got; size_t nk = lp_path_keys(p, keys); bool hold[5] = { 0 }; uint64_t tw[5] = { 0 };
         for (size_t i = 0; i < n; i++) for (int z = 0; z < 5; z++) if (lp_id_eq(&seq[i], &vocab[z])) { hold[z] = 1; tw[z]++; }
         size_t want_k = 0; for (int z = 0; z < 5; z++) want_k += hold[z];
         CHECK(nk == want_k, "trial %d: %zu keys, expected %zu", trial, nk, want_k);
