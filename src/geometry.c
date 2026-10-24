@@ -283,6 +283,54 @@ size_t lp_ewkb_runs_spare(const lp_id *ids, const uint64_t *m, const uint32_t *s
     return need;
 }
 
+static bool enrich_vertex(lp_path path, size_t at, lp_vertex *vertex){
+    lp_path_decode(lp_path_block(path.v + at * LP_VERTEX_BYTES, 1), vertex, 1);
+    double packed; memcpy(&packed, path.v + at * LP_VERTEX_BYTES + 24, 8);
+    return packed == (double)lp_m_full(vertex->run, vertex->said, vertex->outcome, vertex->position);
+}
+static uint8_t *enrich_put(uint8_t *out, const lp_vertex *vertex){
+    double xyz[3]; lp_id_to_xyz(&vertex->id, xyz); lp_xyz_spare_set(xyz, vertex->spare);
+    for (int axis = 0; axis < 3; axis++) out = putd(out, xyz[axis]);
+    return putd(out, (double)lp_m_full(vertex->run, vertex->said, vertex->outcome, vertex->position));
+}
+/* Walk counted sequences together, including differently split equal runs.
+ * Only an absent said annotation is enriched. A different outcome is never
+ * treated as absent: zero is an affirmation, not an unknown outcome. */
+static size_t enrich_vertices(lp_path a, lp_path b, uint8_t *out){
+    size_t ai = 0, bi = 0, count = 0; lp_vertex av = {0}, bv = {0}, pending = {0};
+    while (ai < a.n || av.run || bi < b.n || bv.run) {
+        if (!av.run && ai < a.n && !enrich_vertex(a, ai++, &av)) return 0;
+        if (!bv.run && bi < b.n && !enrich_vertex(b, bi++, &bv)) return 0;
+        if (!av.run || !bv.run || !lp_id_eq(&av.id, &bv.id)
+            || (av.said && bv.said && av.said != bv.said)
+            || av.spare != bv.spare || av.outcome != bv.outcome || av.position != bv.position) return 0;
+        lp_vertex next = av; next.run = av.run < bv.run ? av.run : bv.run;
+        if (!next.said) next.said = bv.said;
+        av.run -= next.run; bv.run -= next.run;
+        if (pending.run && lp_id_eq(&pending.id, &next.id) && pending.said == next.said
+            && pending.spare == next.spare && pending.outcome == next.outcome && pending.position == next.position
+            && (uint64_t)pending.run + next.run < (UINT64_C(1) << LP_M_RUN_BITS)) pending.run += next.run;
+        else {
+            if (pending.run) { count++; if (out) out = enrich_put(out, &pending); }
+            pending = next;
+        }
+    }
+    if (pending.run) { count++; if (out) enrich_put(out, &pending); }
+    return count;
+}
+size_t lp_ewkb_enrich_path(lp_path a, lp_path b, uint8_t *out, size_t cap){
+    if (!a.n || !b.n) return 0;
+    size_t count = enrich_vertices(a, b, NULL);
+    if (!count || count > UINT32_MAX || count > (SIZE_MAX - 9) / LP_VERTEX_BYTES) return 0;
+    size_t need = count == 1 ? 5 + LP_VERTEX_BYTES : 9 + count * LP_VERTEX_BYTES;
+    if (!out || cap < need) return need;
+    uint8_t *p = out; *p++ = 1;
+    p = put32(p, (count == 1 ? LP_POINT : LP_LINESTRING) | EWKB_Z | EWKB_M);
+    if (count != 1) p = put32(p, (uint32_t)count);
+    enrich_vertices(a, b, p);
+    return need;
+}
+
 size_t lp_ewkb_point4(const double c[4], uint8_t *out, size_t cap){
     return lp_ewkb_point_zm(c, NULL, out, cap);
 }

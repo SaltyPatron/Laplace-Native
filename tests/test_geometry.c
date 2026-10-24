@@ -204,6 +204,34 @@ int main(void){
       CHECK(exact, "every float score at or above one half is carried exactly");
       uint8_t old[64]; lp_id one[1] = { ids[0] }; uint64_t m1[1] = { (uint64_t)lp_m_of(5, LP_SAID_CLAIM) }; size_t ol = lp_ewkb_runs(one, m1, 1, old, sizeof old); lp_vertex ov;
       CHECK(lp_path_vertices(old, ol, &ov, 1) == 1 && ov.run == 5 && ov.outcome == LP_OUTCOME_WIN && ov.position == 0 && lp_outcome_score(ov.outcome, ov.spare) == 1.0, "a vertex written without them is a win at no place"); }
+    { lp_id ids[3]; lp_id_codepoint('0', &ids[0]); lp_id_codepoint('1', &ids[1]); ids[2]=ids[1];
+      uint64_t old_m[]={1,2}, new_m[]={1,(uint64_t)lp_m_of(2,LP_SAID_TUPLE)};
+      uint8_t old[160], fresh[160], enriched[160];
+      size_t ol=lp_ewkb_runs(ids,old_m,2,old,sizeof old), nl=lp_ewkb_runs(ids,new_m,2,fresh,sizeof fresh);
+      size_t size=lp_ewkb_enrich_path(lp_path_of(old,ol),lp_path_of(fresh,nl),enriched,sizeof enriched);
+      lp_vertex vertices[3];
+      CHECK(size && lp_path_vertices(enriched,size,vertices,3)==2 && vertices[1].run==2 && vertices[1].said==LP_SAID_TUPLE,
+            "a missing annotation is enriched without changing a repeated child");
+      uint8_t replay[160]; size_t rs=lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(old,ol),replay,sizeof replay);
+      CHECK(rs==size && !memcmp(replay,enriched,size),"replay cannot erase an existing annotation");
+      uint64_t split_m[]={1,(uint64_t)lp_m_of(1,LP_SAID_TUPLE),(uint64_t)lp_m_of(1,LP_SAID_TUPLE)};
+      nl=lp_ewkb_runs(ids,split_m,3,fresh,sizeof fresh);
+      CHECK(lp_ewkb_enrich_path(lp_path_of(old,ol),lp_path_of(fresh,nl),replay,sizeof replay)==size && !memcmp(replay,enriched,size),
+            "different run splits preserve the same ordered occurrences");
+      uint64_t conflict_m[]={1,(uint64_t)lp_m_of(2,LP_SAID_RECORD)};
+      nl=lp_ewkb_runs(ids,conflict_m,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"distinct nonzero annotations conflict");
+      conflict_m[1]=lp_m_full(2,LP_SAID_TUPLE,LP_OUTCOME_LOSS,0);
+      nl=lp_ewkb_runs(ids,conflict_m,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"an affirmation is not an absent outcome");
+      conflict_m[1]=lp_m_full(2,LP_SAID_TUPLE,LP_OUTCOME_WIN,1);
+      nl=lp_ewkb_runs(ids,conflict_m,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"positions cannot be rewritten");
+      conflict_m[1]=lp_m_full(3,LP_SAID_TUPLE,0,0); nl=lp_ewkb_runs(ids,conflict_m,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"multiplicity remains identity data");
+      lp_id reverse[]={ids[1],ids[0]}; nl=lp_ewkb_runs(reverse,new_m,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"child order remains identity data");
+    }
     nested_geometry();
     DONE("geometry");
 }
