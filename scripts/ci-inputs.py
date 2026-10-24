@@ -8,8 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-NAMES = ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway',
-         'tier0.highway.layout', 'tier0.highway.keys', 'tier0.highway.nodes')
+NAMES = ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')
 
 
 def digest(path):
@@ -22,17 +21,34 @@ def digest(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('freeze', 'verify'))
+    parser.add_argument('operation', choices=('prepare', 'freeze', 'verify'))
     parser.add_argument('directory', type=Path)
+    parser.add_argument('--engine', type=Path)
+    parser.add_argument('--ucd', type=Path)
     args = parser.parse_args()
     directory = args.directory.resolve()
+    if args.operation == 'prepare':
+        if not args.engine or not args.ucd:
+            parser.error('prepare requires --engine and --ucd')
+        directory.mkdir(parents=True, exist_ok=False)
+        environment = dict(os.environ, LAPLACE_TIER0=str(directory / 'tier0.bin'),
+                           LAPLACE_FLAGS=str(directory / 'tier0.flags'),
+                           LAPLACE_HIGHWAY=str(directory / 'tier0.highway'))
+        engine = str(args.engine.resolve())
+        for operation, filename in (('tier0', 'tier0.bin'), ('flags', 'tier0.flags')):
+            subprocess.run([engine, operation, '-u', str(args.ucd), '-o', str(directory / filename)],
+                           env=environment, check=True)
+        subprocess.run([engine, 'highway', '-o', str(directory / 'tier0.highway')],
+                       env=environment, check=True)
+        manifest = {name: {'sha256': digest(directory / name), 'bytes': (directory / name).stat().st_size}
+                    for name in NAMES}
+        (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     if args.operation == 'freeze':
         t0 = Path(os.environ['LAPLACE_TIER0'])
         stem = str(t0.with_suffix(''))
         flags = Path(os.environ.get('LAPLACE_FLAGS') or stem + '.flags')
         highway = Path(os.environ.get('LAPLACE_HIGHWAY') or stem + '.highway')
-        sources = (t0, flags, Path(str(flags) + '.layout'), highway,
-                   Path(str(highway) + '.layout'), Path(str(highway) + '.keys'), Path(str(highway) + '.nodes'))
+        sources = (t0, flags, Path(str(flags) + '.layout'), highway)
         # Use the installation's cooperative lock, also held by deployment and preparation.
         with open(os.environ['LAPLACE_HOST_LOCK'], 'a') as lock:
             subprocess.run(['flock', '-s', '-w', '300', str(lock.fileno())], pass_fds=(lock.fileno(),), check=True)
