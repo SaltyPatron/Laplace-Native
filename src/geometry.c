@@ -286,7 +286,9 @@ size_t lp_ewkb_runs_spare(const lp_id *ids, const uint64_t *m, const uint32_t *s
 static bool enrich_vertex(lp_path path, size_t at, lp_vertex *vertex){
     lp_path_decode(lp_path_block(path.v + at * LP_VERTEX_BYTES, 1), vertex, 1);
     double packed; memcpy(&packed, path.v + at * LP_VERTEX_BYTES + 24, 8);
-    return packed == (double)lp_m_full(vertex->run, vertex->said, vertex->outcome, vertex->position);
+    double xyz[3]; lp_id_to_xyz(&vertex->id, xyz); lp_xyz_spare_set(xyz, vertex->spare);
+    return !memcmp(xyz,path.v + at * LP_VERTEX_BYTES,sizeof xyz)
+        && packed == (double)lp_m_full(vertex->run, vertex->said, vertex->outcome, vertex->position);
 }
 static uint8_t *enrich_put(uint8_t *out, const lp_vertex *vertex){
     double xyz[3]; lp_id_to_xyz(&vertex->id, xyz); lp_xyz_spare_set(xyz, vertex->spare);

@@ -231,6 +231,11 @@ int main(void){
       CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"multiplicity remains identity data");
       lp_id reverse[]={ids[1],ids[0]}; nl=lp_ewkb_runs(reverse,new_m,2,fresh,sizeof fresh);
       CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"child order remains identity data");
+      uint32_t spare[]={0,lp_spare_of(1,7)};
+      nl=lp_ewkb_runs_spare(ids,new_m,spare,2,fresh,sizeof fresh);
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"scores and spare values cannot be rewritten");
+      nl=lp_ewkb_runs(ids,new_m,2,fresh,sizeof fresh); fresh[16] ^= 0x80;
+      CHECK(!lp_ewkb_enrich_path(lp_path_of(enriched,size),lp_path_of(fresh,nl),NULL,0),"invalid carrier bits cannot masquerade as annotations");
     }
     nested_geometry();
     DONE("geometry");
