@@ -28,7 +28,7 @@ int main(void){
     Segments segments = {segment_text,0,0,lp_text_new(t0)};
     lp_ref segmented = lp_text_segments(tx,(const uint8_t *)segment_text,strlen(segment_text),check_segment,&segments);
     lp_id ordinary;
-    CHECK(segments.count == 9 && segments.offset == strlen(segment_text), "actual segments include atoms, factored words and separators");
+    CHECK(segments.count == 9 && segments.offset == strlen(segment_text), "actual segments include atoms, words and separators");
     CHECK(lp_text_id(tx,segment_text,strlen(segment_text),&ordinary) && lp_id_eq(&ordinary,&segmented.id), "visiting segments preserves the root and clears callback state");
     lp_text_free(segments.reader);
     lp_ref parts[16]; size_t n;
@@ -51,18 +51,18 @@ int main(void){
     CHECK(n == 3 && !memcmp(&parts[0].id, &ms[0], 16) && !memcmp(&parts[1].id, &ms[1], 16) && !memcmp(&parts[2].id, &ms[2], 16) && r.tier == 2, "microsoft.com is [microsoft] [.] [com] (%zu parts, tier %d)", n, r.tier);
     r = lp_text_parts(tx, (const uint8_t *)"3.14 can't word_1", 17, parts, 16, &n);
     CHECK(n == 11, "3.14 can't word_1 is [3] [.] [14] [ ] [can] ['] [t] [ ] [word] [_] [1] (%zu parts)", n);
-    /* repeats: a block repeated adjacently is one entity, a run of a single constituent is a run */
-    r = lp_text_parts(tx, (const uint8_t *)"banana", 6, parts, 16, &n);
-    lp_id an = word("an");
-    CHECK(n == 4 && !memcmp(&parts[1].id, &an, 16) && !memcmp(&parts[2].id, &an, 16) && parts[1].tier == 1 && r.tier == 2, "banana is b [an]x2 a (%zu parts)", n);
-    r = lp_text_parts(tx, (const uint8_t *)"mississippi", 11, parts, 16, &n);
-    lp_id iss = word("iss");
-    CHECK(n == 7 && !memcmp(&parts[1].id, &iss, 16) && !memcmp(&parts[2].id, &iss, 16), "mississippi is m [iss]x2 i p p i (%zu parts)", n);
-    r = lp_text_parts(tx, (const uint8_t *)"aaaa", 4, parts, 16, &n);
-    CHECK(n == 4 && !memcmp(&parts[0].id, &parts[3].id, 16) && parts[0].tier == 0, "aaaa stays a run of the codepoint");
-    r = lp_text_parts(tx, (const uint8_t *)"abababab", 8, parts, 16, &n);
-    lp_id ab = word("ab");
-    CHECK(n == 4 && !memcmp(&parts[0].id, &ab, 16) && !memcmp(&parts[3].id, &ab, 16), "abababab is [ab]x4 (%zu parts)", n);
+    /* Repetition changes occurrence counts, not the admitted UAX boundaries. */
+    const char *repeated_words[] = {"banana", "mississippi", "aaaa", "abababab"};
+    for (size_t w = 0; w < sizeof repeated_words / sizeof *repeated_words; w++) {
+        const char *text = repeated_words[w]; size_t length = strlen(text);
+        r = lp_text_parts(tx, (const uint8_t *)text, length, parts, 16, &n);
+        lp_id direct = word(text);
+        CHECK(n == length && r.tier == 1 && lp_id_eq(&r.id, &direct),
+              "%s is one word composed directly from its %zu codepoints", text, length);
+        for (size_t i = 0; i < n; i++)
+            CHECK(parts[i].tier == 0 && lp_tier0_codepoint(t0, &parts[i].id) == text[i],
+                  "%s retains scalar occurrence %zu", text, i);
+    }
 
     r = lp_text_parts(tx, (const uint8_t *)"n", 1, parts, 16, &n);
     CHECK(r.tier == 0 && n == 1 && lp_tier0_codepoint(t0, &r.id) == 'n', "one codepoint is that codepoint");

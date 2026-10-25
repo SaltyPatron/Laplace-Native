@@ -217,7 +217,7 @@ slot	id	status	key	part1	part2
 213	4001e345c111d2f56566d49694cb793c	live	7442	Achieving_first	coin.v
 214	3f859559c3df8cbfa9d0fd6d3ab4f7de	live	7443	Achieving_first	coinage.n
 215	658649ebb37a4112ec672a847c934e9d	live	7444	Achieving_first	discovery.n
-216	9950a07714255311613d82ae79f00951	live	7445	Achieving_first	discoverer.n
+216	48e4beaa06458a7b26f632a2ac227eb4	live	7445	Achieving_first	discoverer.n
 217	ba66e1a719660c8df3ce4041d609ba32	live	7446	Achieving_first	originator.n
 218	c25373eda9206be315a6471eb3a4e2a2	live	7447	Achieving_first	inventor.n
 219	d28e9c6d545cdab38d7f5d9c5b8ab71d	live	7448	Achieving_first	invention.n
@@ -315,7 +315,7 @@ slot	id	status	key	part1	part2
 311	90dc4ca271101aa7dc04450ba1d7c7de	live	17797	Adjacency	neighbor.v
 312	33c86c3eea264ed661b42ef89a04d553	live	17798	Adjacency	neighboring.a
 313	63c74cf2321fd536d741693db2c4636b	live	17799	Adjacency	adjacency.n
-314	e873685dcd759084c709d38e3aabaa2d	live	17802	Adjacency	adjoining.a
+314	b2354ae3d0e61fab47de432cb280b8a3	live	17802	Adjacency	adjoining.a
 315	5312961a704f458e5e269e684d9c7724	live	17803	Adjacency	adjoin.v
 316	b1eb9aba7ab410bd2754e4004b13ee94	live	17804	Adjacency	contiguous.a
 317	8b3792d73bc0617115b0e504139c6644	live	17805	Adjacency	contiguity.n
@@ -1274,7 +1274,7 @@ slot	id	status	key	part1	part2
 1270	4a069808baaa8baec08e6d06ae8bdc91	live	10705	Being_necessary	necessary.a
 1271	521c9254f176f8a7ca8cfe284d54fe4e	live	10706	Being_necessary	requirement.n
 1272	10c47ee00b4bc4bd6ba398be07621fef	live	10708	Being_necessary	necessity.n
-1273	410cf3d2dc258a68f422874b453dc0d0	live	10709	Being_necessary	needed.a
+1273	c2693978d2fda817b0db8053e32db141	live	10709	Being_necessary	needed.a
 1274	d4c920ea395fe9b1168fc51764e735ec	live	10710	Being_necessary	indispensable.a
 1275	e5404aef8c7294fa47dd3eba5b481031	live	10712	Being_necessary	required.a
 1276	792fc61dd4563d1e590609b1d7729143	live	12205	Being_necessary	essential.a
@@ -1780,37 +1780,37 @@ slot	id	status	key	part1	part2
 1776	831a6072c68f08ab74f709496add7070	live	11968	Breathing	pant.v
 1777	3cb72fd6999ca24a2bb6a037bc6b6ffc	live	11969	Breathing	respire.v
 1778	68473d36614b3fd0b42965c4df15ed5b	live	11970	Breathing	suspire.v
-1779	ca753efa760115ea8752f79af11b6d37	live	4456	Bringing	lug.v
-1780	3a975bafd1d5067df690de2dacab9541	live	4457	Bringing	haul.v
-1781	08b91d27a53bcc95e14839cb61dcddea	live	4458	Bringing	wheel.v
-1782	737392552e5418c24c94400927abad27	live	4459	Bringing	cart.v
-1783	94038ae1252cd99f1bc9b576a655b5fb	live	4470	Bringing	carry.v
-1784	3973f4314db0c13d1cd422cc5bf69dbb	live	4471	Bringing	hump.v
-1785	02a07f005d6748ef2f6f9fadb241702c	live	8730	Bringing	fly.v
-1786	e9644be26e0fdac208ed48f3eb54d308	live	8731	Bringing	transport.v
-1787	0ecdbc4220c0f83e26bbb40dfd8c38dd	live	8732	Bringing	take.v
-1788	61069d2951fddaa588dfd7f99ebed325	live	8733	Bringing	drive.v
-1789	b05497b1b24aff8d174a0c6cc03e7412	live	8734	Bringing	schlep.v
-1790	6bb7be8168a04274f35d00eb8384767b	live	8735	Bringing	truck.v
-1791	b4e59a91bd92dd0ebf333d460166bd22	live	8738	Bringing	tote.v
-1792	68eaa668966734c3794903797471ea86	live	8739	Bringing	trundle.v
-1793	50eb8757ecf03b8f2e81a4d6e74f8265	live	8755	Bringing	ferry.v
-1794	77de8f7645e1fb0b999cccf5d4304380	live	8865	Bringing	jet.v
-1795	325997ceaaf79f7f0a41ad99664493f3	live	8867	Bringing	paddle.v
-1796	2246abad5ea05e82c6380553fdcabfe8	live	8870	Bringing	motor.v
-1797	15f24c60014a99b5f6223886ded12111	live	8881	Bringing	row.v
-1798	be778b85de49a61fb10df3391d5e7ea8	live	9175	Bringing	convey.v
-1799	52a1a37c6939941fc3147d81d9dc1628	live	9176	Bringing	bike.v
-1800	178a851fcf5abe02519083709ffdf93c	live	9920	Bringing	bring.v
-1801	6a866ec52166c7eeb795811b9b649113	live	12026	Bringing	bear.v
-1802	e7754adbf86755d202d8847d6c8006db	live	12027	Bringing	fetch.v
-1803	b2075a23010bd505f7a2ab4d9b2af7e5	live	12028	Bringing	get.v
-1804	cb4be5a6fae7ef6dd705892db6d71125	live	13641	Bringing	portable.a
-1805	af355cf1a7f24fddda993952260a34e7	live	13901	Bringing	mobile.a
-1806	60491c9e77af588818155160bbd79a02	live	14508	Bringing	transport.n
-1807	7a3f4d9c606d56d53fb89bceb9f2f681	live	15649	Bringing	bus.v
-1808	6352ec619d37570ccb1f8a30cac7b5d0	live	15650	Bringing	shuttle.v
-1809	56645dae4eb69920917b480fbbce9a07	live	17367	Bringing	airlift.v
+1779	3b5600d9a30ecf42d660caa75796bbab	live	4456	Bringing	lug.v
+1780	6dc95dff140f5e62b49560d4eceb513d	live	4457	Bringing	haul.v
+1781	41b6c56a29bb120de4a61b5fe31d3367	live	4458	Bringing	wheel.v
+1782	2adeb0879e5a7786e5a013d33dd1be0c	live	4459	Bringing	cart.v
+1783	4fa0fdbddc287ff58f53fad67998c27f	live	4470	Bringing	carry.v
+1784	8895507daa046f89f604889624fd8cd3	live	4471	Bringing	hump.v
+1785	f2e6591904e6333f53edb052956d25e0	live	8730	Bringing	fly.v
+1786	e06059c9f6492d3422eb3431e6a7a2fb	live	8731	Bringing	transport.v
+1787	cdf6d61dcedbf460868405c69839331b	live	8732	Bringing	take.v
+1788	4a2237248548f534391b4669cd4bbddc	live	8733	Bringing	drive.v
+1789	edaa743a91a7fb8c00a029571ac1c745	live	8734	Bringing	schlep.v
+1790	c6f3c1e793b079d1c5a86305ea395892	live	8735	Bringing	truck.v
+1791	f6b1da0798d00ab6ee256456fa5056a1	live	8738	Bringing	tote.v
+1792	fa54077a0d1c45ef8f70a6ec8cc1faab	live	8739	Bringing	trundle.v
+1793	44257069e59eb84c824735bbbefeec52	live	8755	Bringing	ferry.v
+1794	ff22ac9252ad566da6d7ae68389779ff	live	8865	Bringing	jet.v
+1795	12cc6536b84830cfa8b1ca06e41d388b	live	8867	Bringing	paddle.v
+1796	3ec91bdb0c50f404f5891b86d4fec1a8	live	8870	Bringing	motor.v
+1797	fff428283e126a66cdf441d35ae4faa6	live	8881	Bringing	row.v
+1798	a91d3e74f11e3d95321645d70811413a	live	9175	Bringing	convey.v
+1799	2e5aa91c048c439811163bccf467317c	live	9176	Bringing	bike.v
+1800	40e86f396d609645919a2d24a3150a39	live	9920	Bringing	bring.v
+1801	de278f70d38cc5b5a33a762aee5e2103	live	12026	Bringing	bear.v
+1802	489945b8d1c88b78cad8cf0722e5a3d9	live	12027	Bringing	fetch.v
+1803	dc2467855a308ced83f0d5d0a06fb584	live	12028	Bringing	get.v
+1804	1ecd21bef5589c6d2ff2dc6c39e46cda	live	13641	Bringing	portable.a
+1805	afb56399c698aa12c114fc7fc5b62c75	live	13901	Bringing	mobile.a
+1806	a894e77c4a064bf630d12d6a227c3d72	live	14508	Bringing	transport.n
+1807	51103d9037bba56d4a3475eb811c49a3	live	15649	Bringing	bus.v
+1808	55b56191f7c355af384dbe00844491f9	live	15650	Bringing	shuttle.v
+1809	cbde79d7b5dc7b38e5d7ccfafd76dc8a	live	17367	Bringing	airlift.v
 1810	304cee4f65165ea87d9abe745d5b9591	live	4731	Building	assemble.v
 1811	fd62389955ed0d5fd19f82524edeaca7	live	4737	Building	glue.v
 1812	7291eed5e5d0f013bcf831c1cd9b1db4	live	4738	Building	build.v
@@ -1883,7 +1883,7 @@ slot	id	status	key	part1	part2
 1879	d88dbda56a3fcad5c53f5361a7a75ea1	live	3215	Building_subparts	workroom.n
 1880	8fd1fdfd8a8683f74181e6cc045f9dc1	live	3216	Building_subparts	workshop.n
 1881	5404e7caa98c0f566e13d2c26d8d6c5d	live	3217	Building_subparts	banquet room.n
-1882	c3117a07225da5743ebdb251d3a5afc0	live	3218	Building_subparts	dining room.n
+1882	517d9a65eee061153d35ab5c2ee64671	live	3218	Building_subparts	dining room.n
 1883	28ab569c92d570c31fc3c67ab5817636	live	3219	Building_subparts	dressing room.n
 1884	e3926bb3364b66770f0992cdac3e855c	live	3220	Building_subparts	family room.n
 1885	c95c604440c811ceb1760cdcc6777da3	live	3221	Building_subparts	guest room.n
@@ -2241,7 +2241,7 @@ slot	id	status	key	part1	part2
 2237	a65ef66f7cf977ad30a49261f7646d6a	live	2349	Catastrophe	catastrophic.a
 2238	a936d2a17a28f470a8b6fa3911414b5c	live	13350	Catastrophe	incident.n
 2239	447e4b6ff430140f40c2230f23f04c3e	live	13725	Catastrophe	casualty.n
-2240	ba0d687c0b1779d9bbe5cd951ae0363f	live	14524	Catastrophe	crisis.n
+2240	6b4589c6b605edce21c60b7cdf39cd8e	live	14524	Catastrophe	crisis.n
 2241	5c3fe274f05df7c55f80eafa8133e1b6	live	14621	Catastrophe	debacle.n
 2242	7c13138a9993b116a3f414dc951910ce	live	15008	Catastrophe	disastrous.a
 2243	613c2fe8d583df7ca7cd40b668273a91	live	17621	Catastrophe	accident.n
@@ -3225,7 +3225,7 @@ slot	id	status	key	part1	part2
 3221	c4ca84369b6a6f84dbce44479cef2e55	live	3635	Clothing	crinoline.n
 3222	9dd9009ae9f97fbc42fbf4bc994f0092	live	3636	Clothing	muff.n
 3223	e5084fd6ad37a0c09454d10e6528455f	live	3637	Clothing	cowl.n
-3224	6837f6dff54fe4d66513ab25152cae0a	live	3638	Clothing	tutu.n
+3224	cb8fa7072a465ea361c0465e1f9998cf	live	3638	Clothing	tutu.n
 3225	f7fada348c30ab6964df717498b01c31	live	3639	Clothing	t-shirt.n
 3226	bd0efb26a06705fd2a2d9b83e066a687	live	3640	Clothing	polo-neck.n
 3227	c17b92bc5e06f413b779e977d9d32560	live	3641	Clothing	g-string.n
@@ -3406,7 +3406,7 @@ slot	id	status	key	part1	part2
 3402	653572e69a391eec83132e64ffaea53f	live	18390	Color	indigo.a
 3403	01d2afe7dad3d79476db514bc4625b09	live	18391	Color	puce.a
 3404	5f30f9b093193eaeec5dcb9e38029bea	live	15760	Color_qualities	warm.a
-3405	614d92c5c07b439a09a9840376c3f56b	live	15762	Color_qualities	vivid.a
+3405	4a1baadcd2762ab18ee98f0f340ab76e	live	15762	Color_qualities	vivid.a
 3406	295383fad2b15bf92380f3a8c2ce54fa	live	15765	Color_qualities	dull.a
 3407	44f435bf79d1c85411f0ba1dc84e6d11	live	15813	Color_qualities	pale.a
 3408	ecaf8135ebe31b135012aca8bd3746db	live	15830	Color_qualities	light.a
@@ -3644,7 +3644,7 @@ slot	id	status	key	part1	part2
 3640	632f54b423e149e9ae795009c7d7f832	live	593	Communication_noise	hoot.v
 3641	82fb1e21a2169a064f2df796afa1dd46	live	594	Communication_noise	howl.v
 3642	f6b803b73b89a92ecfeacaeab2394a15	live	595	Communication_noise	moan.v
-3643	a8a958b0d567cd825e7d6b968c1f526e	live	596	Communication_noise	murmur.v
+3643	639b79cd5fba55baa023bada386b79a3	live	596	Communication_noise	murmur.v
 3644	f25a11302b058a2fbb733414cee5b3e4	live	597	Communication_noise	purr.v
 3645	423a426b404022d5b595301711b24ed2	live	598	Communication_noise	rap.v
 3646	d418a3e2f8d894a69e92649586adb2b8	live	599	Communication_noise	rasp.v
@@ -3726,30 +3726,30 @@ slot	id	status	key	part1	part2
 3722	673ce3dd1571af083f759b7fd0872b39	live	13388	Compatibility	conflicting.a
 3723	2d5cfa6e30491e06a4f06e4cd8658a16	live	18379	Compatibility	at variance.a
 3724	efa7d946a9c07b5cae757825f13fbd58	live	18380	Compatibility	fly in the face of.v
-3725	68382e340aa69a692658078d65b3fe93	live	4467	Competition	competition.n
-3726	a1b33b1f1bf75e935633c5590b59e391	live	4468	Competition	competitive.a
-3727	737057b98c80d582a254029d449e58f0	live	4469	Competition	competitor.n
-3728	d7d15472676f0488149f9c56a0040f2a	live	9837	Competition	compete.v
-3729	9061815718b4a2f58382ab9f2d14d66d	live	9838	Competition	play.v
-3730	de0491818c6217cd4349fb2fb35978ac	live	12501	Competition	challenge.n
-3731	1ed5b810ad0c0ed256adc3f35fa9b7f8	live	13799	Competition	rivalry.n
-3732	1b2e9cbe402d2e28cc8d27f8af3f15aa	live	13800	Competition	rival.n
-3733	51eeebc7779cb0b7d6ddfa88cbdbef05	live	16012	Competition	player.n
-3734	f1833cd095a60cb7401f243954ce5e8c	live	12721	Complaining	whinge.v
-3735	80d4abc3988680b52145148b8b91c250	live	12722	Complaining	whine.v
-3736	7235a2211cbb3df2f641e429aa8a47b6	live	12723	Complaining	complain.v
-3737	0806228ea80e255bc3e4dfc6163ceb59	live	12724	Complaining	moan.v
-3738	c6978ad756f122a6bfe179a2341afbdf	live	12725	Complaining	bitch.v
-3739	98aec914369d310caa8d0ea59d60ea06	live	12726	Complaining	complaint.n
-3740	77d51af4e546bb7b19daee99614851e8	live	12727	Complaining	grouse.v
-3741	250953ccc16edf7dff8bc73ec3b0fed6	live	12728	Complaining	lament.v
-3742	771971228df56479c8b82ae6a42480ab	live	12729	Complaining	gripe.v
-3743	30c4862a241bf3dd1a82a9185861228d	live	12730	Complaining	belly-ache.v
-3744	46dc83992c6cd51d89d074ecf2c9e802	live	12763	Complaining	gripe.n
-3745	5687b5fc370d923b441f1bfbac145418	live	12847	Complaining	piss and moan.v
-3746	da99d724bece615affe3ecb4f8dc5cd9	live	13002	Complaining	grumble.v
-3747	5a34cb3c1881ac769fe08425adad18b4	live	13176	Complaining	grousing.n
-3748	cd69652e7219edb285909719ecfaa4aa	live	17324	Complaining	grievance.n
+3725	b66a7f4b9f2a651b9361ed661d3cca77	live	4467	Competition	competition.n
+3726	668099889ef863588489f350bae0a595	live	4468	Competition	competitive.a
+3727	5b2464fb06464afa8b6e83717b04ca0c	live	4469	Competition	competitor.n
+3728	69e363837e408fe3ea1ad76adf16b12f	live	9837	Competition	compete.v
+3729	6fd1e753961d65204797cf9b42fd0b54	live	9838	Competition	play.v
+3730	1a0ca7b971175f192ec62c80d076e575	live	12501	Competition	challenge.n
+3731	92bbee3fba72d3a8af7f4b8b9d925a32	live	13799	Competition	rivalry.n
+3732	7bbcf0b5bf8d23469f5fc74dddb3b7b7	live	13800	Competition	rival.n
+3733	c5aa252c90fd48934ab8c1576c6e619d	live	16012	Competition	player.n
+3734	080f9c5da5f15feba2bb7683689daba7	live	12721	Complaining	whinge.v
+3735	e0f0ef62631de07c13d538c3381ede9c	live	12722	Complaining	whine.v
+3736	45fbde424bff6dd0e9ee67ff5c708293	live	12723	Complaining	complain.v
+3737	0b94509cd1f18313343830b086c2c13e	live	12724	Complaining	moan.v
+3738	34a9b61ccb88cfb9c39d95884f556c1a	live	12725	Complaining	bitch.v
+3739	78a59374bd6e6d31784729ca4277f5f6	live	12726	Complaining	complaint.n
+3740	0f8b9c98de626f8e5c981f226f9511db	live	12727	Complaining	grouse.v
+3741	b79f79be9bcc98ec612e27aad361d976	live	12728	Complaining	lament.v
+3742	fda081db5cc5a0d77012cd45d7a46fbe	live	12729	Complaining	gripe.v
+3743	9b977f99d5c991d9f9955192fa94cd3c	live	12730	Complaining	belly-ache.v
+3744	18daf2eea153cdf58be091602ff1884f	live	12763	Complaining	gripe.n
+3745	3b3e457ebe7288e74d636be67263c64b	live	12847	Complaining	piss and moan.v
+3746	2948d2cc9ec916e7e989929bd06eca7d	live	13002	Complaining	grumble.v
+3747	c4a4cb43cd018228d3335a89c1099fb9	live	13176	Complaining	grousing.n
+3748	fc1bc5aca84b7c9b24cd15c65698f5e7	live	17324	Complaining	grievance.n
 3749	d0660353373551cc2a69d4336be3ca70	live	12363	Completeness	complete.a
 3750	b389219430b9e5242c19d803c0a5055f	live	12364	Completeness	incomplete.a
 3751	daa7d9563af6470a388f37b16f453a67	live	12365	Completeness	completeness.n
@@ -3810,7 +3810,7 @@ slot	id	status	key	part1	part2
 3806	9d6e7e75791ed9a9c1c5202c73274d51	live	17015	Condition_symptom_relation	cause.v
 3807	35b64cb3f0d56c9dfd2954bc14bb301f	live	17060	Condition_symptom_relation	cause.n
 3808	ffc0660bf2334bc6b66035e4254968f7	live	17061	Condition_symptom_relation	associate.v
-3809	60862b2ac627f21a1105e9262dd6bd47	live	17062	Condition_symptom_relation	mimic.v
+3809	daf3b0118c94a95f9fccd0dd1342ce72	live	17062	Condition_symptom_relation	mimic.v
 3810	d6edc4387376a17705f12673006c282b	live	17063	Condition_symptom_relation	show.v
 3811	5c380888013b9579fd85e2bc45a9ab7a	live	17064	Condition_symptom_relation	see.v
 3812	240987a5b14275554912a05258d3eb13	live	17065	Condition_symptom_relation	produce.v
@@ -4051,10 +4051,10 @@ slot	id	status	key	part1	part2
 4047	f7d43045dadfdad4b1d8db9656919fc3	live	11155	Containers	drawer.n
 4048	622b6615f74b753e79c0a38b19141bc8	live	18374	Containers	goldfish bowl.a
 4049	4506109002777d4bb6bb26b99a499436	live	18679	Containers	tub.n
-4050	0f9072b2a8e2d1d3143287640acd940f	live	7296	Containing	contain.v
-4051	83f34de801f5ee411525ef2845936ab8	live	7297	Containing	hold.v
-4052	7b99ed2cdb235ff7deb3ddbf608db5c2	live	13175	Containing	house.v
-4053	74222267c89cbe5b2b466afb9a243d75	live	17644	Containing	store.v
+4050	b38f62103017e016d61224dc2e829276	live	7296	Containing	contain.v
+4051	664287282728374d7030a6c3c95cb147	live	7297	Containing	hold.v
+4052	b7150b77cc8c36f120e7a5b4509e5540	live	13175	Containing	house.v
+4053	647dda54b9019cda925ed1956cce8c5b	live	17644	Containing	store.v
 4054	dd2020e710c8fa4aac0c5579e6fa1ff7	live	9947	Contingency	depend.v
 4055	f0dd6a147ee13bcb0c372ab8191f05f1	live	9948	Contingency	function.n
 4056	0d6695ac156a80aa17d6f85f659fa9f4	live	9949	Contingency	dependent.a
@@ -4601,13 +4601,13 @@ slot	id	status	key	part1	part2
 4597	1addc863e8c1b9d5771cdcab42211097	live	17528	Detaching	decouple.v
 4598	b67c13ceae1659ac97841f4216be81e6	live	17529	Detaching	unhinge.v
 4599	29041906c70adec607bf5776c20c99c9	live	17672	Detaching	undo.v
-4600	9b77ff72fd303610277fea41325195a3	live	5682	Detaining	custody.n
-4601	9c221fd9348a041bf2fa2df3e4c95555	live	5684	Detaining	hold.v
-4602	6291f24113e89402a224db593778ac69	live	5685	Detaining	detain.v
-4603	a657ad8c9968e64b1c5ae8014a7ea3e9	live	5686	Detaining	intern.v
-4604	7b0db72d28dd1dff66bf003b94972e68	live	5687	Detaining	internment.n
-4605	9ac651f0fee73e8b09b2285939dd437d	live	9360	Detaining	at large.a
-4606	4670dd477b1f6f953eb51541e5b9fdc9	live	18388	Detaining	under arrest.a
+4600	304d5a4e3aa8405a7aaaa2482ddcf0e4	live	5682	Detaining	custody.n
+4601	499a46dcebd7845732e924de8489e801	live	5684	Detaining	hold.v
+4602	274facfa7f0a1f961e794a9db93d7de5	live	5685	Detaining	detain.v
+4603	05aa4bf1e113f5f673a522aff7be04de	live	5686	Detaining	intern.v
+4604	00608d2c0b767bf75abc27ca7a2798c1	live	5687	Detaining	internment.n
+4605	708d0b5613f85644b9d611821904c660	live	9360	Detaining	at large.a
+4606	0489a1f90289f6634c5d4d1a9472a9a0	live	18388	Detaining	under arrest.a
 4607	2d4316ad5335f2f65762e6419f118e1a	live	16398	Detonate_explosive	detonate.v
 4608	4749aea4e42cfec05462439100a6551b	live	16399	Detonate_explosive	explode.v
 4609	d84070b00e2d20d1101d41659bb5e2be	live	16614	Detonate_explosive	detonation.n
@@ -5006,7 +5006,7 @@ slot	id	status	key	part1	part2
 5002	0ca07d6217815ccd5c64b1b8bb5115b5	live	10147	Education_teaching	learn.v
 5003	150a30824490b589dbaeffdbd2e9ff7c	live	10148	Education_teaching	school.v
 5004	6b9418fc02078df7ab3e0c37c93463b0	live	10149	Education_teaching	train.v
-5005	8924c17a7f15d21bb277550b8b769a84	live	10312	Education_teaching	training.n
+5005	fb8eb18fd606df5596f624311ba88b16	live	10312	Education_teaching	training.n
 5006	00dfef9d159c0915fc47d43ef7ae17ff	live	10556	Education_teaching	instruct.v
 5007	25bb3c05cf80ad15aa6b68729cc67f99	live	10740	Education_teaching	teach.v
 5008	8527322e244bef5772d67ce5a4340e32	live	10830	Education_teaching	instruction.n
@@ -5180,7 +5180,7 @@ slot	id	status	key	part1	part2
 5176	1d85ab718fa4146d0458ae979fd98b90	live	8785	Emotion_directed	bored.a
 5177	08052a1984188bb157a451d592efc23e	live	8786	Emotion_directed	chagrin.n
 5178	d567c02dc6a32569027be3cce213f5d5	live	8787	Emotion_directed	concerned.a
-5179	f21bc6823c1428cf45b69bb1bb4770b1	live	8788	Emotion_directed	contented.a
+5179	012836f6acae05a93402808c12f736f2	live	8788	Emotion_directed	contented.a
 5180	6b2a5a5471a0b7028e36ac4adee5d144	live	8789	Emotion_directed	covetous.a
 5181	cebf80fa10145bd6a8f0f21213829e09	live	8790	Emotion_directed	dejected.a
 5182	1dde98e116a3f4df2aeeb9561007b8da	live	8791	Emotion_directed	delight.n
@@ -5531,10 +5531,10 @@ slot	id	status	key	part1	part2
 5527	f3a63334e94b1dbcd540e89097e04b3e	live	3892	Execution	firing squad.n
 5528	bbd0acaea8e61bafcb862ebd1a51f32e	live	9094	Execution	hang.v
 5529	e872dc4cbad216c6a923e77002447480	live	9095	Execution	guillotine.v
-5530	2b8378032d1acc87c4bf6c7147f65bdf	live	9096	Execution	guillotining.n
+5530	679d57dd0ea16950360e2992c4368c51	live	9096	Execution	guillotining.n
 5531	63bada6435d6bef9e7087ab6d90de65e	live	11174	Execution	put to death.v
 5532	e3934798a3f9e10c8c384d0759c3f63d	live	14701	Execution	hanging.n
-5533	153d793f6cf1b78df325aab5ad27e357	live	15702	Exemplar	prototype.n
+5533	f382bcd7e9080cead567483516653db5	live	15702	Exemplar	prototype.n
 5534	774afca7acf6a7cdaa877527717dba48	live	15703	Exemplar	model.n
 5535	ef406ea0e3e69d04b3d0462daf3d724c	live	15704	Exemplar	image.n
 5536	e162a70dfd98f4813180e2228d3b9840	live	15709	Exemplar	exemplar.n
@@ -5542,7 +5542,7 @@ slot	id	status	key	part1	part2
 5538	e7d613a21d2b83216522071a7f41cb45	live	17055	Exemplar	paragon.n
 5539	dab6c61eab709d49c61bee1a631bc6d3	live	17056	Exemplar	true.a
 5540	678ee39aedf5cff88ed2a9eeb6bcf63b	live	15706	Exemplariness	exemplary.a
-5541	1fc90f2c527335d649d1fd134a28922a	live	15707	Exemplariness	prototypical.a
+5541	026346707eb2c7ff988ed5f21136a1b8	live	15707	Exemplariness	prototypical.a
 5542	87dd089f1baa67f87d3b8f4e72b2e136	live	16911	Exemplariness	standard.a
 5543	d0a608addaa0c9acdd0939f2c55371b2	live	16030	Exercising	exercise.v
 5544	55e9d47097d02ee7aa1c69a3970f3645	live	16031	Exercising	work out.v
@@ -5928,9 +5928,9 @@ slot	id	status	key	part1	part2
 5924	b7e4808bd88a402c6b3d17b1261dc183	live	17040	Expertise	strong.a
 5925	1abcbfeaeef0a99ddaea50e8178a5df4	live	17106	Expertise	layman.n
 5926	cf61419d1b028076f1a9ab3b3b18b348	live	17107	Expertise	lay.a
-5927	bcadbeccf3ebf71383873f5bebc06a2f	live	12139	Explaining_the_facts	explain.v
-5928	98ed7eae3c614584b4e9316397ea548a	live	12140	Explaining_the_facts	account.v
-5929	1d8971dd0e8821bd1dd24564a88e4eff	live	12141	Explaining_the_facts	explanation.n
+5927	179903be013c73e88a080bccc1079bd0	live	12139	Explaining_the_facts	explain.v
+5928	dcca601b13a34b9a6685e7be9b06b6ae	live	12140	Explaining_the_facts	account.v
+5929	175cb73e2f9a7f7ad8979e82660b65c7	live	12141	Explaining_the_facts	explanation.n
 5930	79ca5783b594661bea9512ab110d12a8	live	16403	Explosion	explosion.n
 5931	91941f712171b4df4ae79ad9ea168a9c	live	16404	Explosion	explode.v
 5932	a3af0a145f7b68b4531953f6ae51cb43	live	16405	Explosion	detonate.v
@@ -6126,27 +6126,27 @@ slot	id	status	key	part1	part2
 6122	932c0c52b80979590b88e43babc2c892	live	15779	Filling	yoke.v
 6123	dcf9f69f9d13a09a6c3cf261803d5b78	live	15822	Filling	dress.v
 6124	bedf5f9e18193cfa651500037dcc7b6c	live	17364	Filling	accessorize.v
-6125	b988e2564ce5d2daafee4890192d4dfd	live	3882	Fining	fine.v
-6126	44db2d1abda8cf9e3951c52101f3f3c8	live	3883	Fining	fine.n
-6127	cd7cbdc1dbb4316ea041806acf2eb63c	live	3884	Fining	reparations.n
-6128	b7f9ea0c689ec4d941b80990a38906b3	live	3885	Fining	damages.n
-6129	f3cbdd5512777fc960928f1560cf6b4c	live	10562	Fining	amerce.v
-6130	e21fb146f531df1459b326a552764195	live	10961	Fining	ticket.n
-6131	0dcee25547f0612f06c5e1406a19a682	live	10962	Fining	ticket.v
-6132	34b04843c5e00e177b549e92e1fab406	live	15778	Fining	mulct.v
-6133	ea69d3bdeb650a00cef7332fddbbee0b	live	9827	Finish_competition	win.n
-6134	da0391b00c9cb25709a12cebb1d9d5f0	live	9829	Finish_competition	victorious.a
-6135	8388c38ce6dc71cc4dcae1df0f36105e	live	9830	Finish_competition	winner.n
-6136	63687f3421e868668934dafd012317c5	live	9831	Finish_competition	victory.n
-6137	6527035b94ed513350ded546934e1b76	live	9832	Finish_competition	lose.v
-6138	deeaaf14dfe7c9f132863508603503b5	live	9833	Finish_competition	loss.n
-6139	dfa3d7ba74f342f85b8f059912406ef0	live	9834	Finish_competition	tie.v
-6140	0b49d480b821be7fbf69dd96c6be9b85	live	9835	Finish_competition	tie.n
-6141	b3446a4b4b3f0e161e2231ff3ede5e6a	live	9836	Finish_competition	victor.n
-6142	3c2c124e970a41f7d4ddfd7b6abc4a7e	live	11186	Finish_competition	draw.n
-6143	f5ef8f0d71a8e156d1172ba4f0dd8bab	live	15237	Finish_competition	show.v
-6144	8c22a7c9df951eb8795b61e9c58011bf	live	15569	Finish_competition	win.v
-6145	2c473e06c82e1991c0b4b2aee0e11cce	live	16495	Finish_competition	fold.v
+6125	76a0808ab8158f806f2a251a27277680	live	3882	Fining	fine.v
+6126	873b797db3047dc4adf77253bb7b1052	live	3883	Fining	fine.n
+6127	e10f4b4c414243f2441dc2792c6f9c59	live	3884	Fining	reparations.n
+6128	e2b8f9ad43827127d9d5cb2c041969af	live	3885	Fining	damages.n
+6129	2362e52a0ace13e83427efc0335cb61e	live	10562	Fining	amerce.v
+6130	18cd1a39de24a4ae95e801ea89353fb4	live	10961	Fining	ticket.n
+6131	c2abcb8bdd4f59595e697ea53cc6f997	live	10962	Fining	ticket.v
+6132	c7374cad65321424e07707da24360a33	live	15778	Fining	mulct.v
+6133	9735e17c211a3587464c05191f09e358	live	9827	Finish_competition	win.n
+6134	5b0ec9b8dea968c0e93965bb48adb72b	live	9829	Finish_competition	victorious.a
+6135	87ae9d1e0a68ce32367b3f9a5cce4be9	live	9830	Finish_competition	winner.n
+6136	530dc199028d3b17b42392ba654b17aa	live	9831	Finish_competition	victory.n
+6137	0e5a466bead56af088f747997bced548	live	9832	Finish_competition	lose.v
+6138	6bca58360c82a735b50fdcade808424b	live	9833	Finish_competition	loss.n
+6139	5d2889a869471a5293731e845808c53d	live	9834	Finish_competition	tie.v
+6140	e4660fb1c494864c043e82034e847c26	live	9835	Finish_competition	tie.n
+6141	9c7a18ce4a0d3d0e4b9aafca576b3f2b	live	9836	Finish_competition	victor.n
+6142	850d47c69b5f2a16c8504e3f9773f520	live	11186	Finish_competition	draw.n
+6143	2771a00d45d65e4b6b160bfa83077030	live	15237	Finish_competition	show.v
+6144	a9cb4845a0bf0bf497be1274c972f8b4	live	15569	Finish_competition	win.v
+6145	2dcba746c7e3ecfcbf709b73af39ff4c	live	16495	Finish_competition	fold.v
 6146	3df13dde8f8803421589c266b96b39b6	live	15593	Finish_game	win.v
 6147	f46844e86221de986fdf97a2605e7253	live	15594	Finish_game	lose.v
 6148	f9b85539866f61323f7ce6478c3bd6a5	live	17505	Fire_break	fire break.n
@@ -6241,7 +6241,7 @@ slot	id	status	key	part1	part2
 6237	676ae9459da0a0430753d5631713adba	live	17524	Fluidic_motion	spray.v
 6238	55c8a6e83b669fce592968632e9d6a06	live	5058	Food	fruit.n
 6239	5aac9abaa4e546dddf27c69ac8ba4147	live	5059	Food	apple.n
-6240	d370c0b70e1ef3b322ddd250d20c9919	live	5060	Food	banana.n
+6240	ed7d1b921fd50a17225b66b3e6b70fcc	live	5060	Food	banana.n
 6241	ff682b86641ce896d431cb9c667fbcf5	live	5061	Food	vegetable.n
 6242	ea3851f373bc6a0a519cc21f582c95d9	live	5062	Food	carrot.n
 6243	f68d2864fd0191a7402846b75c79207a	live	5063	Food	potato.n
@@ -6885,7 +6885,7 @@ slot	id	status	key	part1	part2
 6881	829f6234ffa1b6d4efc47cd3f49180da	live	13312	Idiosyncrasy	weird.a
 6882	d1e87ae584597388ef27fb0e3e72b799	live	13313	Idiosyncrasy	uncanny.a
 6883	46e56c980031498563d5dec4bf0e1e0e	live	13030	Imitating	imitate.v
-6884	56a0730fb025812a3faef3db71c87925	live	13032	Imitating	mimic.v
+6884	eb723dc02c9adf5739647cddad2fc046	live	13032	Imitating	mimic.v
 6885	048e8c9cda09faf120bf997e789a370b	live	13033	Imitating	ape.v
 6886	1ba11803fd93a420d39af3ec33cfabde	live	13034	Imitating	copy.v
 6887	0ceb2760813a32846ab00b6c2ce95ac5	live	4512	Immobilization	tie up.v
@@ -7506,7 +7506,7 @@ slot	id	status	key	part1	part2
 7502	73177bd939d60d7edcd835b46844fc84	live	2470	Kidnapping	abducted.a
 7503	d52c736e772d41d9b4fd631f6e5de85d	live	8630	Killing	kill.v
 7504	6ee092e5b83bcb8b00e83e62bbf18d8a	live	8631	Killing	annihilate.v
-7505	15069cb01e6924f881374a62002d3ab0	live	8632	Killing	assassinate.v
+7505	a2648417f1c46644c30a7c4acbd8b4b4	live	8632	Killing	assassinate.v
 7506	cd03a0335a8050f7bc1027654c15280b	live	8633	Killing	behead.v
 7507	dedb230ee205018edd1e8c72295a711e	live	8634	Killing	eliminate.v
 7508	b84d4b72db6fb690cb52a79376c4a0f6	live	8635	Killing	exterminate.v
@@ -7551,18 +7551,18 @@ slot	id	status	key	part1	part2
 7547	2a72b671a19420404fd4f24d3baa4d86	live	9065	Killing	genocide.n
 7548	b2852269fd8eda6b035ed4b5ab78c36e	live	9066	Killing	butcher.v
 7549	3c0cf7bb13672bffc6013540d1e658ce	live	9067	Killing	beheading.n
-7550	cb0e9681a38812da7255a03922d160d6	live	9068	Killing	assassination.n
+7550	63d822297dd6e0b75cf3fc20d23bb22c	live	9068	Killing	assassination.n
 7551	afaea7353d428dcc2e3f2bf975addfb9	live	9069	Killing	butchery.n
 7552	7d8d6f10907ddfd83d4d5863aa22f348	live	9070	Killing	carnage.n
 7553	fcd80f2edbf6ce76bc4507e2fb56488d	live	9073	Killing	suffocation.n
-7554	4fc8c76764c86269937d132215bc35f4	live	9074	Killing	assassin.n
+7554	1af2548c9f1ee477a7f5094e07e25acd	live	9074	Killing	assassin.n
 7555	a0059eb8146db0c5e834e720c3ffc2c4	live	9075	Killing	blood-bath.n
 7556	06297330a0614f44d12ba79d1df4b2cd	live	9076	Killing	decapitation.n
 7557	4bdd3f498bce86f4535c9faf67f7227c	live	9077	Killing	extermination.n
 7558	8f58c36a37833b9b950688aac1932753	live	9080	Killing	fratricide.n
 7559	392e27855cb59f311f71920a123ec739	live	9086	Killing	garrotte.v
-7560	d455260cc325c8721e77441c862f9768	live	9087	Killing	murderer.n
-7561	cd3799a5257f835245c8f82ee26a816b	live	9088	Killing	slaughterer.n
+7560	946cd456fbf3200f395b701dae173d30	live	9087	Killing	murderer.n
+7561	a3821887a93a697a83b5005b40a04877	live	9088	Killing	slaughterer.n
 7562	06310f887da1191c59e016c93d2a588e	live	9090	Killing	slayer.n
 7563	8257a47ec9a9a407f691e9fa60696a2c	live	9091	Killing	immolation.n
 7564	411387fbfa0517a209069d1c6c5472cb	live	9092	Killing	patricide.n
@@ -8063,7 +8063,7 @@ slot	id	status	key	part1	part2
 8059	4e77508cde304d7ea420dced15eb320e	live	3268	Location_of_light	glittering.a
 8060	06c0f0db5da821d4ee835b8bf2998b93	live	3269	Location_of_light	flash.n
 8061	fb48803c7fc09e51bf738be907140d9b	live	3270	Location_of_light	glistening.a
-8062	4da3102430c7007afc19a8127ca9e65f	live	3271	Location_of_light	shining.a
+8062	5915a63e7e7ffcb1d1189f6d5e511289	live	3271	Location_of_light	shining.a
 8063	a4e0d7dcd7480ad0a0d349c85dff974a	live	3272	Location_of_light	shine.n
 8064	0a9489fff1b971e007b03ebe27a10ad9	live	3273	Location_of_light	sheen.n
 8065	df3e4e5a87dc80382c806ce89dc6d3da	live	3274	Location_of_light	lustre.n
@@ -8236,7 +8236,7 @@ slot	id	status	key	part1	part2
 8232	0a6b7d3d116f3fad6684911620533a47	live	1503	Make_noise	trumpet.v
 8233	6d29bace6177d243ba723eb210c21146	live	1505	Make_noise	tweet.v
 8234	9150fe269e125edbfe488a3c88b57e6a	live	1507	Make_noise	twitter.v
-8235	809860e3053961d4be948c8321da8ec7	live	1508	Make_noise	ululate.v
+8235	599975dc51d65efe95437f8c9899dfa3	live	1508	Make_noise	ululate.v
 8236	653820f56e762735c27e42fc0097f5de	live	1510	Make_noise	wail.v
 8237	69ce6dfb991cdff6d4f44ede2bb5c3c6	live	1512	Make_noise	whimper.v
 8238	bccf03ff5e2357c0df87641d0fe51a59	live	1514	Make_noise	whine.v
@@ -8495,7 +8495,7 @@ slot	id	status	key	part1	part2
 8491	31351ec93a876775c23044116d771dd2	live	4359	Medical_conditions	candida.n
 8492	fc719cb8932db10242745fcf063ea1c8	live	4360	Medical_conditions	cataract.n
 8493	6693ce35b647fb916ee61acf5096528b	live	4361	Medical_conditions	cholangitis.n
-8494	2857929765cfc5517363a8128b817f58	live	4362	Medical_conditions	cholecystitis.n
+8494	e62407967119c859ba0a9b688160fe27	live	4362	Medical_conditions	cholecystitis.n
 8495	abf2442fbbe7f300c010ede557387f1c	live	4363	Medical_conditions	cholera.n
 8496	bc13b4979327b1d4b966baeb5a16a8c6	live	4364	Medical_conditions	cirrhosis.n
 8497	d0dc6e04ce7ca6670ee211ab819d8885	live	4365	Medical_conditions	cold.n
@@ -8504,7 +8504,7 @@ slot	id	status	key	part1	part2
 8500	f01e749334db3b4d7cdc166d6f4e3900	live	4368	Medical_conditions	cryptosporidiosis.n
 8501	736304c55fad7d0b84979c7a2f336c48	live	4369	Medical_conditions	diarrhea.n
 8502	43e485ef20fbb35defb0db4f6e6b3f3a	live	4370	Medical_conditions	depression.n
-8503	17e06f6c35bdc80b1834321d7562bb87	live	4371	Medical_conditions	dermatitis.n
+8503	1e5406d88cbf0dfd2545ccfb23c98c93	live	4371	Medical_conditions	dermatitis.n
 8504	a42b7615f99c8c18eb567699d1da1f5b	live	4372	Medical_conditions	diabetes.n
 8505	6e7590ee63f96bbeec2ec0db4136222d	live	4373	Medical_conditions	diphtheria.n
 8506	d5fd1e417e3f3bd3fda7fd303159ebb4	live	4374	Medical_conditions	diverticulosis.n
@@ -8512,7 +8512,7 @@ slot	id	status	key	part1	part2
 8508	771157c2f48a280a5399e7f0e26279ec	live	4376	Medical_conditions	eczema.n
 8509	a37d55b36643501a921d7af7fccdce4a	live	4377	Medical_conditions	flu.n
 8510	ded0c2cc894ddf974c7b19dca6c951b1	live	4378	Medical_conditions	influenza.n
-8511	e888c3c00216c134463ddbc7e38f919a	live	4379	Medical_conditions	hepatitis.n
+8511	ca2f74aff852bb9b476fa79418391100	live	4379	Medical_conditions	hepatitis.n
 8512	8edc788b3814cc8744862c30e9a637ff	live	4380	Medical_conditions	hernia.n
 8513	ed082f8393ef80569192e475d4f95f7f	live	4381	Medical_conditions	hypertension.n
 8514	8f28dd87475f4d90286b562e7e1ecfb8	live	4382	Medical_conditions	hypoglycaemia.n
@@ -8621,7 +8621,7 @@ slot	id	status	key	part1	part2
 8617	0a3d1e33b1230b7eb79e6c1b49e9ec71	live	4585	Medical_professionals	psychoanalyst.n
 8618	1b234791944d87bacfeec52b0c514925	live	4586	Medical_professionals	radiologist.n
 8619	279cb399f07c07cca7b42fa10c2a7a15	live	4587	Medical_professionals	rheumatologist.n
-8620	95cff17ba2480c28e8c2212c3fac057f	live	4589	Medical_professionals	family practitioner.n
+8620	a52ec16352704ce96b8015cb49416c33	live	4589	Medical_professionals	family practitioner.n
 8621	dc260a7fe9906468eefc37970a3cf7b7	live	4626	Medical_professionals	therapist.n
 8622	21d8e629c74c82bd3e6132c97b61e964	live	4641	Medical_professionals	ophthalmologist.n
 8623	bf816104a19a4f5eb529172b303c0d43	live	4668	Medical_professionals	radiation oncologist.n
@@ -8683,7 +8683,7 @@ slot	id	status	key	part1	part2
 8679	3458c5740378b1549f6a999f1a207ee1	live	10591	Memorization	memorization.n
 8680	8b1251275f4095b957aef7002dce9337	live	10593	Memorization	learn.v
 8681	220a7af6367c14f2d3282af06780ad52	live	10730	Memorization	commit to memory.v
-8682	a5811c14bfaecd871621d1d742fee0d6	live	2668	Memory	remember.v
+8682	4521500d49016a1c6af6a3961bc948fa	live	2668	Memory	remember.v
 8683	05802fa7aaeaa59de657b5568a31d891	live	2670	Memory	memory.n
 8684	943e3d23c41aa41a38fafb414bd47e71	live	2671	Memory	recall.v
 8685	e005e3e4a56e16b0d43d1fe3651558aa	live	2672	Memory	recollect.v
@@ -8768,12 +8768,12 @@ slot	id	status	key	part1	part2
 8764	a013ae3cc2dae5aa6918e98f85875166	live	14907	Mental_stimulus_exp_focus	wrapped up (in).a
 8765	444125b2b7e220b15358096de951644e	live	16021	Mental_stimulus_exp_focus	curious.a
 8766	eb456b577d8272549c42ecc2fcf578e4	live	16033	Mental_stimulus_exp_focus	suspicious.a
-8767	be5ea85487c88be3aae1f4f02ee7ad0a	live	14920	Mental_stimulus_stimulus_focus	interesting.a
-8768	f9ae1d08935d52f718e88ae2eb7a7be8	live	14921	Mental_stimulus_stimulus_focus	fascinating.a
-8769	d594b19fe1d07d622204b0ad18bf804c	live	14922	Mental_stimulus_stimulus_focus	enthralling.a
-8770	7d024c864ab75df925b4431d96c3d3f0	live	14923	Mental_stimulus_stimulus_focus	captivating.a
-8771	8f9e1dc434a509b94094b795e5d638cc	live	14924	Mental_stimulus_stimulus_focus	absorbing.a
-8772	f100b0c3243b776ddf5d14768412e2ea	live	14925	Mental_stimulus_stimulus_focus	engrossing.a
+8767	9f5e489fac054368d79c2dc8a136e96e	live	14920	Mental_stimulus_stimulus_focus	interesting.a
+8768	1a5503e647e165060e73b7c57f3e4f17	live	14921	Mental_stimulus_stimulus_focus	fascinating.a
+8769	8455ae6cc43b8076b8ddd7b27832c37c	live	14922	Mental_stimulus_stimulus_focus	enthralling.a
+8770	6a07ecfcb924567e03ba6edf5165c4e1	live	14923	Mental_stimulus_stimulus_focus	captivating.a
+8771	ccc4357fd71e6a33ad17748aec92e834	live	14924	Mental_stimulus_stimulus_focus	absorbing.a
+8772	fa5bfc6c8ead9ede819d30df867fa12c	live	14925	Mental_stimulus_stimulus_focus	engrossing.a
 8773	37aede2d1a7e1de081b8f9e977cb0e88	live	15150	Mention	mention.v
 8774	a7f4ebe02ab99a12daddfd619b4852e1	live	17826	Mention	touch (on).v
 8775	819ddb33edc684b1c4b0751fe1d677da	live	12282	Military	military.n
@@ -8792,9 +8792,9 @@ slot	id	status	key	part1	part2
 8788	81af2e1f26d90d5e310af4643b974cae	live	16734	Military_operation	operation.n
 8789	384b03517d576627761b663c94c8c267	live	16735	Military_operation	campaign.n
 8790	269dea963d9e6a4d33329c20f5c83809	live	16763	Military_operation	operate.v
-8791	609adcbdf9469e52e7f6f6291d617ac4	live	16125	Mining	mine.v
-8792	d8efe8c391d950e2f808610e756e5328	live	16126	Mining	miner.n
-8793	9b2d0eb99eace965970cec7b6e859e4e	live	16127	Mining	extract.v
+8791	7cc56bf292a0f8a95ec61084d5d62a14	live	16125	Mining	mine.v
+8792	1d2f7d707d1f1108c9ae36dcd35e8ffb	live	16126	Mining	miner.n
+8793	bd1b3374fdfdb5038b11717b83103a3d	live	16127	Mining	extract.v
 8794	4d29ba35ee6211c2b82103391e143da1	live	10493	Misdeed	misdeed.n
 8795	ab619010ed1592c14db4d73622515ce1	live	10497	Misdeed	sin.v
 8796	890fdaec8ad0a1db0ebbf0e3657c81e2	live	10499	Misdeed	sin.n
@@ -9378,7 +9378,7 @@ slot	id	status	key	part1	part2
 9374	d4933bfa072eeec2144abda2cf133960	live	5831	Part_inner_outer	inner.a
 9375	6ff4739812e136b51fe34e9337c041da	live	5832	Part_inner_outer	outside.n
 9376	a418566919d68771d61502c1f5ab8fb0	live	5833	Part_inner_outer	skin.n
-9377	9d8f60e39f9befe860a6de4325086dbe	live	5834	Part_inner_outer	lining.n
+9377	24ce674bf6abb635479bbe67cc63783e	live	5834	Part_inner_outer	lining.n
 9378	eb3d2aef5215e406d4f0d7fb4b3486fd	live	5881	Part_inner_outer	perimeter.n
 9379	a73cd71c7757e78e9975aff7f6d92363	live	8848	Part_inner_outer	center.n
 9380	81eae6f3217bdf27510e27eb47560b1b	live	8849	Part_inner_outer	exterior.n
@@ -9498,8 +9498,8 @@ slot	id	status	key	part1	part2
 9494	b2dcc68f176b9e07a2dae89609d86148	live	13356	Participation	party.n
 9495	693e63a9ce42eaa495bc8d06eecd18ca	live	17193	Participation	engage.v
 9496	14acba4e9b26dc6575ad30d82f853336	live	17266	Participation	concerned.a
-9497	e402ce32a202777e48d382ea01a7f449	live	10190	Partitive	of.prep
-9498	fe875e051aa02147a3a34d9f9dc35e85	live	10191	Partitive	out of.prep
+9497	837b43380be9dab4cb06b8463b57769d	live	10190	Partitive	of.prep
+9498	cbc4efade13a77fb9e47757a8bcbe955	live	10191	Partitive	out of.prep
 9499	43ce8ed74eeac8061f013e363824a527	live	15571	Passing	pass.v
 9500	5e3fbd68a7ac436e9e1d16a84b4bcf18	live	13024	Passing_off	pass off.v
 9501	5285d95026c836e54156707eaf59b397	live	13025	Passing_off	palm off.v
@@ -10862,17 +10862,17 @@ slot	id	status	key	part1	part2
 10858	19ee0b3dc970a7bd49a640a5b6da7193	live	10321	Remainder	left.a
 10859	366708d5323f405054a0da370815b1e1	live	10322	Remainder	remain.v
 10860	cafcc9af23f04676a4407c3038c2bb4e	live	13980	Remainder	remains.n
-10861	598325b8548d8371f26f9f8d3c9d9fcd	live	11021	Remembering_experience	remember.v
-10862	1b3869ca086f99eeb39a8d7b347d6eba	live	11070	Remembering_experience	forget.v
-10863	ad941d3c2651d01adfa53b5e6033f313	live	11071	Remembering_experience	memory.n
-10864	e4eca663a85eaf1514f42946a1c09cd3	live	12440	Remembering_experience	recall.v
-10865	9ac4235e2425a33cd54baa506a651564	live	12441	Remembering_experience	look back.v
-10866	c27d7eb4e6f77ce7fb1d9c79d140fb00	live	12476	Remembering_experience	reminisce.v
-10867	726656af813753d1a396b4428d191e49	live	11022	Remembering_information	remember.v
-10868	e0eebae0562f437b5f23d48a0b501221	live	11024	Remembering_information	forget.v
-10869	6a6c5698e09ef8458364f5a02927d9b9	live	11072	Remembering_information	draw blank.v
-10870	68eaf306aa734cabd3e470859f8bfa71	live	11023	Remembering_to_do	remember.v
-10871	20ca106d3a23e58cfa862fd0f522b82b	live	11025	Remembering_to_do	forget.v
+10861	243a63e3d6532f7cf28dc8a7621d39f6	live	11021	Remembering_experience	remember.v
+10862	85cf972bfca3e5a6b2d8f75e0c994516	live	11070	Remembering_experience	forget.v
+10863	0efa9bf01a753154d5a60ccab51807ae	live	11071	Remembering_experience	memory.n
+10864	a9adf48f95ef604970f51e5b3ef7808c	live	12440	Remembering_experience	recall.v
+10865	494a0c972c335efb24778bc41ffc718a	live	12441	Remembering_experience	look back.v
+10866	6962b32973b30a5f3db3fea06c9d9448	live	12476	Remembering_experience	reminisce.v
+10867	828b0ba04dd03feace34d3eb2ba25089	live	11022	Remembering_information	remember.v
+10868	2e6aead216082629e9fb382d72539154	live	11024	Remembering_information	forget.v
+10869	f7897589ba08ae008c387a261c0e6272	live	11072	Remembering_information	draw blank.v
+10870	2fd2c05acf24a951cda6d08191570a95	live	11023	Remembering_to_do	remember.v
+10871	8766b0532de7136073132c85ccd85eef	live	11025	Remembering_to_do	forget.v
 10872	745c6df2b68c06b242cf077d23f6f267	live	1118	Removing	clear.v
 10873	d2725500cd8e84c9768d7e0ffc6d3608	live	1119	Removing	confiscate.v
 10874	3258461bfbe3219f79d31fb9bcdc4fb8	live	1121	Removing	discard.v
@@ -10986,7 +10986,7 @@ slot	id	status	key	part1	part2
 10982	015cda8f7c48ea0b4c8826d77548abd4	live	648	Request	implore.v
 10983	c6bcdb8bb61be71fa4fdaa2b60569377	live	649	Request	order.n
 10984	0e19269e8a1a6c86d4cc68f6470cd52f	live	650	Request	order.v
-10985	92974e14ec53a7e40d73314ee3ecbfe6	live	651	Request	petition.n
+10985	7639ec5781ecbbf85531910d9676d03a	live	651	Request	petition.n
 10986	69cde7e06ce1a3ca4f348ac6239ed455	live	652	Request	plea.n
 10987	07906dc9f687ca18d41c75426c85dce0	live	653	Request	plead.v
 10988	fd6738e106c68aca25012dca2da09fb8	live	654	Request	request.n
@@ -11103,10 +11103,10 @@ slot	id	status	key	part1	part2
 11099	2c73ee6b376f24a03d6d659c8ee9982c	live	11986	Resurrection	rise.v
 11100	4559a3492fc004330683cfd81c0b77b0	live	11987	Resurrection	resurrection.n
 11101	1475a1940671bfe81f7ee59fc8d480c5	live	11989	Resurrection	return.v
-11102	c35b3f618bad8345cc49442594460371	live	17338	Retaining	retain.v
-11103	2fd5462f68ee43f8361a5d31adf2894f	live	17339	Retaining	keep.v
-11104	363c2f9ed4e1084b6c043640a092bea4	live	17340	Retaining	hold on to.v
-11105	edba735ca7a047d1da24c7e2825445c5	live	17341	Retaining	hang on to.v
+11102	ac66c8454c9bb664369915c49fb3f1b5	live	17338	Retaining	retain.v
+11103	6d0ba2d1b580ffa0377ab4e1c4f713b7	live	17339	Retaining	keep.v
+11104	4d2c9caceed86e023a2b7a66a3cc2001	live	17340	Retaining	hold on to.v
+11105	9bf7df3993ff3e0f8a53d99cb24f2141	live	17341	Retaining	hang on to.v
 11106	19051f8e7e73ad5b81c98c054a77ba7d	live	10665	Reveal_secret	reveal.v
 11107	9f2b42a2b732952d62b77a35f7f8198d	live	10666	Reveal_secret	disclose.v
 11108	d7f2b49565a25cde7c6cb8238ecf75bc	live	10667	Reveal_secret	revelation.n
@@ -11358,7 +11358,7 @@ slot	id	status	key	part1	part2
 11354	3de7b8c686995c888daf4d11f70f5bdb	live	17279	Scrutiny	examination.n
 11355	410813eb0bdab3c0951a49d89889f5de	live	17301	Scrutiny	reconnaissance.n
 11356	1b3abbfab70223bd97a7e2aba7ee1732	live	10641	Secrecy_status	clandestine.a
-11357	b8585a46250ad7809e18221c61f06f4f	live	10642	Secrecy_status	surreptitious.a
+11357	0398b477b847bbbfd0e27e51db4b1f85	live	10642	Secrecy_status	surreptitious.a
 11358	305d3bee8fa917dcb6bfc831932d8363	live	10643	Secrecy_status	covert.a
 11359	b28d0fa4e92d9064f990ceb2d712c731	live	10644	Secrecy_status	secret.a
 11360	2b90c885d5ee54739a3e0a31f1a62529	live	10656	Secrecy_status	secretly.adv
@@ -11607,13 +11607,13 @@ slot	id	status	key	part1	part2
 11603	8750143def8aa763cf2dfe2d91c4e57a	live	56	Separating	bisect.v
 11604	ff2a9dc81a41cb0a9085b77f788deef9	live	57	Separating	divide.v
 11605	8f57e50c34071d459d029a1a9693c0ea	live	58	Separating	part.v
-11606	40bae056ff71b28711b9956b3b9ee15d	live	59	Separating	partition.v
+11606	43ebc8fb3c3f6acd510fc0d1cf15dbaa	live	59	Separating	partition.v
 11607	9a7cdb79c7714f6c4d99248d148df736	live	60	Separating	section.v
 11608	2b5ed0bb8615e274032544e84e839ad0	live	61	Separating	segment.v
 11609	000e3264273aad4f505cc261e5b96c60	live	62	Separating	segregate.v
 11610	8e32834a3577f0318158e4ecc55ac6b8	live	63	Separating	separate.v
 11611	62a0cbed1571f916c1222b1faa3c6122	live	64	Separating	split.v
-11612	a254836d8a12877308ee09359809a05f	live	13640	Separating	partition.n
+11612	ca8117b04f2d87136e39e517a4128dd4	live	13640	Separating	partition.n
 11613	41938679e5b23c0b9daf66f447fb41da	live	15617	Separating	sever.v
 11614	366a1b6c9e94e1f02f0f348f5ac34a4e	live	15359	Sequence	sequence.n
 11615	1349f3163b3338e0b68994313a222e46	live	15360	Sequence	succession.n
@@ -11622,7 +11622,7 @@ slot	id	status	key	part1	part2
 11618	23c372f913ae6acabf12334314159b32	live	15363	Sequence	successive.a
 11619	234c112807a6b09fc680188a9483c949	live	15364	Sequence	order.n
 11620	a16cfc46ba04e893c368deae16a2e03f	live	16285	Serving_in_capacity	serve.v
-11621	5e2b49dc732db074cb2cc6fac18fa60b	live	12647	Set_of_interrelated_entities	system.n
+11621	49e07380774ec1f311743fed9a398550	live	12647	Set_of_interrelated_entities	system.n
 11622	02ec2b4b62e1b388aa756339cda058e2	live	17459	Setting_back_burn	backfire.n
 11623	c211f81c46d4c1d6f5f37fba2329f4e8	live	5181	Setting_fire	light.v
 11624	732390b263c95f7f2a6e174f9700cf17	live	5182	Setting_fire	ignite.v
@@ -11764,7 +11764,7 @@ slot	id	status	key	part1	part2
 11760	50192d1afbfd333d718fbab3daecfebe	live	15714	Similarity	image.n
 11761	bb72d11825932439b619307ea3298673	live	15715	Similarity	very image.n
 11762	e11133649e5f22a1ba37a803e305599a	live	15741	Similarity	take after.v
-11763	77c146f1d10e69516ee8ac9174ba7aa1	live	16901	Similarity	mimic.v
+11763	2b44193a1d1a103d62f2f744ac28b370	live	16901	Similarity	mimic.v
 11764	44fe6b85f3acd65e84f7727d4d73b5dd	live	11230	Simple_name	term.n
 11765	c877d84999353eeeeab6610e211f2283	live	11231	Simple_name	word.n
 11766	c00dcbacbc1356be31bb3c440a971521	live	11232	Simple_naming	call.v
@@ -11945,7 +11945,7 @@ slot	id	status	key	part1	part2
 11941	999253c09fcd0c8ea93ee76eabbc5cf2	live	6624	Social_interaction_evaluation	impertinent.a
 11942	2a2604d013be47665ddb0a6bfa073b84	live	6625	Social_interaction_evaluation	tactful.a
 11943	a787bdf0bd64e46f3f96a212f74811ca	live	6626	Social_interaction_evaluation	diplomatic.a
-11944	e44c105003f0e52753746c9542534752	live	6627	Social_interaction_evaluation	barbaric.a
+11944	1eeb9302ab8a6b1429b19809ec65024d	live	6627	Social_interaction_evaluation	barbaric.a
 11945	4fc50fd45fce04ff344cd3c01abbaf9e	live	6628	Social_interaction_evaluation	spiteful.a
 11946	6590a1c28806a838154847678a550a06	live	6651	Social_interaction_evaluation	pleasant.a
 11947	7a578cbd8467607ef346e3dc9911eaed	live	6733	Social_interaction_evaluation	horrible.a
@@ -12250,7 +12250,7 @@ slot	id	status	key	part1	part2
 12246	94bad130b0e3e90d43cd15f060ced540	live	6336	Stimulus_focus	thrilling.a
 12247	c51e67b1c8089dcfa00fa8fb8f0756af	live	6338	Stimulus_focus	stupefying.a
 12248	49e0cc18a10ecdefcc4bf87ece4312fa	live	6339	Stimulus_focus	stirring.a
-12249	61528f1c543b231a5f8f08fc27486604	live	6340	Stimulus_focus	stinging.a
+12249	70aa6fe8149be956d669650f8d069d36	live	6340	Stimulus_focus	stinging.a
 12250	f1758482383a2fe783a7683c6bb004b7	live	6341	Stimulus_focus	stimulating.a
 12251	b1bf46157d01985cb799dc3c1916879b	live	6342	Stimulus_focus	startling.a
 12252	b3c6226c711e4ffe68e837c3bdbd6b06	live	6343	Stimulus_focus	soothing.a
@@ -12310,7 +12310,7 @@ slot	id	status	key	part1	part2
 12306	bdfcda7268762cfbb57868e2d2d5c0d9	live	6408	Stimulus_focus	disturbing.a
 12307	db76f54e7417d0f02fced911825fb76d	live	6409	Stimulus_focus	embarrassing.a
 12308	0b4754ece0b7c9969c1aa620edf228ae	live	6410	Stimulus_focus	enchanting.a
-12309	9e7883994578157a21e2ecfc02a5e215	live	6419	Stimulus_focus	entertaining.a
+12309	b10addd6bb7d29c1791077b5956266a4	live	6419	Stimulus_focus	entertaining.a
 12310	873ca95062a3d1b8372fa106825d5705	live	6431	Stimulus_focus	enthralling.a
 12311	8826895f5da4da3c29707119e37b5ff1	live	6433	Stimulus_focus	exciting.a
 12312	c64c7031a8783f19bc552543ba5099b3	live	6434	Stimulus_focus	exhilarating.a
@@ -12648,11 +12648,11 @@ slot	id	status	key	part1	part2
 12644	53b62d4e40bc6326daa6be5d0a275ff1	live	17891	Surrounding	rim.v
 12645	99c3ea9b81cd7bb9034c2d5687a3eadb	live	17892	Surrounding	edge.v
 12646	8d8ad19a57536b56eb273ea03d17668e	live	18016	Surrounding	straddling.a
-12647	95f07913283b4abe36e8a332f5ab8008	live	13571	Surviving	survive.v
-12648	75a73680289a19bab340f7f286cc6e84	live	13572	Surviving	ride out.v
-12649	7cffeaf3ffeadf8e3c566f169a8b60a3	live	13594	Surviving	weather.v
-12650	51e0e2a1f5579af545781c8b0b37b025	live	14587	Surviving	survival.n
-12651	d582609e61b9c0296272cfcf0e8b0a69	live	16351	Surviving	live [through].v
+12647	f1b21fbfb5d319f47dddcaf7ae3d84bc	live	13571	Surviving	survive.v
+12648	d503cd296b07df97b7268fb68db57cfa	live	13572	Surviving	ride out.v
+12649	53a1776ec149e6b2699a5cb492c0012d	live	13594	Surviving	weather.v
+12650	c0520f465356fc908a9d6b6d7982b5b0	live	14587	Surviving	survival.n
+12651	684017b2ff23d67d932ff15f40b70af4	live	16351	Surviving	live [through].v
 12652	7227f135bed7bd95fe048a505862ee9a	live	7975	Suspicion	suspect.v
 12653	26752c198f02c1803b20003149ac43ab	live	8014	Suspicion	under suspicion (of).prep
 12654	6e4627736d0d8c1ca99bb04f4e68f646	live	8071	Suspicion	suspect.n
@@ -12956,7 +12956,7 @@ slot	id	status	key	part1	part2
 12952	80f59f1968ecb91a65c2dc41a38a9bd4	live	1969	Theft	thief.n
 12953	528679194e1bba8c85535bc719044912	live	1970	Theft	pickpocket.n
 12954	f505cf8b36dadde1b8b3cdfc6f9060c8	live	1972	Theft	cutpurse.n
-12955	05f7ecda98bfd7910f238d8c0ac3dd66	live	1973	Theft	pilferer.n
+12955	f05505dce93d835ae4c4da66ea78dbd2	live	1973	Theft	pilferer.n
 12956	edf8dc69ea6d8cc8a79f857ee64708ec	live	1974	Theft	snatcher.n
 12957	bfe60b3e7608608c491b6ed890ed8a32	live	1975	Theft	theft.n
 12958	1f34f9c77aa4529b83e0e1e65f6eefc6	live	1976	Theft	thieving.n

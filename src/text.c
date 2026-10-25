@@ -6,8 +6,8 @@
  * ExtendNumLet or quote inside a segment between letters or digits (WB6, WB7, WB11, WB12, WB13a, WB13b: "e.g.",
  * "3.14", "word_1", "can't"); here each such codepoint is its own segment, so microsoft.com is [microsoft] [.] [com]
  * and the codepoint is the one entity it is wherever it stands. The sentence and grapheme rules are the standard's.
- * At every tier, a block of constituents repeated adjacently is one entity, factored from the content alone
- * (lp_factor): banana is b [an]x2 a.
+ * UAX boundaries select the constituents. Repetition never introduces another
+ * boundary inside a word, sentence or paragraph. Repeated IDs stay in order.
  *
  * This is the one decomposition of text in Laplace. The engine records what it composes; the database composes without
  * recording, to compute the ID and coordinate of a text in place. */
@@ -30,7 +30,6 @@ struct lp_text {
     lp_compose_fn compose; void *sink;
     lp_text_segment_fn segment; void *segment_sink;
     lp_ref *parts; size_t pcap, pn; lp_id parts_of; int want_parts;   /* the constituents of the last composition made */
-    lp_ref *f; size_t fcap;                                                /* room for a composition's factored children */
 };
 
 static void *grow(void *p, size_t n){ p = realloc(p, n ? n : 1); if (!p) abort(); return p; }   /* an lp_text lasts as long as its thread: never working memory */
@@ -49,7 +48,7 @@ void lp_text_free(lp_text *c){
     if (!c) return;
     for (int i = 0; i < 3; i++) if (c->brk[i]) ubrk_close(c->brk[i]);
     free(c->sb.b); free(c->wb.b); free(c->gb.b); free(c->cps.v); free(c->g.v); free(c->segs.v); free(c->sents.v); free(c->paras.v);
-    free(c->cpy); free(c->parts); free(c->f); free(c);
+    free(c->cpy); free(c->parts); free(c);
 }
 static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out){
     UErrorCode e = U_ZERO_ERROR; ubrk_setUText(bi, ut, &e); out->n = 0;
@@ -84,11 +83,6 @@ static void separators(const uint8_t *src, size_t n, Bounds *wb){
 }
 static lp_ref made(lp_text *c, const lp_ref *ch, size_t n){
     if (n == 1) return ch[0];
-    if (n >= 4) {                                                             /* repeated blocks become entities of their own */
-        if (n > c->fcap) { c->fcap = n * 2; c->f = grow(c->f, c->fcap * sizeof(lp_ref)); }
-        size_t m = lp_factor(ch, n, c->f, c->compose, c->sink);
-        if (m != n) { ch = c->f; n = m; if (n == 1) return ch[0]; }
-    }
     /* UAX boundaries determine composition, while tier measures the resulting
      * DAG height. Collapsing a one-child level must not leave an empty tier. */
     uint8_t tier=lp_tier_above(ch,n);

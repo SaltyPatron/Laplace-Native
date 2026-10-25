@@ -169,7 +169,7 @@ slot	id	status	key	part1
 165	aa12d396891463cb55e19545cae90523	live	1860	Breaking_off
 166	e8e3c5c381c9b45de9187c5639841f2f	live	2665	Breaking_out_captive
 167	e38e4cf6b30ff8ea407989821950c99d	live	272	Breathing
-168	501eafd2b520ad59efff98af9ad1fcf7	live	240	Bringing
+168	8fc7064d56ffb565ff5915f277e8b6fa	live	240	Bringing
 169	da6fbb00a9a280c1b3832702c7c66025	live	259	Building
 170	f5647801747b1603856bdc716590884d	live	188	Building_subparts
 171	e8ca37bf3d3849e2ab64e458d8fe2ce2	live	173	Buildings
@@ -291,8 +291,8 @@ slot	id	status	key	part1
 287	f2f2d3e3df7172f44ca2a8ca65ed799c	live	2243	Commutative_process
 288	866d1bbc955d575b703636c5e7d970d9	live	2244	Commutative_statement
 289	7191f9dac94c3b153d38ad52dc523f30	live	360	Compatibility
-290	1cc1a36de896ca9eac9cdb3f58560077	live	241	Competition
-291	42b41efa2a23ce900d1812f14fdbce38	live	1621	Complaining
+290	ef734a3d9750faecc3f55fe88976fcdc	live	241	Competition
+291	352fb0a967367c6f762ae2f4593cfd40	live	1621	Complaining
 292	d50b2832cdc76c6d59a7a8eca7a43f17	live	1534	Completeness
 293	cff7a2c046dde23547042a616528aca3	live	117	Compliance
 294	6d2e84e5143ed9fd1269f7c7a0dcee8f	live	2150	Concessive
@@ -310,7 +310,7 @@ slot	id	status	key	part1
 306	6a2fb74538f1974232152256b0308028	live	2303	Container_focused_placing
 307	15852fbb5adf37df4da4ea23e4e3248b	live	2301	Container_focused_removing
 308	ae4448b624991f41aef29d8bb84e8b15	live	78	Containers
-309	cb08e382e0c15748a473625824f8fabc	live	397	Containing
+309	2f61ba7e3dbeb814a23e2f32f472b261	live	397	Containing
 310	cec92b3a5c390195819c4ee088f457b5	live	1174	Containment_scenario
 311	e5d07bbc7a015ddfffdf563e96fda7b0	live	900	Contingency
 312	317deeea22adbeef58b9c3cbcdc33a8c	live	1594	Continued_state_of_affairs
@@ -363,7 +363,7 @@ slot	id	status	key	part1
 359	65b30615fb7242f864297354f789092f	live	1801	Destiny
 360	ccf6d43016715f947e39d76a066132a6	live	417	Destroying
 361	a68efeac88b999a839e68464ce77fb0b	live	1390	Detaching
-362	2d2d47e74ffd663153386bd4836ea9a6	live	313	Detaining
+362	282f68ae92fecc19b99c599238d378ff	live	313	Detaining
 363	930751b2c3847afc9135f06c27256f9a	live	2575	Detonate_explosive
 364	8c9a2694eb530ad8c46b10c6c2cdaa32	live	24	Differentiation
 365	22458090106fd6375ac39a5ebc71ecf4	live	375	Difficulty
@@ -468,7 +468,7 @@ slot	id	status	key	part1
 464	f106a37373bfb43b6d4e6a4335d20f1d	live	47	Experiencer_obj
 465	a4cbbe1407d930fc5ec428d9faf24387	live	2683	Experimentation
 466	81eb48e09f5260143fb79ef6de0ca3a9	live	136	Expertise
-467	83ae6204b16b541f1f794dde27dfde9c	live	1462	Explaining_the_facts
+467	02b0aa25c0db1c52b494c1e195202c15	live	1462	Explaining_the_facts
 468	d68cdd8e1a737952de914aeb47e37ce1	live	2577	Explosion
 469	3e16e7022729b068f676cb096e6b44af	live	1568	Exporting
 470	baa6b51de697ce561145810936451b00	live	1622	Expressing_publicly
@@ -488,8 +488,8 @@ slot	id	status	key	part1
 484	8c77784019e4e28b464425631d748fa7	live	1345	Fields
 485	c71348eb0f5b65090505adf1f522e69f	live	563	Fighting_activity
 486	cc8dde981507038115996438fa36bf51	live	59	Filling
-487	11b16347d3034bf2767904124b7cd5a7	live	223	Fining
-488	e8ac3fe4323f2b81e178f2377662daa9	live	798	Finish_competition
+487	baf53043a8ff4b47c98ed5b92486687e	live	223	Fining
+488	aca276d40112fbeae027930403647d69	live	798	Finish_competition
 489	7709855ea7612c6b9fda7352422f0342	live	2193	Finish_game
 490	d489685efc1df5aa759f4330aaa5dc7f	live	2837	Fire_break
 491	fe052cc9332e2ecafb8db879ff620436	live	2824	Fire_burning
@@ -735,11 +735,11 @@ slot	id	status	key	part1
 731	dffd58eeefc02f2260bb260ddab3452d	live	1710	Mental_activity
 732	84bfcbefe8b1a4dc314d297830e2a0b7	live	29	Mental_property
 733	0624a1d00056b9d2890ce9ac3fcf2b89	live	2044	Mental_stimulus_exp_focus
-734	0f664d24e54a2e93c91af433bc91c62e	live	2046	Mental_stimulus_stimulus_focus
+734	8b72159ab28bf1a932b0264b5279c5cd	live	2046	Mental_stimulus_stimulus_focus
 735	ae83e046219a8a55ae8afc8e0332f4b1	live	2080	Mention
 736	22fd874063c93c2bcfc2380951492945	live	1514	Military
 737	3960a39dd1fcbfd342c879a823c6a13c	live	2676	Military_operation
-738	8f5fac91596a2406b8efbbb45cca9ff3	live	2285	Mining
+738	a2a46e8210e15c977f0206b6f6a2c572	live	2285	Mining
 739	fbf4a8ce7f299a7ec0ad2a6b7ec547c1	live	1100	Misdeed
 740	fed2af263147de9a36298c0bf0bf3243	live	1761	Money
 741	c470ca612135ce7dd35230b3b7e42a50	live	370	Morality_evaluation
@@ -795,7 +795,7 @@ slot	id	status	key	part1
 791	04e5c6960560c344c5eb47c595e0d19c	live	140	Part_whole
 792	5b3ddf60516c8bc6f5e3289cebff9284	live	349	Partiality
 793	84e81a6020a8b0be763d8c9d883f0f05	live	1144	Participation
-794	0a2f2aa623d69be1040194760faf23a1	live	1010	Partitive
+794	3e30e068e04073a55d649695aa430965	live	1010	Partitive
 795	df62677176e06a430967a20475426050	live	2071	Passing
 796	9c94aa3ccad2e55b763909229b2b288a	live	1671	Passing_off
 797	cda2b4d0d41d1da7f3864c6f7dc8c41b	live	61	Path_shape
@@ -951,9 +951,9 @@ slot	id	status	key	part1
 947	851deb9851f517af16cde7a5d04778ae	live	902	Reliance_on_expectation
 948	aa9b912f394da9c351c15694b94d5e26	live	1019	Religious_belief
 949	e8e2b0631aeb6b15a928513db92d0012	live	1030	Remainder
-950	9249cb54d4b4b3ddbc07e034057dffda	live	1222	Remembering_experience
-951	491a4254c3ef949f5ee7274ad39ca345	live	1220	Remembering_information
-952	ba5b0d04b4aa98a86c1e90b3b15f1200	live	1221	Remembering_to_do
+950	5f8c1e8e7c23346a12d439fa70954b39	live	1222	Remembering_experience
+951	eb1a701dea40221037895899e29eac2e	live	1220	Remembering_information
+952	c59ab17f619634852d66803fbe619bdf	live	1221	Remembering_to_do
 953	2ec646ba749f9342a9deff7740459f66	live	63	Removing
 954	d27e24281567809ca578a51c76aff3cb	live	1816	Removing_scenario
 955	636ff941156dfc144fa5c146752a7f78	live	416	Render_nonfunctional
@@ -984,7 +984,7 @@ slot	id	status	key	part1
 980	957f19b2a1649917e653e924a92c3b4e	live	1000	Rest
 981	1f74533d5bba9680ec4ad3cd99ab8d89	live	1682	Result_of_attempt_scenario
 982	d5ed3b8f74fa2e9b71e388682267049d	live	1413	Resurrection
-983	a8f224428caefa2c13fd419124b76b77	live	2800	Retaining
+983	897dc3a5e63a690a0f946c27283b6b2a	live	2800	Retaining
 984	692e939aee44cf968f92922b1833c0f2	live	1146	Reveal_secret
 985	baebb307990039668d9b975cb4167de4	live	347	Revenge
 986	de5b72ad161b3404ad17ee1a52f5f342	live	2585	Revolution
@@ -1021,7 +1021,7 @@ slot	id	status	key	part1
 1017	213134629543979d6875078a05f5aec3	live	15	Separating
 1018	a7ef039b7e951fd386d4b5e04a8eaedb	live	2135	Sequence
 1019	452148b7292c4d305a505bb4f532c4ba	live	2521	Serving_in_capacity
-1020	c0838ef0e5fea56b14f37626e85435aa	live	1617	Set_of_interrelated_entities
+1020	b0c9a7099d0389229e6146a436d48f06	live	1617	Set_of_interrelated_entities
 1021	be0cc9174a3590ea15ac18aebb969175	live	1823	Set_relation
 1022	d13bee91789ba6a150ed3e165ad75357	live	2829	Setting_back_burn
 1023	01897097efacc664f1c2217b1c80aa3f	live	283	Setting_fire
@@ -1107,7 +1107,7 @@ slot	id	status	key	part1
 1103	f6d1e2acca6a271ac3e00144525e9f3a	live	502	Surrendering
 1104	16a97948b6eb91b861ba436c864a3154	live	1500	Surrendering_possession
 1105	f48111f577afa41cc09050aa89d034e2	live	2911	Surrounding
-1106	f6d161e2fd1d2123fe25245752160b12	live	1792	Surviving
+1106	6d521185b0f34da352286749539a4dd3	live	1792	Surviving
 1107	e1f56a6e0ae256d2aac17efd1151ca92	live	503	Suspicion
 1108	aab9fdc15dcfa76fc188cabcff07f4b5	live	227	Symmetrical_collective_reciprocality
 1109	92bdb0560864114ffc7580c6276c5311	live	1610	System
