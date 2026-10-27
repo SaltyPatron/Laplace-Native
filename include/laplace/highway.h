@@ -12,6 +12,10 @@ typedef uint64_t lp_mask;
 /* Versioned, checksummed, single-file cache. All descriptors, textual lookup
  * keys, identifier bytes and crosswalk edges travel with the mapped records.
  * layout/keys are tab-separated descriptor rows, parsed only at map time.
+ * A key is list, source key, local slot. A cross-list reference is source
+ * namespace, source key, target list, target slot; it names the existing target
+ * record without adding slots or changing content identity. Such rows select
+ * envelope version 3; version 2 files remain readable.
  * identifiers contains nrec entries: a little-endian uint32 part count followed
  * by that many nonempty NUL-terminated UTF-8 text components. One component is
  * an identifier string; multiple components compose an ordered identifier
@@ -34,6 +38,10 @@ LP_API bool lp_highway_contains(const lp_highway *highway, const lp_id *id);
 /* Canonical coordinates and tier for any active identifier or cached closure
  * entity. The immutable mapping owns the record; NULL means absent. */
 LP_API const lp_tier0_record *lp_highway_find(const lp_highway *highway, const lp_id *id);
+/* Resolve a source's key, including release-specific pointer namespaces. The
+ * mapping owns the existing target record; no composition or allocation is
+ * performed. A namespace need not be a mask list. NULL means unresolved. */
+LP_API const lp_tier0_record *lp_highway_resolve(const lp_highway *, const char *source_namespace, const char *key);
 
 /* Field bits in the one 64-bit carrier; zero for an invalid descriptor. */
 LP_API lp_mask lp_mask_field(const lp_bank *bank);

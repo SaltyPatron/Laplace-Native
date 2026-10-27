@@ -67,6 +67,43 @@ static void envelope_check(const lp_highway *h){
     CHECK(roundtrip && lp_highway_key(roundtrip,lp_highway_list(roundtrip,"pos"),"VERB")==1,
         "a standalone file retains its keys and list metadata");
     if (roundtrip) { const lp_edge *out=NULL; CHECK(lp_highway_edges(roundtrip,"pos",0,"pos",&out)==1 && out->to==1,"standalone CSR edge"); }
+    FILE *version=fopen(path,"rb"); char magic[8]={0};
+    CHECK(version && fread(magic,1,sizeof magic,version)==sizeof magic && !memcmp(magic,"LPHW0002",8),
+        "ordinary keys retain the existing envelope version");
+    if (version) fclose(version);
+    const char references[]="pos\tNOUN\t0\npos\tVERB\t1\nrelease-a\tsame-key\tpos\t0\nrelease-b\tsame-key\tpos\t1\n";
+    const char *reference_path="highway-envelope-references.bin";
+    CHECK(lp_highway_write(reference_path,records,2,&edge,1,layout,sizeof layout-1,references,sizeof references-1,ids,sizeof ids),
+        "write source pointer namespaces in the same file");
+    const lp_highway *referenced=lp_highway_map(reference_path);
+    CHECK(referenced && referenced->nrec==2 && referenced->nlists==1,
+        "pointer namespaces add neither records nor mask lists");
+    const lp_tier0_record *a=lp_highway_resolve(referenced,"release-a","same-key"),
+        *b=lp_highway_resolve(referenced,"release-b","same-key");
+    CHECK(a && b && lp_id_eq(&a->id,&records[0].id) && lp_id_eq(&b->id,&records[1].id)
+        && !memcmp(a->m,records[0].m,sizeof a->m) && !memcmp(b->m,records[1].m,sizeof b->m),
+        "one key in two releases resolves to each release's existing canonical record");
+    CHECK(!lp_highway_resolve(referenced,"release-c","same-key")
+        && !lp_highway_resolve(referenced,"release-a","absent")
+        && !lp_highway_resolve(referenced,NULL,"same-key")
+        && !lp_highway_resolve(referenced,"release-a",NULL),"unresolved pointers remain unresolved");
+    CHECK(referenced && lp_highway_key(referenced,lp_highway_list(referenced,"pos"),"VERB")==1,
+        "ordinary list-slot lookup remains valid beside cross-list references");
+    version=fopen(reference_path,"rb");
+    CHECK(version && fread(magic,1,sizeof magic,version)==sizeof magic && !memcmp(magic,"LPHW0003",8),
+        "extended keys select a new envelope that older readers reject");
+    if (version) fclose(version);
+    const char *bad_references[]={"release\tkey\tabsent\t0\n","release\tkey\tpos\t2\n",
+        "release\tkey\tpos\t0\nrelease\tkey\tpos\t1\n","\tkey\tpos\t0\n"};
+    const char *bad_paths[]={"highway-reference-unknown-list.bin","highway-reference-past-list.bin",
+        "highway-reference-conflict.bin","highway-reference-empty-namespace.bin"};
+    for (size_t i=0; i<sizeof bad_paths/sizeof *bad_paths; i++) {
+        CHECK(lp_highway_write(bad_paths[i],records,2,&edge,1,layout,sizeof layout-1,
+            bad_references[i],strlen(bad_references[i]),ids,sizeof ids) && !lp_highway_map(bad_paths[i]),
+            "invalid or conflicting reference %zu is rejected despite a valid checksum",i);
+        remove(bad_paths[i]);
+    }
+    remove(reference_path);
     FILE *in=fopen(path,"rb"), *out=fopen("highway-envelope-corrupt.bin","wb");
     CHECK(in && out,"open corruption probe");
     if (in && out) { int c; size_t i=0; while ((c=fgetc(in))!=EOF) { if (i++==110) c^=1; fputc(c,out); } }
