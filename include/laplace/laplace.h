@@ -105,6 +105,19 @@ LP_API bool lp_id_compose_runs(size_t count, lp_id_run_reader reader, void *cont
 /* The ID of a UTF-8 string taken as one composition of its codepoints. Returns false on invalid UTF-8. */
 LP_API bool lp_id_codepoints_utf8(const char *s, size_t len, lp_id *out);
 
+/* Ordered occurrence pairs at each logical offset lo..hi (inclusive). Runs
+ * remain compressed: a callback receives the number of equal pairs represented
+ * by an overlap, rather than one call per occurrence. All runs must be positive
+ * and their sum fit uint64_t; invalid input is rejected before any callback.
+ * lo must be positive. Empty input or offsets beyond its length emit nothing.
+ * No allocation, geometry codec, vocabulary policy or aggregation is owned here.
+ * false means invalid input or the visitor stopped; prior callbacks remain. */
+typedef struct { lp_id id; uint64_t count; } lp_id_run;
+typedef bool (*lp_id_pair_visit)(void *context, const lp_id *subject,
+    const lp_id *object, uint64_t gap, uint64_t occurrences);
+LP_API bool lp_id_run_pairs(const lp_id_run *runs, size_t n, uint64_t lo,
+    uint64_t hi, lp_id_pair_visit visit, void *context);
+
 /* ---------------------------------------------------------------- UTF-8 */
 /* A codepoint's UTF-8 bytes; surrogates are written in the generalized 3-byte form. Returns the length, 1 to 4. */
 LP_API size_t lp_utf8_put(uint32_t cp, uint8_t out[4]);

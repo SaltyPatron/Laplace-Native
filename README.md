@@ -21,6 +21,7 @@ Engine, PostgreSQL and monorepo adapters call these owners.
 | --- | --- | --- |
 | Unicode floor | `lp_utf8_next`, `lp_id_codepoint`, `lp_tier0_at/find` | UTF-8 input or a scalar/ID; the validated mapped cache |
 | Ordered identity | `lp_id_compose`, `lp_id_compose_runs` | Contiguous children or a run reader; exact expanded count |
+| Ordered occurrence pairs | `lp_id_run_pairs` | Compressed positive runs, offset range, multiplicity callback; no codec or vocabulary policy |
 | Placement and composition | `lp_ref_compose`, `lp_ref_compose_runs`, `lp_coord_mean`, `lp_hilbert4` | Child references, positive repeat counts, admitted tier |
 | Text boundaries | `lp_text_new`, `lp_text_id`, text decomposition | Thread-owned ICU context, input bytes, composition sink |
 | Physicality | `lp_path`, `lp_vertex`, `lp_path_decode/expand`, `lp_ewkb_runs_spare` | Borrowed carrier, output capacity, occurrence annotations |

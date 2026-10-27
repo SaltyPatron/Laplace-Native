@@ -48,7 +48,7 @@ endif()
 configure_file(src/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
 
 set(LP_SOURCES src/platform.c src/mem.c src/map.c src/wire.c src/mapped.c src/path.c
-               src/cpu.c src/flags.c src/utf8.c src/identity.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
+               src/cpu.c src/flags.c src/utf8.c src/identity.c src/sequence.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
                src/tier0.c src/geom4d.c src/s3.c src/pull.c src/highway.c src/trust.c src/dot.c)
 set(LP_ISA_V3_SOURCES src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c src/isa/dot_avx2.c)
 set(LP_ISA_V4_SOURCES src/isa/scan_avx512.c src/isa/row_avx512.c src/isa/dot_avx512.c)
