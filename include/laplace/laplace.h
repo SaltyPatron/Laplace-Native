@@ -364,6 +364,14 @@ LP_API size_t lp_rowsig(const float *A, size_t m, const float *B, size_t n, size
 /* Pins MKL to one reproducible code path (CNR: AVX2, strict), the same bits on every machine; lp_rowsig calls it.
  * Anything else that calls MKL calls it first, before any MKL function. Returns false if MKL refused. Needs MKL. */
 LP_API int lp_mkl_reproducible(void);
+/* Exact k nearest neighbours by squared Euclidean distance, summed in double in dimension order.
+ * Results are ordered by (distance, base-row index), independent of the OpenMP thread count.
+ * Returns 0, -1 for invalid pointers/dimensions/size overflow, or -2 for allocation failure. Needs MKL.
+ * The caller's MKL thread setting is restored before return. */
+LP_API int lp_knn_exact(const float *queries, size_t nq, const float *base, size_t nb, size_t dim, size_t k,
+                       uint32_t *out_idx, float *out_dist);
+LP_API int lp_knn_exact_d(const double *queries, size_t nq, const double *base, size_t nb, size_t dim, size_t k,
+                         uint32_t *out_idx, double *out_dist);
 
 /* ---------------------------------------------------------------- consensus: Glicko-2 */
 typedef struct { double rating, deviation, volatility; } lp_rating;
