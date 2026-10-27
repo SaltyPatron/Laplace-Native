@@ -61,5 +61,20 @@
       "3": 4
     }
   },
-  "scope": "Every stored desktop Tier-0 coordinate and Hilbert value matches the legacy full-population cache exactly. Corrected generation preserves every legacy ID, DUCET rank and Hilbert value. Historical prototype generation used nearest-integer quantization and NumPy math; current numeric law specifies truncation and CORE-MATH. These numerical generations are not byte-identical. No active cache or database coordinates were replaced. Activation requires coordinated cache selection and database generation reconciliation."
+  "scope": "Every stored desktop Tier-0 coordinate and Hilbert value matches the legacy full-population cache exactly. Corrected generation preserves every legacy ID, DUCET rank and Hilbert value. Historical prototype generation used nearest-integer quantization and NumPy math; current numeric law specifies truncation and CORE-MATH. These numerical generations are not byte-identical. No active cache or database coordinates were replaced. Activation requires coordinated cache selection and database generation reconciliation.",
+  "reconciliation_preflight": {
+    "unicode": "17.0.0",
+    "private_postgres_cache": "ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984",
+    "private_module_preflight": "Passed against real desktop laplace; all SQL function bindings rolled back.",
+    "recoordinate_dry_run": "Rejected by strict child-to-parent tier ordering after 76.003 seconds; no coordinates were updated.",
+    "offending_parent_child_rows": [
+      "001598084bd269802bdf221224583b5f|2|205eb3766805ba45f4ebea2a4626a427|2|4",
+      "00472a71b47b7e5de89079352b7f3d49|3|d70b684bc79911db05048ae140f98bef|3|3",
+      "00b54d3243289dd7b3bfcfb2a7f50a11|2|d6c2b72373663dbf7d7fac341073fa01|2|11",
+      "00c2869b36a2b4618e9f6829e927c3f7|2|d6c2b72373663dbf7d7fac341073fa01|2|6",
+      "00c411153771053198773886d8dd0a49|2|ee1bd07870b8811d5b6610c9b40b3584|2|6"
+    ],
+    "public_cache_after_rollback": "a6540fe9f93da1c37563deb16991c6aeffb77f90c05a99616ee5d925eb3346ae",
+    "private_postgres_module_sha256": "400be00a251d51164641f071b09ef14bdcadf20c3719a440af608342760cfa01"
+  }
 }
