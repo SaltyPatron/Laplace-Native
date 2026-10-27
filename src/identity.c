@@ -31,6 +31,37 @@ void lp_id_compose(const lp_id *ch, size_t n, lp_id *out){
     if (n == 1) { *out = ch[0]; return; }
     lp_hash16(ch, 16 * n, out);                           /* lp_id is exactly 16 bytes, so the children are contiguous */
 }
+
+bool lp_id_compose_runs(size_t count, lp_id_run_reader reader, void *context, lp_id *out){
+    if (!reader || !out || count > SIZE_MAX / sizeof(lp_id)) return false;
+    lp_id block[BLAKE3_CHUNK_LEN / sizeof(lp_id)], child, result;
+    size_t seen = 0, used = 0;
+    blake3_hasher hash;
+    if (count > sizeof block / sizeof *block) blake3_hasher_init(&hash);
+    while (seen < count) {
+        uint64_t run = 0;
+        if (reader(context, &child, &run) != 0 || !run || run > count - seen) return false;
+        seen += (size_t)run;
+        while (run) {
+            size_t take = run < sizeof block / sizeof *block - used
+                ? (size_t)run : sizeof block / sizeof *block - used;
+            for (size_t i = 0; i < take; i++) block[used + i] = child;
+            used += take; run -= take;
+            if (used == sizeof block / sizeof *block && count > used) {
+                blake3_hasher_update(&hash, block, sizeof block); used = 0;
+            }
+        }
+    }
+    uint64_t extra = 0;
+    if (reader(context, &child, &extra) != 1) return false;
+    if (count <= sizeof block / sizeof *block) lp_id_compose(block, count, &result);
+    else {
+        if (used) blake3_hasher_update(&hash, block, used * sizeof *block);
+        blake3_hasher_finalize(&hash, result.b, sizeof result.b);
+    }
+    *out = result;
+    return true;
+}
 bool lp_id_codepoints_utf8(const char *str, size_t len, lp_id *out){
     const uint8_t *s = (const uint8_t *)str; size_t i = 0, n = 0; uint32_t cp; lp_id first, cur;
     blake3_hasher h; blake3_hasher_init(&h);
