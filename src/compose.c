@@ -12,8 +12,17 @@ lp_ref lp_ref_atom(const lp_tier0_record *t0, uint32_t cp){
     return r;
 }
 
-/* One kernel for ordinary and run-compressed paths. Counts weight the integer
- * centroid, while BLAKE3 sees precisely the ordered, repeated ID bytes. */
+typedef struct { const lp_ref *children; const uint64_t *runs; size_t count, at; } RefRuns;
+static int ref_run(void *context, lp_id *child, uint64_t *run){
+    RefRuns *input = context;
+    if (input->at == input->count) return 1;
+    *child = input->children[input->at].id;
+    *run = input->runs ? input->runs[input->at] : 1;
+    input->at++; return 0;
+}
+
+/* Counts weight the exact integer centroid. Native's common ordered-run
+ * identity kernel handles hashing for both ordinary and compressed paths. */
 static bool compose_refs(const lp_ref *ch, const uint64_t *runs, size_t n, uint8_t tier, lp_ref *out){
     if (!out) return false;
     memset(out, 0, sizeof *out);
@@ -28,26 +37,12 @@ static bool compose_refs(const lp_ref *ch, const uint64_t *runs, size_t n, uint8
     if (!total) return true;
     if (total == 1) { *out = ch[0]; return true; }
     lp_coord_sum sum = {{0, 0, 0, 0}, total};
-    lp_id block[64]; size_t used = 0;
-    blake3_hasher hash;
-    if (total > 64) blake3_hasher_init(&hash);
     for (size_t i = 0; i < n; i++) {
         uint64_t copies = runs ? runs[i] : 1;
         for (unsigned d = 0; d < 4; d++) sum.s[d] += (__int128)ch[i].c.m[d] * copies;
-        while (copies) {
-            size_t take = copies < 64 - used ? (size_t)copies : 64 - used;
-            for (size_t j = 0; j < take; j++) block[used + j] = ch[i].id;
-            used += take; copies -= take;
-            if (used == 64 && total > 64) {
-                blake3_hasher_update(&hash, block, sizeof block); used = 0;
-            }
-        }
     }
-    if (total <= 64) lp_hash16(block, used * sizeof *block, &out->id);
-    else {
-        if (used) blake3_hasher_update(&hash, block, used * sizeof *block);
-        blake3_hasher_finalize(&hash, out->id.b, sizeof out->id.b);
-    }
+    RefRuns input = {ch, runs, n, 0};
+    if (!lp_id_compose_runs((size_t)total, ref_run, &input, &out->id)) return false;
     lp_coord_mean(&sum, &out->c);
     return true;
 }
