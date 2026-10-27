@@ -109,7 +109,12 @@ bool lp_highway_write(const char *path, const lp_tier0_record *records, size_t n
         || (nedges && !edges) || !layout || !nl || (nk && !keys_text) || !identifiers || !ni
         || !bytes_add(&size,nrec,sizeof *records) || !bytes_add(&size,nedges,sizeof *edges)
         || !bytes_add(&size,nl,1) || !bytes_add(&size,nk,1) || !bytes_add(&size,ni,1)) return false;
-    uint8_t header[HW_HEADER] = {0}; memcpy(header,"LPHW0002",8);
+    bool references=false,comment=nk && keys_text[0]=='#'; unsigned tabs=0;
+    for (size_t i=0; i<nk; i++) {
+        if (keys_text[i]=='\t') { if (++tabs==3 && !comment) references=true; }
+        else if (keys_text[i]=='\n') { tabs=0; comment=i+1<nk && keys_text[i+1]=='#'; }
+    }
+    uint8_t header[HW_HEADER] = {0}; memcpy(header,references ? "LPHW0003" : "LPHW0002",8);
     write64(header+16,nrec); write64(header+24,nedges); write64(header+32,nl);
     write64(header+40,nk); write64(header+48,ni); write64(header+56,size);
     blake3_hasher hash; blake3_hasher_init(&hash); blake3_hasher_update(&hash,header,64);
@@ -144,17 +149,29 @@ static bool lines(const char *bytes, size_t size, int fields, void (*visit)(void
     }
     free(copy); return true;
 }
-typedef struct { lp_highway *h; bool bad; } KeyReading;
+/* A source's key names existing content. Its namespace need not own a mask
+ * list or another copy of that content's records. */
+static size_t key_bytes(const char *space,const char *text,char out[1032]){
+    if (!space || !text || !*space || !*text) return 0;
+    size_t ns=strlen(space),nt=strlen(text);
+    if (ns>=sizeof(((lp_list *)0)->name) || nt>1000) return 0;
+    memcpy(out,space,ns); out[ns]='\t'; memcpy(out+ns+1,text,nt);
+    return ns+1+nt;
+}
+typedef struct { lp_highway *h; bool references,bad; } KeyReading;
 static void key_line(void *ctx, char **f, int n){
     KeyReading *r=ctx; if (r->bad) return;
-    if (n!=3 || !*f[1] || strlen(f[1])>1000) { r->bad=true; return; }
-    uint32_t li=0; while (li<r->h->nlists && strcmp(r->h->list[li].name,f[0])) li++;
+    if (n!=3 && !(r->references && n==4)) { r->bad=true; return; }
+    const char *target=n==4 ? f[2] : f[0], *ordinal=n==4 ? f[3] : f[2];
+    uint32_t li=0; while (li<r->h->nlists && strcmp(r->h->list[li].name,target)) li++;
     uint64_t slot;
-    if (li==r->h->nlists || !number(f[2],UINT32_MAX,&slot) || slot>=r->h->list[li].count) { r->bad=true; return; }
-    char key[1004]; size_t len=strlen(f[1]); memcpy(key,&li,4); memcpy(key+4,f[1],len);
-    bool fresh; uint32_t *value=lp_strmap_get(r->h->keys,key,4+len,&fresh);
-    if (!fresh && *value!=slot) r->bad=true;
-    *value=(uint32_t)slot;
+    if (li==r->h->nlists || !number(ordinal,UINT32_MAX,&slot) || slot>=r->h->list[li].count) { r->bad=true; return; }
+    char key[1032]; size_t len=key_bytes(f[0],f[1],key);
+    if (!len) { r->bad=true; return; }
+    uint32_t at=r->h->list[li].first+(uint32_t)slot;
+    bool fresh; uint32_t *value=lp_strmap_get(r->h->keys,key,len,&fresh);
+    if (!fresh && !lp_id_eq(&r->h->rec[*value].id,&r->h->rec[at].id)) r->bad=true;
+    if (fresh || at<*value) *value=at;
 }
 static bool identifiers_read(Highway *mapped,const uint8_t *bytes,size_t size,size_t count){
     const uint8_t *at=bytes,*end=bytes+size; size_t nparts=0,label_bytes=0;
@@ -193,7 +210,8 @@ static bool identifiers_read(Highway *mapped,const uint8_t *bytes,size_t size,si
 }
 static const void *highway_open(const char *path){
     size_t size; const uint8_t *m=lp_map_file(path,0,&size); if (!m) return NULL;
-    Highway *mapped=NULL; bool ok=size>=HW_HEADER && !memcmp(m,"LPHW0002",8) && !read64(m+8);
+    bool references=size>=HW_HEADER && !memcmp(m,"LPHW0003",8);
+    Highway *mapped=NULL; bool ok=size>=HW_HEADER && (references || !memcmp(m,"LPHW0002",8)) && !read64(m+8);
     uint64_t nr=0,ne=0,nl=0,nk=0,ni=0; size_t expected=HW_HEADER; uint8_t fp[32];
     if (ok) {
         nr=read64(m+16); ne=read64(m+24); nl=read64(m+32); nk=read64(m+40); ni=read64(m+48);
@@ -255,8 +273,8 @@ static const void *highway_open(const char *path){
         }
         ok=ok && covered==ne;
         if (ok) {
-            h->keys=lp_strmap_lasting(sizeof(uint32_t)); KeyReading r={h,false};
-            ok=lines(layout+nl,(size_t)nk,3,key_line,&r) && !r.bad;
+            h->keys=lp_strmap_lasting(sizeof(uint32_t)); KeyReading r={.h=h,.references=references};
+            ok=lines(layout+nl,(size_t)nk,references ? 4 : 3,key_line,&r) && !r.bad;
         }
         if (ok) ok=identifiers_read(mapped,(const uint8_t *)(layout+nl+nk),(size_t)ni,(size_t)nr);
         if (ok) { h->by_id=lp_idindex_build(h->rec,h->nrec,sizeof *h->rec); ok=h->by_id!=NULL; }
@@ -355,10 +373,17 @@ const lp_bank *lp_highway_bank_of(const lp_highway *h, const lp_id *id, int32_t 
 }
 
 /* The immutable textual-key index is built and validated before publication. */
+const lp_tier0_record *lp_highway_resolve(const lp_highway *h,const char *space,const char *text){
+    if (!h || !h->keys) return NULL;
+    char key[1032]; size_t len=key_bytes(space,text,key); if (!len) return NULL;
+    const uint32_t *at=lp_strmap_lookup(h->keys,key,len);
+    return at && *at<h->nrec && h->rec[*at].pad!=LP_HIGHWAY_RETIRED ? h->rec+*at : NULL;
+}
 int64_t lp_highway_key(const lp_highway *h,const lp_list *l,const char *key){
-    if (!h || !l || !key || l<h->list || l>=h->list+h->nlists) return -1;
-    size_t kl=strlen(key); char k[1004]; if (!kl || kl>1000) return -1;
-    uint32_t li=(uint32_t)(l-h->list); memcpy(k,&li,4); memcpy(k+4,key,kl);
-    int64_t i=lp_strmap_find(h->keys,k,4+kl);
-    return i<0 ? -1 : (int64_t)*(uint32_t *)lp_strmap_at(h->keys,(size_t)i);
+    if (!h || !l || l<h->list || l>=h->list+h->nlists) return -1;
+    const lp_tier0_record *record=lp_highway_resolve(h,l->name,key);
+    if (!record) return -1;
+    size_t at=(size_t)(record-h->rec);
+    if (at>=l->first && at-l->first<l->count) return (int64_t)(at-l->first);
+    return lp_highway_slot(h,l,&record->id);
 }
