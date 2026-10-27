@@ -118,6 +118,19 @@ typedef bool (*lp_id_pair_visit)(void *context, const lp_id *subject,
 LP_API bool lp_id_run_pairs(const lp_id_run *runs, size_t n, uint64_t lo,
     uint64_t hi, lp_id_pair_visit visit, void *context);
 
+/* Dependency depth of an in-memory DAG, independently of semantic tier.
+ * reader advances its cursor and returns 0 with a child index and edge distance, 1 at end,
+ * negative on failure. Repeated edges are allowed. A leaf has level 1; a parent is at least
+ * child level + distance. Distance 1 gives ordinary depth; distance 0 groups
+ * dependencies that one owner commits atomically in a shared wave. Iterative traversal uses a stack bounded
+ * by graph depth, with no recursion or expanded reverse-edge copy. All nodes
+ * are checked before success, so callers can reject cycles before publishing.
+ * levels holds n values and is usable only on success. errno reports malformed
+ * indices/arguments (EINVAL), cycles (ELOOP), resource overflow or allocation.
+ * The caller owns storage, ID lookup, admission and commit barriers. */
+typedef int (*lp_dag_child_reader)(void *context, size_t node, size_t *cursor, size_t *child, size_t *distance);
+LP_API bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *levels);
+
 /* ---------------------------------------------------------------- UTF-8 */
 /* A codepoint's UTF-8 bytes; surrogates are written in the generalized 3-byte form. Returns the length, 1 to 4. */
 LP_API size_t lp_utf8_put(uint32_t cp, uint8_t out[4]);
