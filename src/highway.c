@@ -290,7 +290,7 @@ static const void *highway_open(const char *path){
     if (!ok) {
         if (h) {
             if (mapped->row) for (size_t i=0; i<h->nedgelists; i++) free(mapped->row[i]);
-            free(mapped->row); free(mapped->extra_keys.v); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
+            free(mapped->row); lp_vec_free(&mapped->extra_keys); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
             free(h->list); free(h->bank); free(h->edges); lp_strmap_free(h->keys); lp_idindex_free(h->by_id);
             free(mapped->identifier); free(mapped->parts); free(mapped->labels); free(mapped);
         }
