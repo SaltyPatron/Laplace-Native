@@ -11,6 +11,38 @@ The library with the shared code of Laplace: identity, UTF-8, tier 0, fixed-poin
 
 The programs are in [Laplace-Engine](https://github.com/SaltyPatron/Laplace-Engine). The documentation is [Laplace-Wiki](https://github.com/SaltyPatron/Laplace-Wiki), published at <https://saltypatron.github.io/Laplace-Wiki/>.
 
+## Shared interfaces, from codepoints upward
+
+These are dependency layers, not additional semantic tiers. Recipes still own
+the domain's tier boundaries. Public contracts are in `include/laplace/`;
+Engine, PostgreSQL and monorepo adapters call these owners.
+
+| Layer | Shared interface | What varies at the caller |
+| --- | --- | --- |
+| Unicode floor | `lp_utf8_next`, `lp_id_codepoint`, `lp_tier0_at/find` | UTF-8 input or a scalar/ID; the validated mapped cache |
+| Ordered identity | `lp_id_compose`, `lp_id_compose_runs` | Contiguous children or a run reader; exact expanded count |
+| Placement and composition | `lp_ref_compose`, `lp_ref_compose_runs`, `lp_coord_mean`, `lp_hilbert4` | Child references, positive repeat counts, admitted tier |
+| Text boundaries | `lp_text_new`, `lp_text_id`, text decomposition | Thread-owned ICU context, input bytes, composition sink |
+| Physicality | `lp_path`, `lp_vertex`, `lp_path_decode/expand`, `lp_ewkb_runs_spare` | Borrowed carrier, output capacity, occurrence annotations |
+| Sets and working memory | `lp_idmap`, `lp_strmap`, `lp_vec`, `lp_buf`, `lp_allocator` | Value size, caller context, allocator and lifetime |
+| Native calculations | Path matching, shape measures, `lp_frontier`, consensus/series | Explicit operands and policy; CPU dispatch stays inside the kernel |
+| Host adapters | PostgreSQL fmgr/SPI, Engine libpq/COPY, monorepo C ABI | Storage access, authorization, cancellation, transport and result shape |
+
+Identity takes ordered child IDs and repeats only. Coordinates use exact integer
+accumulation; occurrence annotations and tier do not salt identity. Singleton
+composition is the child. `lp_id_compose_runs` reads one `(ID, repeat count)` at
+a time, verifies the exact expanded count and end of input, and hashes with
+bounded stack storage. It never allocates an expanded child array. Native
+reference composition and the monorepo `hash128_merkle_runs` adapter use this
+same implementation. Empty ID sequences retain `lp_id_compose`'s empty hash;
+an empty `lp_ref` remains the existing absent-reference value, not an entity.
+
+Carrier views borrow their input. Copy anything retained beyond that input's
+lifetime. Read a compressed vertex with `lp_path_decode`; expand runs only when
+the consumer actually requires occurrences. Maps deduplicate content IDs while
+paths preserve ordered occurrences. A set result and an occurrence result are
+different contracts even when they share a kernel.
+
 ## Build
 
 ```sh

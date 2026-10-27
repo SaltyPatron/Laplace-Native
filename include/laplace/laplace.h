@@ -95,6 +95,13 @@ static inline bool lp_id_unhex(const char *s, lp_id *out){ return lp_unhex(s, 16
 LP_API void lp_id_codepoint(uint32_t cp, lp_id *out);
 /* A composition's ID: BLAKE3-128 of its children's IDs in order, repeats included. One child is that child. */
 LP_API void lp_id_compose(const lp_id *children, size_t n, lp_id *out);
+/* The same identity from ordered runs, without an expanded child array or heap
+ * allocation. reader returns 0 with (child, run), 1 at end, negative on failure.
+ * count is the exact expanded count, including repeats; the reader must end
+ * there. Zero runs, early/late end and byte-count overflow fail without changing
+ * out. Empty input hashes the empty sequence; one child remains that child. */
+typedef int (*lp_id_run_reader)(void *context, lp_id *child, uint64_t *run);
+LP_API bool lp_id_compose_runs(size_t count, lp_id_run_reader reader, void *context, lp_id *out);
 /* The ID of a UTF-8 string taken as one composition of its codepoints. Returns false on invalid UTF-8. */
 LP_API bool lp_id_codepoints_utf8(const char *s, size_t len, lp_id *out);
 

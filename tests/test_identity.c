@@ -2,9 +2,55 @@
  * composition IDs match the prototype database. */
 #include "laplace/tier0.h"
 #include "check.h"
+#include "blake3.h"
 #include <string.h>
 
 static int cmp16(const void *a, const void *b){ return memcmp(a, b, 16); }
+
+typedef struct { const lp_id *ids; const uint64_t *runs; size_t count, at; int end; } IdRuns;
+static int next_id_run(void *context, lp_id *id, uint64_t *run){
+    IdRuns *input = context;
+    if (input->at == input->count) return input->end;
+    *id = input->ids[input->at]; *run = input->runs[input->at++]; return 0;
+}
+static void ordered_runs(void){
+    lp_id ids[3], actual, expected;
+    for (unsigned i=0; i<3; i++) lp_id_codepoint('A'+i, ids+i);
+    const uint64_t cases[][3]={{1,1,1},{61,1,1},{62,1,1},{63,1,1},{64,1,1},{126,1,1},{127,1,1},{65537,1,1}};
+    for (size_t c=0; c<sizeof cases/sizeof *cases; c++) {
+        /* Independent BLAKE3 oracle over the fully expanded bytes. Exercise
+         * both sides of the single-chunk and multi-chunk boundaries. */
+        size_t count=(size_t)(cases[c][0]+cases[c][1]+cases[c][2]);
+        lp_id *expanded=malloc(count*sizeof *expanded); CHECK(expanded,"allocate run oracle");
+        if (!expanded) continue;
+        size_t at=0;
+        for (size_t i=0; i<3; i++) for (uint64_t r=0; r<cases[c][i]; r++) expanded[at++]=ids[i];
+        blake3_hasher h; blake3_hasher_init(&h);
+        blake3_hasher_update(&h,expanded,count*sizeof *expanded); blake3_hasher_finalize(&h,expected.b,16);
+        IdRuns input={ids,cases[c],3,0,1};
+        CHECK(lp_id_compose_runs(count,next_id_run,&input,&actual) && lp_id_eq(&actual,&expected),
+              "streamed identity equals BLAKE3 of %zu ordered expanded children",count);
+        free(expanded);
+    }
+    uint64_t one=1;
+    IdRuns single={ids,&one,1,0,1}, empty={NULL,NULL,0,0,1};
+    CHECK(lp_id_compose_runs(1,next_id_run,&single,&actual) && lp_id_eq(&actual,ids),"stream singleton collapses to child");
+    lp_id_compose(NULL,0,&expected);
+    CHECK(lp_id_compose_runs(0,next_id_run,&empty,&actual) && lp_id_eq(&actual,&expected),"empty stream retains empty-sequence hash");
+    uint64_t bad[][3]={{0,1,1},{1,1,1},{1,1,3},{UINT64_MAX,1,1}};
+    for (size_t i=0; i<sizeof bad/sizeof *bad; i++) {
+        actual=ids[0]; IdRuns input={ids,bad[i],3,0,1};
+        CHECK(!lp_id_compose_runs(4,next_id_run,&input,&actual) && lp_id_eq(&actual,ids),"invalid run %zu leaves output intact",i);
+    }
+    uint64_t exact[]={1,1,1};
+    IdRuns extra={ids,exact,3,0,1}, failed={ids,exact,3,0,-1};
+    CHECK(!lp_id_compose_runs(2,next_id_run,&extra,&actual),"a late end is refused");
+    CHECK(!lp_id_compose_runs(3,next_id_run,&failed,&actual),"reader failures propagate");
+    CHECK(!lp_id_compose_runs(SIZE_MAX,next_id_run,&empty,&actual) && empty.at==0,"byte-count overflow refused before reading");
+    CHECK(!lp_id_compose_runs(1,NULL,NULL,&actual) && !lp_id_compose_runs(1,next_id_run,&single,NULL),"missing reader/output refused");
+    IdRuns alias={ids,&one,1,0,1}; expected=ids[0];
+    CHECK(lp_id_compose_runs(1,next_id_run,&alias,ids) && lp_id_eq(ids,&expected),"stream output may alias an input child");
+}
 
 /* Bounded exhaustive oracle for the established shortest-block definition.
  * This deliberately does not use the production run-boundary shortcut. */
@@ -69,6 +115,7 @@ static void factors(const lp_tier0_record *t0){
 }
 
 int main(void){
+    ordered_runs();
     const lp_tier0_record *t0 = lp_tier0_map(LAPLACE_TIER0);
     CHECK(t0 != NULL, "cannot map tier 0 at %s", LAPLACE_TIER0);
     if (!t0) DONE("identity");
