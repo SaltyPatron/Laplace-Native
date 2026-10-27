@@ -80,10 +80,12 @@ static void layout_line(void *ctx, char **f, int n){
  * scalar-cache records and edge pairs use that same on-disk representation. */
 enum { HW_HEADER = 96 };
 typedef struct { const char *display; const char **part; uint32_t count; } Identifier;
+typedef struct { uint32_t at, more; } KeyTarget;
 typedef struct {
     lp_highway public; const uint8_t *mapping; size_t size; Identifier *identifier;
     const char **parts; char *labels;
     uint8_t fingerprint[32]; lp_strmap *lists,*relations; uint32_t **row;
+    lp_vec(KeyTarget) extra_keys;
 } Highway;
 static uint64_t read64(const uint8_t *p){
     uint64_t n = 0; for (unsigned i = 0; i < 8; i++) n |= (uint64_t)p[i] << (8 * i); return n;
@@ -169,9 +171,15 @@ static void key_line(void *ctx, char **f, int n){
     char key[1032]; size_t len=key_bytes(f[0],f[1],key);
     if (!len) { r->bad=true; return; }
     uint32_t at=r->h->list[li].first+(uint32_t)slot;
-    bool fresh; uint32_t *value=lp_strmap_get(r->h->keys,key,len,&fresh);
-    if (!fresh && !lp_id_eq(&r->h->rec[*value].id,&r->h->rec[at].id)) r->bad=true;
-    if (fresh || at<*value) *value=at;
+    if (r->h->rec[at].pad==LP_HIGHWAY_RETIRED) { r->bad=true; return; }
+    Highway *mapped=(Highway *)r->h;
+    bool fresh; KeyTarget *value=lp_strmap_get(r->h->keys,key,len,&fresh);
+    if (fresh) { *value=(KeyTarget){at,0}; return; }
+    for (const KeyTarget *target=value; target; target=target->more ? mapped->extra_keys.v+target->more-1 : NULL)
+        if (lp_id_eq(&r->h->rec[target->at].id,&r->h->rec[at].id)) return;
+    if (n!=4 || mapped->extra_keys.n>=UINT32_MAX-1) { r->bad=true; return; }
+    KeyTarget extra={at,value->more};
+    lp_push(&mapped->extra_keys,extra); value->more=(uint32_t)mapped->extra_keys.n;
 }
 static bool identifiers_read(Highway *mapped,const uint8_t *bytes,size_t size,size_t count){
     const uint8_t *at=bytes,*end=bytes+size; size_t nparts=0,label_bytes=0;
@@ -273,7 +281,7 @@ static const void *highway_open(const char *path){
         }
         ok=ok && covered==ne;
         if (ok) {
-            h->keys=lp_strmap_lasting(sizeof(uint32_t)); KeyReading r={.h=h,.references=references};
+            h->keys=lp_strmap_lasting(sizeof(KeyTarget)); KeyReading r={.h=h,.references=references};
             ok=lines(layout+nl,(size_t)nk,references ? 4 : 3,key_line,&r) && !r.bad;
         }
         if (ok) ok=identifiers_read(mapped,(const uint8_t *)(layout+nl+nk),(size_t)ni,(size_t)nr);
@@ -282,7 +290,7 @@ static const void *highway_open(const char *path){
     if (!ok) {
         if (h) {
             if (mapped->row) for (size_t i=0; i<h->nedgelists; i++) free(mapped->row[i]);
-            free(mapped->row); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
+            free(mapped->row); free(mapped->extra_keys.v); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
             free(h->list); free(h->bank); free(h->edges); lp_strmap_free(h->keys); lp_idindex_free(h->by_id);
             free(mapped->identifier); free(mapped->parts); free(mapped->labels); free(mapped);
         }
@@ -374,10 +382,19 @@ const lp_bank *lp_highway_bank_of(const lp_highway *h, const lp_id *id, int32_t 
 
 /* The immutable textual-key index is built and validated before publication. */
 const lp_tier0_record *lp_highway_resolve(const lp_highway *h,const char *space,const char *text){
-    if (!h || !h->keys) return NULL;
-    char key[1032]; size_t len=key_bytes(space,text,key); if (!len) return NULL;
-    const uint32_t *at=lp_strmap_lookup(h->keys,key,len);
-    return at && *at<h->nrec && h->rec[*at].pad!=LP_HIGHWAY_RETIRED ? h->rec+*at : NULL;
+    uint32_t cursor=0;
+    const lp_tier0_record *first=lp_highway_resolve_next(h,space,text,&cursor);
+    return first && !lp_highway_resolve_next(h,space,text,&cursor) ? first : NULL;
+}
+const lp_tier0_record *lp_highway_resolve_next(const lp_highway *h,const char *space,const char *text,uint32_t *cursor){
+    if (!h || !h->keys || !cursor || *cursor==UINT32_MAX) return NULL;
+    const Highway *mapped=(const Highway *)h; const KeyTarget *target=NULL;
+    if (!*cursor) {
+        char key[1032]; size_t len=key_bytes(space,text,key);
+        if (len) target=lp_strmap_lookup(h->keys,key,len);
+    } else if (*cursor<=mapped->extra_keys.n) target=mapped->extra_keys.v+*cursor-1;
+    *cursor=target && target->more ? target->more : UINT32_MAX;
+    return target && target->at<h->nrec ? h->rec+target->at : NULL;
 }
 int64_t lp_highway_key(const lp_highway *h,const lp_list *l,const char *key){
     if (!h || !l || l<h->list || l>=h->list+h->nlists) return -1;
