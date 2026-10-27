@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Engine
-          ref: 25104e87337084087d5e53f0d0d4ff6c62cc6bc0
+          ref: de00247c295c20b5fd37ee072c2c313be1663f6b
           path: .engine/Laplace-Engine
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
