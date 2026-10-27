@@ -1,4 +1,4 @@
-/* Identity against the prototype: every scalar's ID equals tier 0's, all 1,112,064 are distinct, and known
+/* Identity against the prototype: every codepoint's ID equals tier 0's, all 1,114,112 are distinct, and known
  * composition IDs match the prototype database. */
 #include "laplace/tier0.h"
 #include "check.h"
@@ -74,17 +74,16 @@ int main(void){
     if (!t0) DONE("identity");
     factors(t0);
     lp_id *all = malloc(sizeof(lp_id) * LP_TIER0_COUNT); size_t bad = 0, count = 0;
-    CHECK(all != NULL, "cannot allocate scalar identity check");
+    CHECK(all != NULL, "cannot allocate codepoint identity check");
     if (!all) DONE("identity");
     for (uint32_t cp = 0; cp < LP_NCP; cp++) {
-        if (!lp_unicode_scalar(cp)) continue;
         lp_id_codepoint(cp, &all[count]);
         const lp_tier0_record *record = lp_tier0_at(t0, cp);
         if (!record || memcmp(&all[count], &record->id, 16)) bad++;
         count++;
     }
     CHECK(bad == 0, "%zu codepoint IDs differ from tier 0", bad);
-    CHECK(count == LP_TIER0_COUNT, "all scalar identities were checked");
+    CHECK(count == LP_TIER0_COUNT, "all codepoint identities were checked");
     qsort(all, count, 16, cmp16); size_t dup = 0;
     for (size_t i = 1; i < count; i++) dup += !memcmp(&all[i], &all[i - 1], 16);
     CHECK(dup == 0, "%zu duplicate codepoint IDs", dup);

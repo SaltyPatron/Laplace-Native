@@ -12,6 +12,6 @@ int main(int argc, char **argv){
     if (!ok) { perror("Tier-0 generation"); free(records); return 1; }
     uint8_t digest[32]; char hex[65];
     lp_tier0_fingerprint(records, digest); lp_hex(digest, 32, hex);
-    printf("%s: %u Unicode scalar records, sorted by ID\nBLAKE3-256 %s\n", argv[2], LP_TIER0_COUNT, hex);
+    printf("%s: %u Unicode codepoint records, sorted by ID\nBLAKE3-256 %s\n", argv[2], LP_TIER0_COUNT, hex);
     free(records); return 0;
 }

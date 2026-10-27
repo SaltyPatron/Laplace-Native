@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-27",
+  "unicode": "17.0.0",
+  "source_base": "1a3500b63647d2ca32da4b08d5609eee8aa5bb81",
+  "contract": "Laplace-Wiki/Sequence/Projection.md 4.3-4.7; Sequence/Tier-0.md 5.2-5.7",
+  "fixed_projection_population": 1114112,
+  "previous_population": 1112064,
+  "unchanged_active_cache": "a6540fe9f93da1c37563deb16991c6aeffb77f90c05a99616ee5d925eb3346ae",
+  "corrected_cache": {
+    "records": 1114112,
+    "bytes": 71303168,
+    "blake3": "ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984",
+    "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1"
+  },
+  "independent_generations": [
+    {
+      "host": "HART-DESKTOP",
+      "platform": "Windows",
+      "compiler": "IntelLLVM 2026.1.1",
+      "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+      "acceptance": "Native Tier-0, identity, coordinates, text IDs and UAX decomposition passed"
+    },
+    {
+      "host": "hart-server",
+      "platform": "Linux",
+      "compiler": "Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)",
+      "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+      "generation_seconds": 1.620997866964899,
+      "acceptance": "Native Tier-0, identity, coordinates, text IDs and UAX decomposition passed"
+    },
+    {
+      "host": "hart-server",
+      "platform": "Linux",
+      "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+      "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+      "generation_seconds": 1.703787597012706,
+      "acceptance": "Native Tier-0, identity, coordinates, text IDs and UAX decomposition passed"
+    }
+  ],
+  "all_three_generations_byte_identical": true,
+  "legacy_database_comparison": {
+    "database": "laplace",
+    "tier0_rows": 1114112,
+    "ids_absent_from_legacy": 0,
+    "coordinate_differences": 0,
+    "hilbert_differences": 0,
+    "seconds": 5.0666315000271425,
+    "examples": [],
+    "mode": "read-only COPY; exact binary64 coordinates; PostgreSQL bigint Hilbert high-bit bias removed"
+  },
+  "corrected_vs_legacy_cache": {
+    "missing_ids": 0,
+    "rank_differences": 0,
+    "hilbert_differences": 0,
+    "coordinate_rows_different": 695203,
+    "max_coordinate_delta_grid_units": 3,
+    "coordinate_delta_histogram": {
+      "0": 418909,
+      "1": 693368,
+      "2": 1831,
+      "3": 4
+    }
+  },
+  "scope": "Every stored desktop Tier-0 coordinate and Hilbert value matches the legacy full-population cache exactly. Corrected generation preserves every legacy ID, DUCET rank and Hilbert value. Historical prototype generation used nearest-integer quantization and NumPy math; current numeric law specifies truncation and CORE-MATH. These numerical generations are not byte-identical. No active cache or database coordinates were replaced. Activation requires coordinated cache selection and database generation reconciliation."
+}
