@@ -14,8 +14,10 @@ typedef uint64_t lp_mask;
  * layout/keys are tab-separated descriptor rows, parsed only at map time.
  * A key is list, source key, local slot. A cross-list reference is source
  * namespace, source key, target list, target slot; it names the existing target
- * record without adding slots or changing content identity. Such rows select
- * envelope version 3; version 2 files remain readable.
+ * record without adding slots or changing content identity. A namespace/key
+ * may name multiple targets; all are retained. Such rows select envelope
+ * version 3; version 2 files remain readable. Earlier version 3 readers reject
+ * multiple distinct targets rather than selecting one.
  * identifiers contains nrec entries: a little-endian uint32 part count followed
  * by that many nonempty NUL-terminated UTF-8 text components. One component is
  * an identifier string; multiple components compose an ordered identifier
@@ -40,8 +42,13 @@ LP_API bool lp_highway_contains(const lp_highway *highway, const lp_id *id);
 LP_API const lp_tier0_record *lp_highway_find(const lp_highway *highway, const lp_id *id);
 /* Resolve a source's key, including release-specific pointer namespaces. The
  * mapping owns the existing target record; no composition or allocation is
- * performed. A namespace need not be a mask list. NULL means unresolved. */
+ * performed. A namespace need not be a mask list. NULL means absent or
+ * ambiguous: a singular lookup never selects one of several targets. */
 LP_API const lp_tier0_record *lp_highway_resolve(const lp_highway *, const char *source_namespace, const char *key);
+/* Enumerate every distinct canonical target without lookup allocation. Start
+ * cursor at zero and keep it for this namespace/key until NULL is returned.
+ * The mapping owns the records. No target is ranked or merged with another. */
+LP_API const lp_tier0_record *lp_highway_resolve_next(const lp_highway *, const char *source_namespace, const char *key, uint32_t *cursor);
 
 /* Field bits in the one 64-bit carrier; zero for an invalid descriptor. */
 LP_API lp_mask lp_mask_field(const lp_bank *bank);

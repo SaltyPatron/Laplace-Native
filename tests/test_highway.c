@@ -93,8 +93,31 @@ static void envelope_check(const lp_highway *h){
     CHECK(version && fread(magic,1,sizeof magic,version)==sizeof magic && !memcmp(magic,"LPHW0003",8),
         "extended keys select a new envelope that older readers reject");
     if (version) fclose(version);
+    const char ambiguous[]="pos\tNOUN\t0\npos\tVERB\t1\nrelease\tmerged\tpos\t0\nrelease\tmerged\tpos\t1\nrelease\tmerged\tpos\t0\n";
+    const char *ambiguous_path="highway-envelope-ambiguous.bin";
+    CHECK(lp_highway_write(ambiguous_path,records,2,&edge,1,layout,sizeof layout-1,ambiguous,sizeof ambiguous-1,ids,sizeof ids),
+        "write every target of a many-to-one source mapping");
+    const lp_highway *multiple=lp_highway_map(ambiguous_path);
+    CHECK(multiple && !lp_highway_resolve(multiple,"release","merged"),
+        "a singular lookup cannot choose one of several canonical targets");
+    uint32_t cursor=0; unsigned count=0,seen=0; const lp_tier0_record *target;
+    while ((target=lp_highway_resolve_next(multiple,"release","merged",&cursor))) {
+        count++;
+        for (unsigned i=0; i<2; i++) if (lp_id_eq(&target->id,&records[i].id)) {
+            seen|=1u<<i; CHECK(!memcmp(target->m,records[i].m,sizeof target->m),"candidate keeps its canonical coordinates");
+        }
+    }
+    CHECK(count==2 && seen==3 && !lp_highway_resolve_next(multiple,"release","merged",&cursor),
+        "enumeration retains both distinct targets exactly once and terminates");
+    cursor=0;
+    CHECK(lp_highway_resolve_next(referenced,"release-a","same-key",&cursor)==a
+        && !lp_highway_resolve_next(referenced,"release-a","same-key",&cursor),"ordinary pointers enumerate once");
+    cursor=0;
+    CHECK(!lp_highway_resolve_next(multiple,"release","absent",&cursor)
+        && !lp_highway_resolve_next(multiple,"release","merged",NULL),"empty and invalid enumeration is safe");
+    remove(ambiguous_path);
     const char *bad_references[]={"release\tkey\tabsent\t0\n","release\tkey\tpos\t2\n",
-        "release\tkey\tpos\t0\nrelease\tkey\tpos\t1\n","\tkey\tpos\t0\n"};
+        "pos\tkey\t0\npos\tkey\t1\n","\tkey\tpos\t0\n"};
     const char *bad_paths[]={"highway-reference-unknown-list.bin","highway-reference-past-list.bin",
         "highway-reference-conflict.bin","highway-reference-empty-namespace.bin"};
     for (size_t i=0; i<sizeof bad_paths/sizeof *bad_paths; i++) {
