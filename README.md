@@ -4,6 +4,7 @@ The library with the shared code of Laplace: identity, UTF-8, tier 0, fixed-poin
 
 | Library | Holds | Needs |
 | --- | --- | --- |
+| Windows process bytes | `cmake/LaplaceWindowsUtf8.cmake`: `laplace_utf8_executable` | Executable target; UTF-8 arguments and narrow filesystem input before C startup |
 | `laplace` (static and shared) | everything but the three below | BLAKE3 |
 | `laplace_text` | the decomposition of text | ICU 78 (Unicode 17) |
 | `laplace_model` | the model-decomposition kernel | MKL, OpenMP |
@@ -29,6 +30,11 @@ Engine, PostgreSQL and monorepo adapters call these owners.
 | Sets and working memory | `lp_idmap`, `lp_strmap`, `lp_vec`, `lp_buf`, `lp_allocator` | Value size, caller context, allocator and lifetime |
 | Native calculations | Path matching, shape measures, `lp_frontier`, consensus/series | Explicit operands and policy; CPU dispatch stays inside the kernel |
 | Host adapters | PostgreSQL fmgr/SPI, Engine libpq/COPY, monorepo C ABI | Storage access, authorization, cancellation, transport and result shape |
+
+Windows executables embed one shared [UTF-8 process manifest](https://learn.microsoft.com/windows/apps/design/globalizing/use-utf8-code-page).
+The setting applies before the CRT converts arguments. Console encoding changes
+inside `main` cannot recover characters already replaced at startup. Libraries
+inherit their host's process contract.
 
 Identity takes ordered child IDs and repeats only. Coordinates use exact integer
 accumulation; occurrence annotations and tier do not salt identity. Singleton
