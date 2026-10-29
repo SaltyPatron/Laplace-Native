@@ -52,3 +52,44 @@ bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *
 fail:
     free(stack); return false;
 }
+
+typedef struct { size_t node, cursor; } ComponentFrame;
+bool lp_graph_components(size_t n,lp_dag_child_reader reader,void *context,size_t *components,size_t *count){
+    if(!reader || !count || (n && !components)){errno=EINVAL;return false;}
+    *count=0;if(!n)return true;
+    if(n>SIZE_MAX/(3*sizeof(size_t)) || n>SIZE_MAX/sizeof(ComponentFrame)){errno=EOVERFLOW;return false;}
+    size_t *storage=calloc(n,3*sizeof *storage);
+    ComponentFrame *frames=malloc(n*sizeof *frames);
+    if(!storage || !frames){free(storage);free(frames);errno=ENOMEM;return false;}
+    size_t *index=storage,*low=storage+n,*active=storage+2*n;
+    for(size_t i=0;i<n;i++)components[i]=SIZE_MAX;
+    size_t clock=0,used=0,live=0,groups=0;
+    for(size_t root=0;root<n;root++){
+        if(index[root])continue;
+        index[root]=low[root]=++clock;active[live++]=root;
+        frames[used++]=(ComponentFrame){.node=root};
+        while(used){
+            ComponentFrame *frame=frames+used-1;size_t node=frame->node,child,distance;
+            int result=reader(context,node,&frame->cursor,&child,&distance);
+            if(result==0){
+                if(child>=n){errno=EINVAL;goto components_fail;}
+                if(!index[child]){
+                    index[child]=low[child]=++clock;active[live++]=child;
+                    frames[used++]=(ComponentFrame){.node=child};
+                }else if(components[child]==SIZE_MAX && index[child]<low[node])low[node]=index[child];
+                continue;
+            }
+            if(result!=1){errno=EINVAL;goto components_fail;}
+            if(low[node]==index[node]){
+                size_t member;
+                do{member=active[--live];components[member]=groups;}while(member!=node);
+                groups++;
+            }
+            used--;
+            if(used && low[node]<low[frames[used-1].node])low[frames[used-1].node]=low[node];
+        }
+    }
+    *count=groups;free(frames);free(storage);return true;
+components_fail:
+    free(frames);free(storage);return false;
+}

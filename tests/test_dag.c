@@ -29,6 +29,10 @@ static int same_owner(void *context, size_t node, size_t *cursor, size_t *out, s
     int result = chain(context,node,cursor,out,distance);
     *distance = 0; return result;
 }
+static int ring(void *context,size_t node,size_t *cursor,size_t *out,size_t *distance){
+    *distance=1;if((*cursor)++)return 1;
+    *out=(node+1)%(*(size_t *)context);return 0;
+}
 int main(void){
     const size_t offsets[] = {0,2,4,4,5,5,6}, edges[] = {3,1,2,2,2,4};
     Graph g = {6,offsets,edges,0}; size_t levels[6];
@@ -60,5 +64,52 @@ int main(void){
     CHECK(lp_dag_levels(0,child,&g,NULL), "empty graph");
     CHECK(!lp_dag_levels(1,child,&g,NULL) && errno == EINVAL, "missing output rejected");
     CHECK(!lp_dag_levels(0,NULL,NULL,NULL) && errno == EINVAL, "missing reader rejected");
+    size_t components[6], groups=99;
+    g.error=0;
+    CHECK(lp_graph_components(6,child,&g,components,&groups) && groups==6,"DAG components stay distinct");
+    for(size_t i=0;i<g.count;i++)for(size_t edge=g.offsets[i];edge<g.offsets[i+1];edge++)
+        CHECK(components[g.children[edge]]<components[i],"component dependencies precede consumers");
+    const size_t joined_offsets[]={0,1,2,4,5,6,6},joined_edges[]={1,0,1,3,4,3};
+    Graph joined={6,joined_offsets,joined_edges,0};
+    CHECK(lp_graph_components(6,child,&joined,components,&groups) && groups==4,"cycles coalesce into logical groups");
+    CHECK(components[0]==components[1] && components[3]==components[4] && components[0]!=components[3],"disconnected cycles stay separate");
+    CHECK(components[1]<components[2] && components[3]<components[2],"both provider groups precede their consumer");
+    size_t self_offsets[]={0,2,2},self_edges[]={0,1};Graph self={2,self_offsets,self_edges,0};
+    CHECK(lp_graph_components(2,child,&self,components,&groups) && groups==2 && components[1]<components[0],"self reference retains external dependency");
+    deep=malloc(count*sizeof *deep);
+    CHECK(deep,"allocate deep component result");
+    if(deep){
+        CHECK(lp_graph_components(count,reverse_chain,&count,deep,&groups) && groups==count,"deep components use no C recursion");
+        CHECK(deep[0]==count-1 && deep[count-1]==0,"deep providers precede consumers");
+        CHECK(lp_graph_components(count,ring,&count,deep,&groups) && groups==1,"deep cycle is one logical component");
+        CHECK(deep[0]==0 && deep[count-1]==0,"deep cycle includes every member");
+        free(deep);
+    }
+    uint32_t random=0x427169e3;
+    for(size_t trial=0;trial<128;trial++){
+        size_t offsets[13],edges[144],used=0,part[12];bool reaches[12][12]={{0}};
+        for(size_t i=0;i<12;i++){
+            offsets[i]=used;reaches[i][i]=true;
+            for(size_t j=0;j<12;j++){
+                random=random*1664525u+1013904223u;
+                if(random%11==0){edges[used++]=j;reaches[i][j]=true;}
+            }
+        }
+        offsets[12]=used;Graph fixture={12,offsets,edges,0};
+        for(size_t k=0;k<12;k++)for(size_t i=0;i<12;i++)for(size_t j=0;j<12;j++)
+            reaches[i][j]|=reaches[i][k] && reaches[k][j];
+        CHECK(lp_graph_components(12,child,&fixture,part,&groups),"varied component graph");
+        for(size_t i=0;i<12;i++)for(size_t j=0;j<12;j++)
+            CHECK((part[i]==part[j])==(reaches[i][j] && reaches[j][i]),"components agree with independent mutual reachability");
+        for(size_t i=0;i<12;i++)for(size_t edge=offsets[i];edge<offsets[i+1];edge++)
+            CHECK(part[edges[edge]]<=part[i],"varied external dependencies precede consumers");
+    }
+    cycle_edges[0]=2;
+    CHECK(!lp_graph_components(2,child,&cycle,components,&groups) && errno==EINVAL,"component reader rejects invalid child");
+    g.error=1;
+    CHECK(!lp_graph_components(6,child,&g,components,&groups) && errno==EINVAL,"component reader failure propagates");
+    CHECK(lp_graph_components(0,child,&g,NULL,&groups) && groups==0,"empty component graph");
+    CHECK(!lp_graph_components(1,child,&g,NULL,&groups) && errno==EINVAL,"component output required");
+    CHECK(!lp_graph_components(0,child,&g,NULL,NULL) && errno==EINVAL,"component count required");
     DONE("dag");
 }

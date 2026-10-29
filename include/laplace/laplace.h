@@ -131,6 +131,16 @@ LP_API bool lp_id_run_pairs(const lp_id_run *runs, size_t n, uint64_t lo,
 typedef int (*lp_dag_child_reader)(void *context, size_t node, size_t *cursor, size_t *child, size_t *distance);
 LP_API bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *levels);
 
+/* Strongly connected groups of a logical dependency graph. Uses the same
+ * indexed child reader as lp_dag_levels; edge distances do not affect groups.
+ * Every node receives a component in [0,count), numbered with dependencies
+ * before their consumers. Cycles form one component, including self-edges.
+ * Iterative O(nodes+edges) work and O(nodes) workspace; no reverse-edge copy.
+ * Output is usable only on success; errno reports malformed input or storage
+ * failure. Structural publication still uses lp_dag_levels to reject cycles. */
+LP_API bool lp_graph_components(size_t n, lp_dag_child_reader reader, void *context,
+                                size_t *components, size_t *count);
+
 /* ---------------------------------------------------------------- UTF-8 */
 /* A codepoint's UTF-8 bytes; surrogates are written in the generalized 3-byte form. Returns the length, 1 to 4. */
 LP_API size_t lp_utf8_put(uint32_t cp, uint8_t out[4]);
