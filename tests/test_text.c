@@ -6,7 +6,7 @@
 
 static lp_id word(const char *w){ lp_id id; lp_id_codepoints_utf8(w, strlen(w), &id); return id; }
 static lp_ref height_sink(void *context,const lp_ref *children,uint32_t count,uint8_t tier){
-    (void)context;
+    if (context) ++*(size_t *)context;
     CHECK(count>=2 && tier==lp_tier_above(children,count),"every emitted text composition has its actual recursive height");
     return lp_ref_compose(children,count,tier);
 }
@@ -30,6 +30,14 @@ int main(void){
     lp_id ordinary;
     CHECK(segments.count == 9 && segments.offset == strlen(segment_text), "actual segments include atoms, words and separators");
     CHECK(lp_text_id(tx,segment_text,strlen(segment_text),&ordinary) && lp_id_eq(&ordinary,&segmented.id), "visiting segments preserves the root and clears callback state");
+    segments.offset = segments.count = 0;
+    size_t composed = 0;
+    lp_ref recorded = lp_text_decompose_segments(tx,(const uint8_t *)segment_text,strlen(segment_text),
+        height_sink,&composed,check_segment,&segments);
+    CHECK(composed > 0 && segments.count == 9 && segments.offset == strlen(segment_text)
+          && lp_id_eq(&recorded.id,&segmented.id), "recording and segment visits share one canonical decomposition");
+    CHECK(lp_text_id(tx,"other",5,&ordinary) && segments.count == 9,
+          "recording segment callbacks do not leak into the next text");
     lp_text_free(segments.reader);
     lp_ref parts[16]; size_t n;
 

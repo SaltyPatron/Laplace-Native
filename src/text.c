@@ -142,8 +142,13 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
 }
 
 lp_ref lp_text_segments(lp_text *c, const uint8_t *s, size_t n, lp_text_segment_fn visit, void *sink){
-    c->segment = visit; c->segment_sink = sink;
-    lp_ref root = lp_text_decompose(c, s, n, NULL, NULL);
+    return lp_text_decompose_segments(c, s, n, NULL, NULL, visit, sink);
+}
+
+lp_ref lp_text_decompose_segments(lp_text *c, const uint8_t *s, size_t n,
+    lp_compose_fn compose, void *compose_sink, lp_text_segment_fn visit, void *segment_sink){
+    c->segment = visit; c->segment_sink = segment_sink;
+    lp_ref root = lp_text_decompose(c, s, n, compose, compose_sink);
     c->segment = NULL; c->segment_sink = NULL;
     return root;
 }
