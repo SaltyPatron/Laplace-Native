@@ -45,7 +45,60 @@ static void relabelled_roots(void){
     }
 }
 
+static void series_information(void){
+    lp_rating prior=lp_rating_stock();
+    lp_series_entry entries[]={observation('a',2,1,.8),observation('b',2,1,.8),observation('c',100,100,0)};
+    lp_standing expected,actual;lp_series_information information[3];size_t count=99;
+    CHECK(lp_series_update(&prior,entries,3,&expected),"reference posterior solves");
+    CHECK(lp_series_evaluate(&prior,entries,3,&actual,information,3,&count),"posterior exposes root information");
+    CHECK(standing_equal(&expected,&actual) && count==2 && actual.witnesses==count,
+          "inspection preserves every standing bit and omits uninformative roots");
+    double precision=lp_witness_precision(.8,LP_ATTEST_FLOOR);
+    double one=.5/(1+.5/precision),sum=0;
+    for(size_t i=0;i<count;i++){
+        CHECK(information[i].games==2 && fabs(information[i].information-one)<1e-13,
+              "balanced root reports its analytic profile Fisher information");
+        sum+=information[i].information;
+    }
+    CHECK(lp_id_cmp(&information[0].dependence_root,&information[1].dependence_root)<0,
+          "root information has canonical ID order");
+    double phi=prior.deviation/LP_GLICKO_SCALE,rd=actual.deviation/LP_GLICKO_SCALE;
+    CHECK(fabs(1/(rd*rd)-1/(phi*phi+actual.volatility*actual.volatility)-sum)<1e-12,
+          "reported information is the actual posterior precision contribution");
+    lp_series_entry reverse[]={entries[2],entries[1],entries[0]};
+    lp_series_information reordered[3];size_t reordered_count=0;lp_standing reordered_standing;
+    CHECK(lp_series_evaluate(&prior,reverse,3,&reordered_standing,reordered,3,&reordered_count)
+          && standing_equal(&actual,&reordered_standing) && reordered_count==count,
+          "information evaluation retains input permutation invariance");
+    for(size_t i=0;i<count;i++)
+        CHECK(lp_id_eq(&information[i].dependence_root,&reordered[i].dependence_root)
+              && information[i].games==reordered[i].games
+              && !memcmp(&information[i].information,&reordered[i].information,sizeof(double)),
+              "root information bits and identity are independent of input order");
+    entries[1].dependence_root=entries[0].dependence_root;
+    CHECK(lp_series_evaluate(&prior,entries,3,&actual,information,3,&count)
+          && count==1 && information[0].games==4
+          && fabs(information[0].information-1/(1+1/precision))<1e-13
+          && information[0].information<sum,
+          "copies in one root do not manufacture independent information");
+    entries[1].dependence_root=observation('b',0,0,0).dependence_root;
+    lp_standing saved=actual;lp_series_information untouched[3];
+    memset(information,0xA5,sizeof information);memcpy(untouched,information,sizeof information);count=77;
+    CHECK(!lp_series_evaluate(&prior,entries,3,&actual,information,1,&count) && errno==ENOSPC
+          && count==2 && standing_equal(&saved,&actual) && !memcmp(information,untouched,sizeof information),
+          "insufficient output capacity reports its size without partial results");
+    entries[0].trust=NAN;count=77;
+    CHECK(!lp_series_evaluate(&prior,entries,3,&actual,information,3,&count) && errno==EINVAL
+          && count==77 && standing_equal(&saved,&actual) && !memcmp(information,untouched,sizeof information),
+          "invalid evidence leaves all outputs untouched");
+    count=77;
+    CHECK(lp_series_evaluate(&prior,NULL,0,&actual,NULL,0,&count) && count==0
+          && actual.rating==prior.rating && actual.deviation==prior.deviation,
+          "empty evidence needs no output storage and retains the prior");
+}
+
 static void rooted_series(void){
+    series_information();
     relabelled_roots();
     const double trusts[] = {0.5,0.85,0.99};
     const uint64_t counts[] = {1,10,1000,1000000};

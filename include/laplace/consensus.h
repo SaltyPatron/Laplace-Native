@@ -71,6 +71,22 @@ LP_API lp_series_entry lp_series_observation(lp_id root, uint64_t games, double 
 LP_API bool lp_series(const lp_series_entry *entries, size_t n, lp_standing *out);
 LP_API bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, size_t n, lp_standing *out);
 
+typedef struct {
+    lp_id dependence_root;
+    uint64_t games;
+    double information;            /* profile curvature in inverse squared Glicko-2 units */
+} lp_series_information;
+
+/* The same posterior, with each informative root's actual contribution to its
+ * precision. Roots are returned in canonical ID order. Shared-root observations
+ * are folded before measuring information, so copying a source cannot create
+ * independent precision. A capacity of n always suffices. Insufficient capacity
+ * reports the required count through written, sets ENOSPC, and leaves out and
+ * information untouched; other failures leave every output untouched. */
+LP_API bool lp_series_evaluate(const lp_rating *prior, const lp_series_entry *entries, size_t n,
+                              lp_standing *out, lp_series_information *information,
+                              size_t capacity, size_t *written);
+
 /* The source precision bound, in inverse squared Glicko-2 units. Derived from
  * g(phi)=t, with a positive absolute RD floor. Zero trust gives zero information;
  * reliability never enters only as an opponent-deviation change. */

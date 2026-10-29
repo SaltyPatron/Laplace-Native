@@ -114,7 +114,7 @@ lp_series_entry lp_series_observation(lp_id root, uint64_t games, double wins, d
                              .opponent = { LP_GLICKO_RATING, 0, LP_GLICKO_VOLATILITY } };
 }
 
-typedef struct { double games, score, anchor, weight, precision, performance; } SeriesRoot;
+typedef struct { double games, score, anchor, weight, precision, performance, information; lp_id id; } SeriesRoot;
 
 static void series_likelihood(const SeriesRoot *r, double x, double *score, double *information){
     double z = r->weight * (x - r->anchor), tail = exp(-fabs(z)), denominator = 1 + tail;
@@ -186,6 +186,7 @@ static bool posterior(SeriesRoot *roots, size_t n, double mu, double mu0, double
     double score = 0, info = 0;
     for (size_t i = 0; i < n; i++) {
         double s, j; if (!source_mode(roots + i, mu, &s, &j)) return false;
+        roots[i].information = j;
         score += s; info += j;
     }
     *slope = (mu0 - mu) * prior_precision + score; *information = info; *data_score = score;
@@ -220,7 +221,13 @@ static bool series_volatility(double sigma, double phi2, double v, double delta,
     return false;
 }
 
-bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, size_t n, lp_standing *out){
+static int information_order(const void *a, const void *b){
+    return lp_id_cmp(&((const lp_series_information *)a)->dependence_root,
+                     &((const lp_series_information *)b)->dependence_root);
+}
+static bool series_evaluate(const lp_rating *prior, const lp_series_entry *entries, size_t n,
+                           lp_standing *out, lp_series_information *information,
+                           size_t capacity, size_t *written){
     if (!prior || !out || (n && !entries) || n > SIZE_MAX / sizeof(lp_series_entry)
         || !isfinite(prior->rating) || !isfinite(prior->deviation) || prior->deviation <= 0
         || !isfinite(prior->volatility) || prior->volatility <= 0) { errno = EINVAL; return false; }
@@ -234,7 +241,7 @@ bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, si
         if (e->games > UINT64_MAX - result.matches) { errno = EOVERFLOW; return false; }
         result.matches += e->games;
     }
-    if (!n) { *out = result; return true; }
+    if (!n) { *out = result; if(written)*written=0; return true; }
     lp_series_entry *sorted = lp_alloc(n * sizeof *sorted); memcpy(sorted, entries, n * sizeof *sorted);
     qsort(sorted, n, sizeof *sorted, series_order);
     SeriesRoot *roots = lp_zalloc(n * sizeof *roots); size_t nr = 0; bool ok = false; int failure = ERANGE;
@@ -256,7 +263,7 @@ bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, si
             .score = 0.5 + folded.trust * (folded.wins / (double)folded.games - 0.5),
             .anchor = (folded.opponent.rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE,
             .weight = weight, .precision = precision,
-            .performance = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE };
+            .performance = (prior->rating - LP_GLICKO_RATING) / LP_GLICKO_SCALE, .id=folded.dependence_root };
     }
     /* IDs decide dependence membership, never numerical summation order.
      * Publishing the same partition under its final trunk must preserve bits. */
@@ -299,9 +306,27 @@ bool lp_series_update(const lp_rating *prior, const lp_series_entry *entries, si
     result.volatility = sigma;
     ok = isfinite(result.rating) && isfinite(result.deviation) && result.deviation > 0;
 done:
+    if(ok && written){
+        if(capacity<nr){*written=nr;failure=ENOSPC;ok=false;}
+        else{
+            for(size_t i=0;i<nr;i++) information[i]=(lp_series_information){
+                .dependence_root=roots[i].id,.games=(uint64_t)roots[i].games,.information=roots[i].information};
+            if(nr>1)qsort(information,nr,sizeof *information,information_order);
+            *written=nr;
+        }
+    }
     lp_free(roots); lp_free(sorted);
     if (ok) *out = result; else errno = failure;
     return ok;
+}
+
+bool lp_series_evaluate(const lp_rating *prior,const lp_series_entry *entries,size_t n,
+                        lp_standing *out,lp_series_information *information,size_t capacity,size_t *written){
+    if(!written || (capacity && !information)){errno=EINVAL;return false;}
+    return series_evaluate(prior,entries,n,out,information,capacity,written);
+}
+bool lp_series_update(const lp_rating *prior,const lp_series_entry *entries,size_t n,lp_standing *out){
+    return series_evaluate(prior,entries,n,out,NULL,0,NULL);
 }
 
 bool lp_series(const lp_series_entry *entries, size_t n, lp_standing *out){

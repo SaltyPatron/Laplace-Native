@@ -30,6 +30,14 @@ Engine, PostgreSQL and monorepo adapters call these owners.
 | Physicality | `lp_path`, `lp_vertex`, `lp_path_decode/expand`, `lp_ewkb_runs_spare` | Borrowed carrier, output capacity, occurrence annotations |
 | Sets and working memory | `lp_idmap`, `lp_strmap`, `lp_vec`, `lp_buf`, `lp_allocator` | Value size, caller context, allocator and lifetime |
 | Native calculations | Path matching, shape measures, `lp_frontier`, consensus/series | Explicit operands and policy; CPU dispatch stays inside the kernel |
+
+`lp_series_evaluate` returns the standing and each dependence root's profile
+Fisher information from the same rooted-series posterior as `lp_series_update`.
+Shared roots are folded before measuring their precision contribution; repeated
+observations do not become independent sources. Information rows use canonical
+root-ID order and preserve the standing's existing numerical bits. Callers can
+size the output to the input count; insufficient capacity produces no partial
+standing or information rows.
 | Host adapters | PostgreSQL fmgr/SPI, Engine libpq/COPY, monorepo C ABI | Storage access, authorization, cancellation, transport and result shape |
 
 Windows executables embed one shared [UTF-8 process manifest](https://learn.microsoft.com/windows/apps/design/globalizing/use-utf8-code-page).
