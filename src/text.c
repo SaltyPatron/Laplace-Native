@@ -12,6 +12,7 @@
  * This is the one decomposition of text in Laplace. The engine records what it composes; the database composes without
  * recording, to compute the ID and coordinate of a text in place. */
 #include "laplace/laplace.h"
+#include "laplace/highway.h"
 #include "laplace/consensus.h"
 #include <unicode/ubrk.h>
 #include <unicode/utext.h>
@@ -25,7 +26,7 @@ struct lp_text {
     const lp_tier0_record *t0;
     UBreakIterator *brk[3];                          /* sentence, word, character: opened once */
     Bounds sb, wb, gb;
-    Refs cps, g, segs, sents, paras;
+    Refs cps, g, segs, sents, paras, identifiers;
     uint8_t *cpy; size_t ccap;
     lp_compose_fn compose; void *sink;
     lp_text_segment_fn segment; void *segment_sink;
@@ -48,7 +49,7 @@ void lp_text_free(lp_text *c){
     if (!c) return;
     for (int i = 0; i < 3; i++) if (c->brk[i]) ubrk_close(c->brk[i]);
     free(c->sb.b); free(c->wb.b); free(c->gb.b); free(c->cps.v); free(c->g.v); free(c->segs.v); free(c->sents.v); free(c->paras.v);
-    free(c->cpy); free(c->parts); free(c);
+    free(c->cpy); free(c->parts); free(c->identifiers.v); free(c);
 }
 static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out){
     UErrorCode e = U_ZERO_ERROR; ubrk_setUText(bi, ut, &e); out->n = 0;
@@ -165,6 +166,33 @@ lp_ref lp_text_parts(lp_text *c, const uint8_t *s, size_t n, lp_ref *parts, size
     for (size_t i = 0; i < c->pn && i < cap; i++) parts[i] = c->parts[i];
     *nparts = c->pn;
     return trunk;
+}
+
+bool lp_highway_decompose(const lp_highway *highway,lp_text *text,const lp_id *id,
+    lp_compose_fn compose,void *sink,lp_ref *root,lp_ref *parts,size_t cap,size_t *nparts){
+    if(nparts)*nparts=0;
+    if(!text || !id || !root || (cap && !parts))return false;
+    lp_id expected=*id;
+    const lp_tier0_record *record=lp_highway_find(highway,&expected);
+    const char *const *components;size_t count=lp_highway_identifier_parts_for_id(highway,&expected,&components);
+    if(!record || !count)return false;
+    lp_ref value;const lp_ref *children;size_t amount;
+    if(count==1){
+        if(!text->parts){text->pcap=64;text->parts=grow(NULL,text->pcap*sizeof *text->parts);}
+        text->pn=0;text->want_parts=1;
+        value=lp_text_decompose(text,(const uint8_t *)components[0],strlen(components[0]),compose,sink);
+        text->want_parts=0;
+        if(!text->pn || !lp_id_eq(&text->parts_of,&value.id)){text->parts[0]=value;text->pn=1;}
+        children=text->parts;amount=text->pn;
+    }else{
+        text->identifiers.n=0;
+        for(size_t i=0;i<count;i++)push(&text->identifiers,lp_text_decompose(text,(const uint8_t *)components[i],strlen(components[i]),compose,sink));
+        children=text->identifiers.v;amount=count;uint8_t tier=lp_tier_above(children,count);
+        value=compose?compose(sink,children,(uint32_t)count,tier):lp_ref_compose(children,count,tier);
+    }
+    if(!lp_id_eq(&value.id,&expected) || memcmp(value.c.m,record->m,sizeof value.c.m))return false;
+    for(size_t i=0;i<amount && i<cap;i++)parts[i]=children[i];
+    *root=value;if(nparts)*nparts=amount;return true;
 }
 
 const lp_trust_class *lp_trust_class_for_id(lp_text *text,const lp_id *id){

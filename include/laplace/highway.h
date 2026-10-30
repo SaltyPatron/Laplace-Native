@@ -33,6 +33,16 @@ LP_API const char *lp_highway_identifier(const lp_highway *, const lp_list *, ui
 /* Ordered identifier components, owned by the mapping. Decompose each with
  * Tier-0, then compose the resulting refs when the count exceeds one. */
 LP_API size_t lp_highway_identifier_parts(const lp_highway *, const lp_list *, uint32_t slot, const char *const **parts);
+/* The same canonical components, resolved by content ID through the mapped
+ * index. No namespace guess, list scan, allocation or database lookup. */
+LP_API size_t lp_highway_identifier_parts_for_id(const lp_highway *, const lp_id *, const char *const **parts);
+/* Resolve the canonical form from mapped identifier components with Native's
+ * shared decomposer. Verify ID and fixed-point coordinates against the mapped
+ * record. Tier comes from the current modality rules; record.pad remains the
+ * selected artifact's metadata. Optional sink records the same composition
+ * tree. Parts follow lp_text_parts' bounded-output/count contract. No database. */
+LP_API bool lp_highway_decompose(const lp_highway *, lp_text *, const lp_id *,
+    lp_compose_fn, void *sink, lp_ref *root, lp_ref *parts, size_t cap, size_t *nparts);
 
 /* Membership in any list, through the cache's map-time ID index. No lookup
  * allocation, name scan, coordinate computation or database call. */

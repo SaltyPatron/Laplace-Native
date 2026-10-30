@@ -17,9 +17,17 @@ static void identifiers_check(const lp_highway *h,const lp_tier0_record *t0){
             if (!identifier) continue;
             const char *const *parts; size_t np=lp_highway_identifier_parts(h,list,slot,&parts);
             CHECK(np>0,"active identifier has components"); if (!np) continue;
+            const char *const *indexed;
+            size_t indexed_count=lp_highway_identifier_parts_for_id(h,&record->id,&indexed);
+            CHECK(indexed_count==np,"ID lookup retains every canonical component");
+            for(size_t i=0;i<np && i<indexed_count;i++)CHECK(!strcmp(indexed[i],parts[i]),"ID lookup preserves component order and bytes");
             lp_ref *children=malloc(np*sizeof *children); CHECK(children,"identifier components"); if (!children) continue;
             for (size_t i=0; i<np; i++) children[i]=lp_text_decompose(text,(const uint8_t *)parts[i],strlen(parts[i]),NULL,NULL);
             lp_ref value=np==1 ? children[0] : lp_ref_compose(children,np,lp_tier_above(children,np)); free(children);
+            lp_ref resolved,immediate[4];size_t direct_count;
+            CHECK(lp_highway_decompose(h,text,&record->id,NULL,NULL,&resolved,immediate,4,&direct_count)
+                && lp_id_eq(&resolved.id,&value.id) && !memcmp(resolved.c.m,value.c.m,sizeof value.c.m)
+                && resolved.tier==value.tier && direct_count>0,"mapped content resolves through the shared Native decomposer");
             CHECK(lp_id_eq(&record->id,&value.id) && !memcmp(record->m,value.c.m,sizeof record->m)
                 && record->pad==value.tier && record->hilbert==lp_hilbert4(&value.c),"%s:%u is its canonical identifier composition %s",list->name,slot,identifier);
             CHECK((np>1 || lp_highway_key(h,list,identifier)==slot) && lp_highway_slot(h,list,&value.id)==slot,
