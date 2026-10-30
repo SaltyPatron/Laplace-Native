@@ -7,7 +7,7 @@
 static lp_id word(const char *w){ lp_id id; lp_id_codepoints_utf8(w, strlen(w), &id); return id; }
 static lp_ref height_sink(void *context,const lp_ref *children,uint32_t count,uint8_t tier){
     if (context) ++*(size_t *)context;
-    CHECK(count>=2 && tier==lp_tier_above(children,count),"every emitted text composition has its actual recursive height");
+    CHECK(count>=2 && tier>=lp_tier_above(children,count),"every emitted text composition stands above its constituents; domain floors may lift it");
     return lp_ref_compose(children,count,tier);
 }
 typedef struct { const char *bytes; size_t offset, count; lp_text *reader; } Segments;
@@ -43,11 +43,11 @@ int main(void){
 
     lp_ref r = lp_text_parts(tx, (const uint8_t *)"Holmes", 6, parts, 16, &n);             /* a word fills every tier above it */
     lp_id h = word("Holmes");
-    CHECK(!memcmp(&r.id, &h, 16) && r.tier == 1 && n == 6, "[H,o,l,m,e,s] stands directly above scalar leaves (tier %d, %zu parts)", r.tier, n);
+    CHECK(!memcmp(&r.id, &h, 16) && r.tier == 2 && n == 6, "[H,o,l,m,e,s] retains its word floor over scalar leaves (tier %d, %zu parts)", r.tier, n);
 
     r = lp_text_parts(tx, (const uint8_t *)"Sherlock Holmes", 15, parts, 16, &n);          /* [[S,h,e,r,l,o,c,k], ' ', [H,o,l,m,e,s]] */
     lp_id k[3] = { word("Sherlock"), word(" "), word("Holmes") }, want; lp_id_compose(k, 3, &want);
-    CHECK(!memcmp(&r.id, &want, 16) && r.tier == 2 && n == 3, "two words and a codepoint (tier %d, %zu parts)", r.tier, n);
+    CHECK(!memcmp(&r.id, &want, 16) && r.tier == 3 && n == 3, "two words and a codepoint (tier %d, %zu parts)", r.tier, n);
     CHECK(n == 3 && !memcmp(&parts[0].id, &k[0], 16) && !memcmp(&parts[1].id, &k[1], 16) && !memcmp(&parts[2].id, &k[2], 16), "its parts, in order");
     CHECK(parts[1].tier == 0, "the space is a codepoint");
     lp_coord in[3] = { parts[0].c, parts[1].c, parts[2].c }, c; lp_coord_centroid(in, 3, &c);
@@ -56,7 +56,7 @@ int main(void){
     /* a separator separates: the default rules' joiners are segments of their own */
     r = lp_text_parts(tx, (const uint8_t *)"microsoft.com", 13, parts, 16, &n);
     lp_id ms[3] = { word("microsoft"), word("."), word("com") };
-    CHECK(n == 3 && !memcmp(&parts[0].id, &ms[0], 16) && !memcmp(&parts[1].id, &ms[1], 16) && !memcmp(&parts[2].id, &ms[2], 16) && r.tier == 2, "microsoft.com is [microsoft] [.] [com] (%zu parts, tier %d)", n, r.tier);
+    CHECK(n == 3 && !memcmp(&parts[0].id, &ms[0], 16) && !memcmp(&parts[1].id, &ms[1], 16) && !memcmp(&parts[2].id, &ms[2], 16) && r.tier == 3, "microsoft.com is [microsoft] [.] [com] (%zu parts, tier %d)", n, r.tier);
     r = lp_text_parts(tx, (const uint8_t *)"3.14 can't word_1", 17, parts, 16, &n);
     CHECK(n == 11, "3.14 can't word_1 is [3] [.] [14] [ ] [can] ['] [t] [ ] [word] [_] [1] (%zu parts)", n);
     /* Repetition changes occurrence counts, not the admitted UAX boundaries. */
@@ -65,7 +65,7 @@ int main(void){
         const char *text = repeated_words[w]; size_t length = strlen(text);
         r = lp_text_parts(tx, (const uint8_t *)text, length, parts, 16, &n);
         lp_id direct = word(text);
-        CHECK(n == length && r.tier == 1 && lp_id_eq(&r.id, &direct),
+        CHECK(n == length && r.tier == 2 && lp_id_eq(&r.id, &direct),
               "%s is one word composed directly from its %zu codepoints", text, length);
         for (size_t i = 0; i < n; i++)
             CHECK(parts[i].tier == 0 && lp_tier0_codepoint(t0, &parts[i].id) == text[i],
@@ -74,6 +74,12 @@ int main(void){
 
     r = lp_text_parts(tx, (const uint8_t *)"n", 1, parts, 16, &n);
     CHECK(r.tier == 0 && n == 1 && lp_tier0_codepoint(t0, &r.id) == 'n', "one codepoint is that codepoint");
+    r = lp_text_parts(tx,(const uint8_t *)"e\xcc\x81",3,parts,16,&n);
+    CHECK(r.tier==1 && n==2,"one multi-codepoint grapheme retains tier 1 when higher singleton levels reuse it");
+    r = lp_text_parts(tx,(const uint8_t *)"e\xcc\x81x",4,parts,16,&n);
+    CHECK(r.tier==2 && n==2 && parts[0].tier==1 && parts[1].tier==0,"a word preserves its floor across mixed grapheme and codepoint constituents");
+    r = lp_text_parts(tx,(const uint8_t *)"Hi!",3,parts,16,&n);
+    CHECK(r.tier==3 && n==2 && parts[0].tier==2,"punctuation creates a sentence composition without promoting a singleton word");
     lp_id none; memset(&none, 0xAB, 16);
     CHECK(lp_tier0_codepoint(t0, &none) == -1, "an ID that is no codepoint");
     const char *height_cases[]={"Holmes","Sherlock Holmes","banana","mississippi","aaaa","abababab","e\xcc\x81","First sentence. Another sentence.\n\nA paragraph."};

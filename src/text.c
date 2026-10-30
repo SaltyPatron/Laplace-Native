@@ -81,11 +81,14 @@ static void separators(const uint8_t *src, size_t n, Bounds *wb){
     if (wb->n) { if (o.n == o.cap) { o.cap = o.cap * 2 + 4; o.b = grow(o.b, o.cap * 4); } o.b[o.n++] = wb->b[wb->n - 1]; }
     free(wb->b); *wb = o;
 }
-static lp_ref made(lp_text *c, const lp_ref *ch, size_t n){
+static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t floor){
     if (n == 1) return ch[0];
-    /* UAX boundaries determine composition, while tier measures the resulting
-     * DAG height. Collapsing a one-child level must not leave an empty tier. */
+    /* The selected text recipe supplies a floor, independently of how many
+     * singleton levels reused their child. A word over scalar leaves is still
+     * tier 2. Constituents may lift a composition, never lower its domain floor.
+     * Singleton identity remains the child's and does not mint a wrapper. */
     uint8_t tier=lp_tier_above(ch,n);
+    if(tier<floor)tier=floor;
     lp_ref r = c->compose ? c->compose(c->sink, ch, (uint32_t)n, tier) : lp_ref_compose(ch, n, tier);
     if (c->want_parts) {                            /* the trunk is the last composition of more than one child */
         if (n > c->pcap) { c->pcap = n * 2; c->parts = grow(c->parts, c->pcap * sizeof(lp_ref)); }
@@ -121,24 +124,24 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
                 while (gi < c->gb.n && c->gb.b[gi] <= g0) gi++;
                 int32_t g1 = (gi < c->gb.n && c->gb.b[gi] < w1) ? c->gb.b[gi] : w1; size_t i = (size_t)g0; uint32_t cp; c->cps.n = 0;
                 while (i < (size_t)g1) { if (!lp_utf8_next(src, n, &i, &cp)) { cp = 0xFFFD; i++; } push(&c->cps, lp_ref_atom(c->t0, cp)); }
-                push(&c->g, made(c, c->cps.v, c->cps.n)); g0 = g1;
+                push(&c->g, made(c, c->cps.v, c->cps.n, 1)); g0 = g1;
             }
-            lp_ref segment = made(c, c->g.v, c->g.n);
+            lp_ref segment = made(c, c->g.v, c->g.n, 2);
             push(&c->segs, segment);
             if (c->segment) c->segment(c->segment_sink, (size_t)w0, (size_t)(w1 - w0), &segment);
             w0 = w1;
         }
-        push(&c->sents, made(c, c->segs.v, c->segs.n));
+        push(&c->sents, made(c, c->segs.v, c->segs.n, 3));
         int end_para = (si + 2 == c->sb.n);
         for (int32_t z = s1 - 1; z >= s0 && !end_para; z--) {
             if (src[z] != '\n' && src[z] != '\r' && src[z] != ' ' && src[z] != '\t') break;
             if ((src[z] == '\n' || src[z] == '\r') && cpy[z] != ' ') end_para = 1;
         }
-        if (end_para) { push(&c->paras, made(c, c->sents.v, c->sents.n)); c->sents.n = 0; }
+        if (end_para) { push(&c->paras, made(c, c->sents.v, c->sents.n, 4)); c->sents.n = 0; }
     }
-    if (c->sents.n) push(&c->paras, made(c, c->sents.v, c->sents.n));
+    if (c->sents.n) push(&c->paras, made(c, c->sents.v, c->sents.n, 4));
     utext_close(ut);
-    return made(c, c->paras.v, c->paras.n);
+    return made(c, c->paras.v, c->paras.n, 5);
 }
 
 lp_ref lp_text_segments(lp_text *c, const uint8_t *s, size_t n, lp_text_segment_fn visit, void *sink){

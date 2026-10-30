@@ -674,8 +674,9 @@ LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_comp
 typedef void (*lp_text_segment_fn)(void *sink, size_t offset, size_t length, const lp_ref *value);
 LP_API lp_ref lp_text_segments(lp_text *, const uint8_t *s, size_t n, lp_text_segment_fn, void *sink);
 /* Record compositions and visit their word segments in the same decomposition.
- * A tier is DAG height, not a lexical category; consumers must use these actual
- * boundaries rather than infer word boundaries from the root's tier. */
+ * The text recipe supplies tier floors 1..5; constituent altitude can lift them.
+ * Singleton levels reuse their child. Consumers must use these actual segment
+ * boundaries rather than infer word occurrences from the root's tier. */
 LP_API lp_ref lp_text_decompose_segments(lp_text *, const uint8_t *s, size_t n,
     lp_compose_fn, void *compose_sink, lp_text_segment_fn, void *segment_sink);
 /* The same, also giving the trunk's own constituents in order, repeats included (at most cap are written; the count
