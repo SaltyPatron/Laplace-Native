@@ -14,8 +14,10 @@ The programs are in [Laplace-Engine](https://github.com/SaltyPatron/Laplace-Engi
 
 ## Shared interfaces, from codepoints upward
 
-These are dependency layers, not additional semantic tiers. Recipes still own
-the domain's tier boundaries. Public contracts are in `include/laplace/`;
+These are dependency layers, not additional semantic tiers. Modalities supply
+their content boundaries. Recipes map source structures onto compositions that
+reference shared entities; packaging depth does not renumber the content. A text
+word remains tier 2 when referenced by XML, JSON or TSV. Public contracts are in `include/laplace/`;
 Engine, PostgreSQL and monorepo adapters call these owners.
 
 | Layer | Shared interface | What varies at the caller |

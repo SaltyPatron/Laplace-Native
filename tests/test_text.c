@@ -7,7 +7,7 @@
 static lp_id word(const char *w){ lp_id id; lp_id_codepoints_utf8(w, strlen(w), &id); return id; }
 static lp_ref height_sink(void *context,const lp_ref *children,uint32_t count,uint8_t tier){
     if (context) ++*(size_t *)context;
-    CHECK(count>=2 && tier>=lp_tier_above(children,count),"every emitted text composition stands above its constituents; domain floors may lift it");
+    CHECK(count>=2 && tier>=lp_tier_above(children,count),"every emitted text composition stands above its constituents; modality floors may lift it");
     return lp_ref_compose(children,count,tier);
 }
 typedef struct { const char *bytes; size_t offset, count; lp_text *reader; } Segments;

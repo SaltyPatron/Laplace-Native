@@ -83,10 +83,10 @@ static void separators(const uint8_t *src, size_t n, Bounds *wb){
 }
 static lp_ref made(lp_text *c, const lp_ref *ch, size_t n, uint8_t floor){
     if (n == 1) return ch[0];
-    /* The selected text recipe supplies a floor, independently of how many
-     * singleton levels reused their child. A word over scalar leaves is still
-     * tier 2. Constituents may lift a composition, never lower its domain floor.
-     * Singleton identity remains the child's and does not mint a wrapper. */
+    /* Text modality floors survive collapsed singleton levels. A word over
+     * scalar leaves is still tier 2. XML, JSON, TSV and other packaging trees
+     * reference this same content; their depth cannot renumber it. Constituents
+     * may lift a composition. Singleton identity remains the child's. */
     uint8_t tier=lp_tier_above(ch,n);
     if(tier<floor)tier=floor;
     lp_ref r = c->compose ? c->compose(c->sink, ch, (uint32_t)n, tier) : lp_ref_compose(ch, n, tier);
