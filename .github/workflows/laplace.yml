@@ -34,6 +34,8 @@ jobs:
           path: .engine/Laplace-Engine
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
+      - name: Verify prepared inputs retain stable build paths across runs
+        run: TMPDIR="$RUNNER_TEMP" bash tests/ci-prepared-inputs.sh
       - name: Build the canonical cache generator against this Native revision
         run: |
           . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
@@ -77,6 +79,13 @@ jobs:
         env:
           PRESET: ${{ matrix.preset }}
         run: bash scripts/ci-build.sh "$PRESET"
+      - name: Verify unchanged Native build does no work
+        env:
+          PRESET: ${{ matrix.preset }}
+        run: |
+          set -euo pipefail
+          cmake --build "$LAPLACE_BUILD/Laplace-Native/$PRESET" | tee "$RUNNER_TEMP/native-noop-$PRESET.log"
+          grep -F 'ninja: no work to do.' "$RUNNER_TEMP/native-noop-$PRESET.log"
       - name: Verify ISA evidence rejects skipped or missing tests
         run: python3 scripts/test-verify-isa.py
       - name: Execute tests on the local verification host

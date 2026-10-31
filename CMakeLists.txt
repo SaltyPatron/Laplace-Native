@@ -19,7 +19,11 @@ if(LP_FP_COMPILE)
   if(NOT EXISTS "${LAPLACE_COREMATH}/src/binary64/cos/cos.c")
     message(FATAL_ERROR "LAPLACE_COREMATH: no CORE-MATH checkout at '${LAPLACE_COREMATH}'")
   endif()
-  set(CORE_MATH "${LAPLACE_COREMATH}" CACHE PATH "CORE-MATH checkout")
+  # The standalone math project exposes CORE_MATH as an optional cache input.
+  # Its empty cache placeholder must not pin Native's environment-derived path.
+  if(NOT CORE_MATH)
+    set(CORE_MATH "${LAPLACE_COREMATH}")
+  endif()
   add_subdirectory(${LAPLACE_OPERATIONS}/math laplace-math EXCLUDE_FROM_ALL)
   add_library(lp_crmath ALIAS laplace_math_link)
 endif()
@@ -58,21 +62,29 @@ set_source_files_properties(${LP_ISA_V4_SOURCES} PROPERTIES COMPILE_OPTIONS "${L
 set_source_files_properties(src/isa/dot_avxvnni.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3};${LP_ISA_AVXVNNI}")
 set_source_files_properties(src/isa/dot_avx512vnni.c PROPERTIES COMPILE_OPTIONS "${LP_ISA_V4};${LP_ISA_VNNI512}")
 
+# Both library forms use the same PIC sources, definitions and FP contract.
+# Compile them once; consumers still select the existing static/shared targets.
+add_library(laplace_objects OBJECT ${LP_SOURCES} ${LP_ISA_SOURCES})
+target_include_directories(laplace_objects PRIVATE include src ${LP_GENERATED})
+target_compile_definitions(laplace_objects PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_HAVE_AVXVNNI LP_HAVE_AVX512VNNI LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
+target_compile_options(laplace_objects PRIVATE ${LP_C_FLAGS})
+target_link_libraries(laplace_objects PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
+if(TARGET laplace::math)
+  target_link_libraries(laplace_objects PRIVATE laplace::math)
+endif()
+
 foreach(kind static shared)
   if(kind STREQUAL "static")
-    add_library(laplace_static STATIC ${LP_SOURCES} ${LP_ISA_SOURCES})
+    add_library(laplace_static STATIC $<TARGET_OBJECTS:laplace_objects>)
     set(t laplace_static)
     if(NOT WIN32)                                     # on Windows the DLL's import library is laplace.lib
       set_target_properties(${t} PROPERTIES OUTPUT_NAME laplace)
     endif()
   else()
-    add_library(laplace SHARED ${LP_SOURCES} ${LP_ISA_SOURCES})
+    add_library(laplace SHARED $<TARGET_OBJECTS:laplace_objects>)
     set(t laplace)
   endif()
-  target_include_directories(${t} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
-                                      PRIVATE src ${LP_GENERATED})
-  target_compile_definitions(${t} PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_HAVE_AVXVNNI LP_HAVE_AVX512VNNI LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
-  target_compile_options(${t} PRIVATE ${LP_C_FLAGS})
+  target_include_directories(${t} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_link_libraries(${t} PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
   if(TARGET laplace::math)                          # everything that links Native takes its libm calls from laplace-math
     target_link_libraries(${t} PUBLIC laplace::math)
@@ -119,8 +131,8 @@ endif()
 # laplace_linalg: eigenmaps, Procrustes and Gram-Schmidt over Eigen and Spectra (headers only), kept out of the core
 # library like laplace_model. Eigen's packet math fuses with FMA under x86-64-v3 and its product blocking follows the
 # cache sizes cpuid reports, so it is compiled scalar with fixed blocking: the results are the scalar ones everywhere.
-set(LAPLACE_EIGEN_DIR "$ENV{LAPLACE_EIGEN_DIR}" CACHE PATH "Eigen 3.4 checkout")
-set(LAPLACE_SPECTRA_DIR "$ENV{LAPLACE_SPECTRA_DIR}" CACHE PATH "Spectra 1.x checkout")
+laplace_path(LAPLACE_EIGEN_DIR "" "Eigen 3.4 checkout")
+laplace_path(LAPLACE_SPECTRA_DIR "" "Spectra 1.x checkout")
 file(TO_CMAKE_PATH "${LAPLACE_EIGEN_DIR}" LP_EIGEN)
 file(TO_CMAKE_PATH "${LAPLACE_SPECTRA_DIR}" LP_SPECTRA)
 function(lp_linalg_library name)                    # extra arguments: compile options after the contract's
