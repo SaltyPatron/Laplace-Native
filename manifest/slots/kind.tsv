@@ -1,6 +1,0 @@
-# Frozen row-role slots. IDs compose each key's own Unicode text.
-slot	id	status	key
-0	7297b457eacda57cf5795d8a4f1e818d	live	claim
-1	28de6b53f504c866be7f1527dd8defd8	live	record
-2	2b8023db4a503f83a232bdda2c0831d9	live	tuple
-3	1b34eb90aa6b75a1083588f6b01c12d2	live	file
