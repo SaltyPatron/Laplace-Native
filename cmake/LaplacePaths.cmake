@@ -5,6 +5,11 @@
 # selections remain authoritative until explicitly cleared with -U. Every path is kept with forward slashes, which every platform
 # accepts: one compiled into C as a string (LP_TIER0_DEFAULT) must not carry backslash escapes.
 macro(laplace_path var default doc)
+  if(DEFINED CACHE{${var}})
+    # Type only an existing explicit cache input: CMake then normalizes an
+    # untyped relative -D path against the configure command's working directory.
+    set(${var} "${${var}}" CACHE PATH "${doc}")
+  endif()
   if(DEFINED ${var})
     file(TO_CMAKE_PATH "${${var}}" _lp_path)
   elseif(DEFINED ENV{${var}} AND NOT "$ENV{${var}}" STREQUAL "")
