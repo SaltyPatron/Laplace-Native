@@ -8,7 +8,7 @@
 #include <fenv.h>
 
 _Static_assert(sizeof(lp_tier0_record) == 64, "Tier-0 record layout changed");
-_Static_assert(LP_TIER0_COUNT == 1112064u, "the cache must contain only Unicode scalars");
+_Static_assert(LP_TIER0_COUNT == 1114112u, "the fixed projection population must not change");
 
 static void wall_regressions(void){
     lp_coord c = { { INT64_MIN, INT64_MIN, INT64_MIN, INT64_MIN } };
@@ -87,14 +87,13 @@ int main(int argc, char **argv){
     CHECK(ranks != NULL && order != NULL, "cannot allocate the rank-permutation check");
     if (!ranks || !order) { free(ranks); free(order); DONE("tier0"); }
     size_t ids_bad = 0, rank_bad = 0, coord_bad = 0, hilbert_bad = 0, pad_bad = 0;
-    size_t scalar_count = 0, atom_bad = 0, reverse_bad = 0, point_bad = 0;
+    size_t codepoint_count = 0, atom_bad = 0, reverse_bad = 0, point_bad = 0;
     size_t absent = 0, unsorted = 0;
     for (size_t i = 1; i < LP_TIER0_COUNT; i++)
         unsorted += memcmp(t0[i - 1].id.b, t0[i].id.b, 16) >= 0;
     for (uint32_t cp = 0; cp < LP_NCP; cp++) {
-        if (!lp_unicode_scalar(cp)) continue;
         const lp_tier0_record *record = lp_tier0_at(t0, cp);
-        scalar_count++;
+        codepoint_count++;
         if (!record) { absent++; continue; }
         uint8_t utf8[4]; size_t len = lp_utf8_put(cp, utf8); lp_id expected;
         blake3_hasher h; blake3_hasher_init(&h);
@@ -128,20 +127,18 @@ int main(int argc, char **argv){
     CHECK(pad_bad == 0, "%zu records have nondeterministic padding", pad_bad);
     CHECK(atom_bad == 0, "%zu atoms differ from their cached ID or coordinate", atom_bad);
     CHECK(reverse_bad == 0, "%zu IDs resolve to the wrong codepoint", reverse_bad);
-    CHECK(scalar_count == 1112064u, "wrong scalar count: %zu", scalar_count);
-    CHECK(absent == 0, "%zu Unicode scalars are missing", absent);
+    CHECK(codepoint_count == LP_NCP, "wrong codepoint count: %zu", codepoint_count);
+    CHECK(absent == 0, "%zu Unicode codepoints are missing", absent);
     CHECK(unsorted == 0, "%zu adjacent IDs are not strictly increasing", unsorted);
-    CHECK(lp_tier0_at(t0, 0xd800u) == NULL && lp_tier0_at(t0, 0xdfffu) == NULL,
-          "surrogates are not Tier-0 atoms");
     CHECK(lp_tier0_at(t0, LP_NCP) == NULL && lp_tier0_at(NULL, 'a') == NULL,
           "invalid codepoints and unknown mappings are rejected");
     lp_id missing; memset(&missing, 0x5a, sizeof missing);
     CHECK(!lp_tier0_contains(NULL, &missing) && !lp_tier0_contains(t0, NULL)
           && !lp_tier0_contains(t0, &missing), "membership rejects missing mappings and IDs");
-    const uint32_t members[] = {0, 0xd7ffu, 0xe000u, 0x10ffffu};
+    const uint32_t members[] = {0, 0xd7ffu, 0xd800u, 0xdfffu, 0xe000u, 0x10ffffu};
     for (size_t i = 0; i < sizeof members / sizeof *members; i++) {
         lp_id id; lp_id_codepoint(members[i], &id);
-        CHECK(lp_tier0_contains(t0, &id), "membership includes scalar boundary U+%04X", members[i]);
+        CHECK(lp_tier0_contains(t0, &id), "membership includes codespace position U+%04X", members[i]);
     }
 
     if (!absent && !rank_bad) {
@@ -153,16 +150,16 @@ int main(int argc, char **argv){
                 CHECK(fesetround(pass ? FE_DOWNWARD : FE_UPWARD) == 0, "set caller rounding mode");
                 int requested = fegetround();
                 bool built = lp_tier0_build(order, LP_TIER0_COUNT, rebuilt);
-                CHECK(built, "full native scalar cache generation %d", pass);
+                CHECK(built, "full native codespace cache generation %d", pass);
                 CHECK(fegetround() == requested, "generation preserves its caller's rounding mode");
                 CHECK(fesetround(rounding) == 0, "restore caller rounding mode");
                 if (built) CHECK(memcmp(t0, rebuilt, (size_t)LP_TIER0_COUNT * sizeof *t0) == 0,
                                  "native generation %d differs from the UCD-generated artifact", pass);
             }
-            uint32_t first = order[0]; order[0] = 0xd800u;
-            CHECK(!lp_tier0_build(order, LP_TIER0_COUNT, rebuilt), "generation rejects surrogates");
+            uint32_t first = order[0]; order[0] = LP_NCP;
+            CHECK(!lp_tier0_build(order, LP_TIER0_COUNT, rebuilt), "generation rejects positions outside the codespace");
             order[0] = order[1];
-            CHECK(!lp_tier0_build(order, LP_TIER0_COUNT, rebuilt), "generation rejects duplicate scalars");
+            CHECK(!lp_tier0_build(order, LP_TIER0_COUNT, rebuilt), "generation rejects duplicate codepoints");
             order[0] = first;
             CHECK(!lp_tier0_build(order, LP_TIER0_COUNT - 1, rebuilt), "generation rejects incomplete orders");
             free(rebuilt);
