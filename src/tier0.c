@@ -1,7 +1,7 @@
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif
-/* Tier 0: 1,112,064 Unicode scalars, sorted by content ID and mapped read-only.
+/* Tier 0: the fixed 1,114,112-point Unicode codespace, sorted by content ID and mapped read-only.
  * Codepoint ordinals are process-local acceleration addresses, never file offsets or identities. */
 #include "laplace/tier0.h"
 #include "internal.h"
@@ -295,7 +295,6 @@ static int collation_elements(const UnicodeOrder *u, uint32_t cp, CollationEleme
 static bool unicode_keys(UnicodeOrder *u){
     u->keys = calloc(LP_NCP, sizeof(CollationKey)); if (!u->keys) return false;
     for (uint32_t cp = 0; cp < LP_NCP; cp++) {
-        if (!lp_unicode_scalar(cp)) continue;
         CollationElement elements[64]; uint32_t nfd[64];
         int count = collation_elements(u, cp, elements), nd = unicode_nfd(u, cp, nfd, 64, 0);
         if (count < 0 || nd < 0) { errno = EINVAL; return false; }
@@ -350,7 +349,7 @@ bool lp_tier0_from_ucd(const char *root, lp_tier0_record *out){
     scratch = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
     if (!order || !scratch) { ok = false; goto done; }
     size_t count = 0;
-    for (uint32_t cp = 0; cp < LP_NCP; cp++) if (lp_unicode_scalar(cp)) order[count++] = cp;
+    for (uint32_t cp = 0; cp < LP_NCP; cp++) order[count++] = cp;
     /* Context-carrying merge sort keeps generation reentrant on both Windows and POSIX. */
     for (size_t width = 1; width < count; width *= 2) {
         for (size_t start = 0; start < count; start += 2 * width) {
@@ -376,9 +375,7 @@ bool lp_tier0_build(const uint32_t *order, size_t count, lp_tier0_record *out){
     if (!seen) return false;
     for (size_t i = 0; i < count; i++) {
         uint32_t cp = order[i];
-        if (!lp_unicode_scalar(cp)) { free(seen); errno = EINVAL; return false; }
-        uint32_t slot = cp < 0xd800u ? cp : cp - 2048u;
-        if (seen[slot]++) { free(seen); errno = EINVAL; return false; }
+        if (cp >= LP_NCP || seen[cp]++) { free(seen); errno = EINVAL; return false; }
     }
     free(seen);
     points = malloc(count * sizeof *points); walk = malloc(count * sizeof *walk);
@@ -436,7 +433,7 @@ const char *lp_tier0_path(void){
 typedef struct Tier0Index {
     const lp_tier0_record *table;
     lp_idindex *ids;
-    uint32_t *slot_of_scalar, *scalar_of_slot;
+    uint32_t *slot_of_codepoint, *codepoint_of_slot;
     struct Tier0Index *next;
 } Tier0Index;
 
@@ -451,7 +448,7 @@ static const Tier0Index *index_for(const lp_tier0_record *table){
 
 static void index_free(Tier0Index *x){
     if (!x) return;
-    lp_idindex_free(x->ids); free(x->slot_of_scalar); free(x->scalar_of_slot); free(x);
+    lp_idindex_free(x->ids); free(x->slot_of_codepoint); free(x->codepoint_of_slot); free(x);
 }
 
 static const void *tier0_open(const char *path){
@@ -462,9 +459,9 @@ static const void *tier0_open(const char *path){
     unsigned char *ranks = calloc(LP_TIER0_COUNT, 1);
     if (!x || !ranks) goto invalid;
     x->table = table;
-    x->slot_of_scalar = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
-    x->scalar_of_slot = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
-    if (!x->slot_of_scalar || !x->scalar_of_slot) goto invalid;
+    x->slot_of_codepoint = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
+    x->codepoint_of_slot = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
+    if (!x->slot_of_codepoint || !x->codepoint_of_slot) goto invalid;
 
     /* Refuse corrupt, unsorted, duplicated or differently shaped artifacts before publishing a mapping. */
     for (size_t i = 0; i < LP_TIER0_COUNT; i++) {
@@ -476,14 +473,12 @@ static const void *tier0_open(const char *path){
     }
     x->ids = lp_idindex_build(table, LP_TIER0_COUNT, sizeof *table);
     if (!x->ids) goto invalid;
-    uint32_t ordinal = 0;
     for (uint32_t cp = 0; cp < LP_NCP; cp++) {
-        if (cp == 0xd800u) cp = 0xe000u;
         lp_id id; lp_id_codepoint(cp, &id);
         uint64_t probe = 0; int64_t slot = lp_idindex_find(x->ids, &id, &probe);
         if (slot < 0) goto invalid;
-        x->slot_of_scalar[ordinal++] = (uint32_t)slot;
-        x->scalar_of_slot[slot] = cp;
+        x->slot_of_codepoint[cp] = (uint32_t)slot;
+        x->codepoint_of_slot[slot] = cp;
     }
     free(ranks);
     lp_lock_take(&index_mu);
@@ -502,9 +497,9 @@ const lp_tier0_record *lp_tier0_map(const char *path){
 }
 
 const lp_tier0_record *lp_tier0_at(const lp_tier0_record *table, uint32_t cp){
-    if (!lp_unicode_scalar(cp)) return NULL;
+    if (cp >= LP_NCP) return NULL;
     const Tier0Index *x = index_for(table);
-    return x ? table + x->slot_of_scalar[cp < 0xd800u ? cp : cp - 2048u] : NULL;
+    return x ? table + x->slot_of_codepoint[cp] : NULL;
 }
 
 const lp_tier0_record *lp_tier0_find(const lp_tier0_record *table, const lp_id *id){
@@ -522,7 +517,7 @@ int64_t lp_tier0_codepoint(const lp_tier0_record *table, const lp_id *id){
     const Tier0Index *x = index_for(table);
     if (!x || !id) return -1;
     uint64_t probe = 0; int64_t slot = lp_idindex_find(x->ids, id, &probe);
-    return slot < 0 ? -1 : (int64_t)x->scalar_of_slot[slot];
+    return slot < 0 ? -1 : (int64_t)x->codepoint_of_slot[slot];
 }
 
 void lp_tier0_fingerprint(const lp_tier0_record *t0, uint8_t out[32]){

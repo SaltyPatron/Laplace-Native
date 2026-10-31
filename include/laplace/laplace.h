@@ -476,8 +476,8 @@ typedef struct { lp_id id; int64_t m[4]; uint64_t hilbert; uint32_t rank, pad; }
 
 /* Where tier 0 is: $LAPLACE_TIER0, or the path the library was built with. */
 LP_API const char *lp_tier0_path(void);
-/* Memory-map 1,112,064 ID-sorted Unicode scalar records; NULL or "" maps lp_tier0_path().
- * Missing, malformed, unsorted and non-scalar tables are rejected. Codepoint lookup is
+/* Memory-map 1,114,112 ID-sorted Unicode codepoint records; NULL or "" maps lp_tier0_path().
+ * Missing, malformed, unsorted and incomplete tables are rejected. Codepoint lookup is
  * lp_tier0_at() from laplace/tier0.h; a codepoint is never an offset into this file. */
 LP_API const lp_tier0_record *lp_tier0_map(const char *path);
 /* The codepoint with this ID, or -1: O(1), from a table built on first use. */
