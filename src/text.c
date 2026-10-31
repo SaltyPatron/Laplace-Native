@@ -51,9 +51,19 @@ void lp_text_free(lp_text *c){
     free(c->sb.b); free(c->wb.b); free(c->gb.b); free(c->cps.v); free(c->g.v); free(c->segs.v); free(c->sents.v); free(c->paras.v);
     free(c->cpy); free(c->parts); free(c->identifiers.v); free(c);
 }
-static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out){
+static int codepoint_boundary(const uint8_t *src, size_t n, size_t at){
+    if (!at || at >= n || (src[at] & 0xc0u) != 0x80u) return 1;
+    size_t first = at;
+    while (first && at - first < 3 && (src[first] & 0xc0u) == 0x80u) first--;
+    size_t after = first; uint32_t cp;
+    return !lp_utf8_next(src, n, &after, &cp) || after <= at;
+}
+static void bounds_of(UBreakIterator *bi, UText *ut, Bounds *out, const uint8_t *src, size_t n){
     UErrorCode e = U_ZERO_ERROR; ubrk_setUText(bi, ut, &e); out->n = 0;
     for (int32_t p = ubrk_first(bi); p != UBRK_DONE; p = ubrk_next(bi)) {
+        /* ICU treats a generalized UTF-8 surrogate as replacement characters.
+         * Its byte boundaries cannot split a codepoint admitted by Native. */
+        if (!codepoint_boundary(src, n, (size_t)p)) continue;
         if (out->n == out->cap) { out->cap = out->cap ? out->cap * 2 : 1024; out->b = grow(out->b, out->cap * 4); }
         out->b[out->n++] = p;
     }
@@ -113,7 +123,7 @@ lp_ref lp_text_decompose(lp_text *c, const uint8_t *src, size_t n, lp_compose_fn
         i = e0;
     }
     UErrorCode e = U_ZERO_ERROR; UText *ut = utext_openUTF8(NULL, (const char *)cpy, (int64_t)n, &e);
-    bounds_of(c->brk[0], ut, &c->sb); bounds_of(c->brk[1], ut, &c->wb); bounds_of(c->brk[2], ut, &c->gb);
+    bounds_of(c->brk[0], ut, &c->sb, src, n); bounds_of(c->brk[1], ut, &c->wb, src, n); bounds_of(c->brk[2], ut, &c->gb, src, n);
     separators(src, n, &c->wb);
     c->paras.n = 0; c->sents.n = 0; size_t wi = 0, gi = 0;
     for (size_t si = 0; si + 1 < c->sb.n; si++) {

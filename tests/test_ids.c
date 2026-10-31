@@ -50,12 +50,12 @@ int main(void){
                           "source text is not silently normalized");
     lp_id_codepoint(0x1f44d, marks); lp_id_codepoint(0x1f3fd, marks + 1); lp_id_compose(marks, 2, &grapheme);
     CHECK(lp_text_id(text, "\xf0\x9f\x91\x8d\xf0\x9f\x8f\xbd", 8, &actual) && lp_id_eq(&actual, &grapheme), "emoji modifiers remain in their grapheme");
-    const char *invalid[] = { "\xc0\xaf", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xf0\x9f" };
-    const size_t sizes[] = { 2, 3, 4, 2 };
+    const char *invalid[] = { "\xc0\xaf", "\xf4\x90\x80\x80", "\xf0\x9f" };
+    const size_t sizes[] = { 2, 4, 2 };
     for (size_t i = 0; i < sizeof sizes / sizeof *sizes; i++) {
         memset(&actual, 0xa5, sizeof actual); lp_id before = actual;
         CHECK(!lp_text_id(text, invalid[i], sizes[i], &actual) && lp_id_eq(&actual, &before),
-              "malformed/non-scalar UTF-8 %zu does not mint an entity", i);
+              "malformed/noncanonical UTF-8 %zu does not mint an entity", i);
     }
     CHECK(!lp_text_id(text, "", 0, &actual) && !lp_text_id(NULL, "a", 1, &actual), "reject missing content or context");
     lp_idmap_free(rows.entities); lp_text_free(text); lp_text_free(engine);

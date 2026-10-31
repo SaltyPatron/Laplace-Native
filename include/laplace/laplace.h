@@ -665,7 +665,7 @@ typedef struct lp_text lp_text;
 LP_API lp_text *lp_text_new(const lp_tier0_record *t0);
 LP_API void     lp_text_free(lp_text *);
 /* Canonical UAX #29 tree identity, using the same decomposer as the Engine recording callback. Context belongs
- * to the calling thread. Empty or noncanonical UTF-8 is rejected before decomposition. */
+ * to the calling thread. Empty or noncanonical generalized UTF-8 is rejected before decomposition. */
 LP_API bool lp_text_id(lp_text *context, const char *utf8, size_t len, lp_id *out);
 LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_compose_fn compose, void *sink);
 /* Visit the decomposer's actual word segments in source order, including

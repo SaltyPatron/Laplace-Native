@@ -74,6 +74,27 @@ int main(void){
 
     r = lp_text_parts(tx, (const uint8_t *)"n", 1, parts, 16, &n);
     CHECK(r.tier == 0 && n == 1 && lp_tier0_codepoint(t0, &r.id) == 'n', "one codepoint is that codepoint");
+    lp_text *surrogate_reader = lp_text_new(t0);
+    CHECK(surrogate_reader != NULL, "independent generalized UTF-8 reader");
+    for (uint32_t cp = 0xd800; cp <= 0xdfff; cp++) {
+        uint8_t bytes[4]; size_t length = lp_utf8_put(cp, bytes);
+        r = lp_text_parts(tx, bytes, length, parts, 16, &n);
+        lp_ref atom = lp_ref_atom(t0, cp);
+        CHECK(r.tier == 0 && n == 1 && lp_id_eq(&r.id, &atom.id)
+              && !memcmp(&r.c, &atom.c, sizeof r.c) && lp_id_eq(&parts[0].id, &atom.id),
+              "U+%04X remains its one canonical codepoint without replacement atoms", cp);
+        Segments original = {(const char *)bytes, 0, 0, surrogate_reader};
+        segmented = lp_text_segments(tx, bytes, length, check_segment, &original);
+        CHECK(original.count == 1 && original.offset == length && lp_id_eq(&segmented.id, &atom.id),
+              "U+%04X segmentation preserves its complete original bytes", cp);
+    }
+    lp_text_free(surrogate_reader);
+    const uint8_t halves[] = {0xed,0xa0,0x80,0xed,0xb0,0x80};
+    r = lp_text_parts(tx, halves, sizeof halves, parts, 16, &n);
+    lp_id half_ids[2], joined; lp_id_codepoint(0xd800, &half_ids[0]); lp_id_codepoint(0xdc00, &half_ids[1]);
+    lp_id_compose(half_ids, 2, &joined);
+    CHECK(n == 2 && lp_id_eq(&r.id, &joined) && lp_id_eq(&parts[0].id, &half_ids[0])
+          && lp_id_eq(&parts[1].id, &half_ids[1]), "adjacent surrogate codepoints retain their identities and order");
     r = lp_text_parts(tx,(const uint8_t *)"e\xcc\x81",3,parts,16,&n);
     CHECK(r.tier==1 && n==2,"one multi-codepoint grapheme retains tier 1 when higher singleton levels reuse it");
     r = lp_text_parts(tx,(const uint8_t *)"e\xcc\x81x",4,parts,16,&n);
