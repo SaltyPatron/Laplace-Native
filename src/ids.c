@@ -8,7 +8,7 @@ bool lp_text_id(lp_text *context, const char *utf8, size_t len, lp_id *out){
     const uint8_t *bytes = (const uint8_t *)utf8;
     for (size_t i = 0; i < len; ) {
         size_t start = i; uint32_t cp; uint8_t canonical[4];
-        if (!lp_utf8_next(bytes, len, &i, &cp) || !lp_unicode_scalar(cp)) { errno = EILSEQ; return false; }
+        if (!lp_utf8_next(bytes, len, &i, &cp)) { errno = EILSEQ; return false; }
         size_t n = lp_utf8_put(cp, canonical);
         if (i - start != n || memcmp(bytes + start, canonical, n)) { errno = EILSEQ; return false; }
     }
