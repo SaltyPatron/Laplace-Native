@@ -1,14 +1,18 @@
 # Where everything Laplace builds against and runs with is. One definition, shared by Laplace-Native, Laplace-postgres,
 # and Laplace-Engine: each value comes from the environment (laplace.env) when it is set there, else from the default
-# here. -D on the command line overrides both. Every path is kept with forward slashes, which every platform
+# here on each configure. Explicit -D/cache or parent selections override both. Defaults are normal variables:
+# caching an environment-derived default would silently pin it after the environment changed. Existing cache
+# selections remain authoritative until explicitly cleared with -U. Every path is kept with forward slashes, which every platform
 # accepts: one compiled into C as a string (LP_TIER0_DEFAULT) must not carry backslash escapes.
 macro(laplace_path var default doc)
-  if(DEFINED ENV{${var}} AND NOT "$ENV{${var}}" STREQUAL "")
+  if(DEFINED ${var})
+    file(TO_CMAKE_PATH "${${var}}" _lp_path)
+  elseif(DEFINED ENV{${var}} AND NOT "$ENV{${var}}" STREQUAL "")
     file(TO_CMAKE_PATH "$ENV{${var}}" _lp_path)
-    set(${var} "${_lp_path}" CACHE PATH "${doc}")
   else()
-    set(${var} "${default}" CACHE PATH "${doc}")
+    file(TO_CMAKE_PATH "${default}" _lp_path)
   endif()
+  set(${var} "${_lp_path}")
 endmacro()
 
 laplace_path(LAPLACE_SRC        "/repos/src"                      "source root: Laplace's repositories and its dependencies'")
