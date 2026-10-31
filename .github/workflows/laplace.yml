@@ -19,7 +19,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: { persist-credentials: false }
+        with: { persist-credentials: false, clean: false }
+      - name: Prepare the exact candidate while retaining pinned dependency sources
+        run: bash scripts/ci-checkout.sh
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Operations
@@ -36,6 +38,8 @@ jobs:
           persist-credentials: false
       - name: Verify prepared inputs retain stable build paths across runs
         run: TMPDIR="$RUNNER_TEMP" bash tests/ci-prepared-inputs.sh
+      - name: Verify repeated job cleanup preserves unchanged compilation inputs
+        run: TMPDIR="$RUNNER_TEMP" bash tests/ci-checkout.sh
       - name: Build the canonical cache generator against this Native revision
         run: |
           . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
@@ -58,7 +62,9 @@ jobs:
       matrix: { preset: [icx-release, gcc-release] }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: { persist-credentials: false }
+        with: { persist-credentials: false, clean: false }
+      - name: Prepare the exact candidate while retaining pinned dependency sources
+        run: bash scripts/ci-checkout.sh
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Operations
@@ -120,7 +126,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: { persist-credentials: false }
+        with: { persist-credentials: false, clean: false }
+      - name: Prepare the exact candidate while retaining pinned dependency sources
+        run: bash scripts/ci-checkout.sh
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Operations
