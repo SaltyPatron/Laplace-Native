@@ -113,18 +113,6 @@ else()
   message(WARNING "ICU not found at ${LAPLACE_ICU_DIR}: laplace_text is not built, and neither is anything that decomposes text")
 endif()
 
-# ts_runtime: the pinned tree-sitter C runtime shared by Laplace-Engine and Laplace-MCP.
-if(NOT TARGET ts_runtime AND EXISTS "${LAPLACE_TREESITTER}/lib/src/lib.c")
-  add_library(ts_runtime STATIC EXCLUDE_FROM_ALL "${LAPLACE_TREESITTER}/lib/src/lib.c")
-  target_include_directories(ts_runtime PUBLIC "${LAPLACE_TREESITTER}/lib/include"
-                             PRIVATE "${LAPLACE_TREESITTER}/lib/src" "${LAPLACE_TREESITTER}/lib/src/wasm")
-  if(WIN32)
-    target_compile_options(ts_runtime PRIVATE /w /O2)
-  else()
-    target_compile_options(ts_runtime PRIVATE -w -O3 -fPIC)
-  endif()
-endif()
-
 # laplace_model: the model-decomposition kernels, which need MKL and OpenMP; kept out of the core library so the
 # PostgreSQL extension does not depend on them. MKL through its own CMake package (on CMAKE_PREFIX_PATH in the oneAPI
 # dev shell on both platforms), as the single dynamic library mkl_rt; reproducible mode is pinned in rowsig.c.
