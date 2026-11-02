@@ -13,7 +13,7 @@ permissions:
   id-token: write
 jobs:
   lease:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, laplace, Laplace-Native, staging]
     timeout-minutes: 15
     steps:
       # Public repositories cannot call private reusable workflows. Use the same pinned Operations action
