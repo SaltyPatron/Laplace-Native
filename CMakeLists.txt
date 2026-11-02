@@ -100,9 +100,9 @@ if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
   add_library(laplace_text STATIC src/text.c src/ids.c)
   target_include_directories(laplace_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
-  if(WIN32)                                         # ICU's Windows release: lib64, and its own library names
-    target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib64)
-    target_link_libraries(laplace_text PUBLIC laplace_static icuin icuuc icudt)
+  if(WIN32)                                         # ICU's Windows release: lib64, linked by full path so LIB cannot shadow it
+    target_link_libraries(laplace_text PUBLIC laplace_static
+      "${LAPLACE_ICU_DIR}/lib64/icuin.lib" "${LAPLACE_ICU_DIR}/lib64/icuuc.lib" "${LAPLACE_ICU_DIR}/lib64/icudt.lib")
   else()
     target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib)
     target_link_libraries(laplace_text PUBLIC laplace_static icui18n icuuc icudata)
@@ -111,6 +111,18 @@ if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
   endif()
 else()
   message(WARNING "ICU not found at ${LAPLACE_ICU_DIR}: laplace_text is not built, and neither is anything that decomposes text")
+endif()
+
+# ts_runtime: the pinned tree-sitter C runtime shared by Laplace-Engine and Laplace-MCP.
+if(NOT TARGET ts_runtime AND EXISTS "${LAPLACE_TREESITTER}/lib/src/lib.c")
+  add_library(ts_runtime STATIC EXCLUDE_FROM_ALL "${LAPLACE_TREESITTER}/lib/src/lib.c")
+  target_include_directories(ts_runtime PUBLIC "${LAPLACE_TREESITTER}/lib/include"
+                             PRIVATE "${LAPLACE_TREESITTER}/lib/src" "${LAPLACE_TREESITTER}/lib/src/wasm")
+  if(WIN32)
+    target_compile_options(ts_runtime PRIVATE /w /O2)
+  else()
+    target_compile_options(ts_runtime PRIVATE -w -O3 -fPIC)
+  endif()
 endif()
 
 # laplace_model: the model-decomposition kernels, which need MKL and OpenMP; kept out of the core library so the
