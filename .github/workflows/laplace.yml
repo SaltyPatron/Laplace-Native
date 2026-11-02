@@ -1,11 +1,6 @@
 name: Laplace-Native
 on:
   workflow_dispatch:
-    inputs:
-      qualify_cloud:
-        description: "Explicitly start the cloud host for full ISA qualification"
-        type: boolean
-        default: false
   push:
     branches: [main]
   pull_request:
@@ -119,7 +114,7 @@ jobs:
           retention-days: 7
   cloud-acquire:
     needs: native
-    if: github.event_name == 'workflow_dispatch' && inputs.qualify_cloud
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     permissions: { contents: read, id-token: write }
     uses: ./.github/workflows/cloud-lease.yml
     with: { operation: acquire }
@@ -175,7 +170,7 @@ jobs:
       operations-checkout: ${{ secrets.LAPLACE_CHECKOUT }}
   deploy:
     needs: [native, isa]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.native.result == 'success' && (needs.isa.result == 'success' || needs.isa.result == 'skipped')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, laplace, Laplace-Native, staging]
     timeout-minutes: 5
     steps:
