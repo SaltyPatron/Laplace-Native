@@ -100,9 +100,9 @@ if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
   add_library(laplace_text STATIC src/text.c src/ids.c)
   target_include_directories(laplace_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
-  if(WIN32)                                         # ICU's Windows release: lib64, and its own library names
-    target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib64)
-    target_link_libraries(laplace_text PUBLIC laplace_static icuin icuuc icudt)
+  if(WIN32)                                         # ICU's Windows release: lib64, linked by full path so LIB cannot shadow it
+    target_link_libraries(laplace_text PUBLIC laplace_static
+      "${LAPLACE_ICU_DIR}/lib64/icuin.lib" "${LAPLACE_ICU_DIR}/lib64/icuuc.lib" "${LAPLACE_ICU_DIR}/lib64/icudt.lib")
   else()
     target_link_directories(laplace_text PUBLIC ${LAPLACE_ICU_DIR}/lib)
     target_link_libraries(laplace_text PUBLIC laplace_static icui18n icuuc icudata)
