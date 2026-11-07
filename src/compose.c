@@ -33,9 +33,10 @@ static bool compose_refs(const lp_ref *ch, const uint64_t *runs, size_t n, uint8
         total += runs[i];
     }
     if (total > SIZE_MAX / sizeof(lp_id)) return false;
-    out->tier = tier;
+    (void)tier;
     if (!total) return true;
     if (total == 1) { *out = ch[0]; return true; }
+    out->tier = lp_tier_above(ch, n);
     lp_coord_sum sum = {{0, 0, 0, 0}, total};
     for (size_t i = 0; i < n; i++) {
         uint64_t copies = runs ? runs[i] : 1;

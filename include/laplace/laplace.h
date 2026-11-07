@@ -674,10 +674,9 @@ LP_API lp_ref   lp_text_decompose(lp_text *, const uint8_t *s, size_t n, lp_comp
 typedef void (*lp_text_segment_fn)(void *sink, size_t offset, size_t length, const lp_ref *value);
 LP_API lp_ref lp_text_segments(lp_text *, const uint8_t *s, size_t n, lp_text_segment_fn, void *sink);
 /* Record compositions and visit their word segments in the same decomposition.
- * The text modality supplies tier floors 1..5; constituent altitude can lift them.
- * Packaging trees reference these content entities without renumbering them.
- * Singleton levels reuse their child. Consumers must use these actual segment
- * boundaries rather than infer word occurrences from the root's tier. */
+ * A tier is Merkle DAG height (1 + max(child.tier)), not a lexical category;
+ * singleton levels reuse their child without wrapper nodes. Consumers must use
+ * these actual segment boundaries rather than infer word occurrences from tier. */
 LP_API lp_ref lp_text_decompose_segments(lp_text *, const uint8_t *s, size_t n,
     lp_compose_fn, void *compose_sink, lp_text_segment_fn, void *segment_sink);
 /* The same, also giving the trunk's own constituents in order, repeats included (at most cap are written; the count
