@@ -172,6 +172,47 @@ int main(int argc, char **argv){
     if (file_fingerprint(path, streamed))
         CHECK(memcmp(mapped, streamed, 32) == 0, "mapped and streamed BLAKE3 fingerprints differ");
     lp_hex(mapped, 32, hex); printf("tier0 BLAKE3-256: %s\n", hex);
+
+    CHECK(lp_tier0_parse_branches("ascii") == LP_TIER0_BRANCH_ASCII, "parse ascii branch");
+    CHECK(lp_tier0_parse_branches("utf") == (LP_TIER0_BRANCH_ASCII | LP_TIER0_BRANCH_UTF), "parse utf profile");
+    CHECK(lp_tier0_parse_branches("cjk") == LP_TIER0_BRANCH_BMP, "parse cjk profile");
+    CHECK(lp_tier0_parse_branches("ascii+cjk") == (LP_TIER0_BRANCH_ASCII | LP_TIER0_BRANCH_CJK), "parse ascii+cjk branches");
+    CHECK(lp_tier0_parse_branches("full") == LP_TIER0_BRANCH_ALL, "parse full profile");
+    CHECK(lp_tier0_active_branches(t0) == LP_TIER0_BRANCH_ALL, "full mapping reports all branches");
+    CHECK(lp_tier0_record_count(t0) == LP_TIER0_COUNT, "full mapping reports complete record count");
+
+    const lp_tier0_record *ascii_t0 = lp_tier0_map_branches(path, LP_TIER0_BRANCH_ASCII);
+    CHECK(ascii_t0 != NULL, "map ASCII Tier-0 branch");
+    if (ascii_t0) {
+        CHECK(lp_tier0_active_branches(ascii_t0) == LP_TIER0_BRANCH_ASCII, "ASCII branch mask");
+        CHECK(lp_tier0_record_count(ascii_t0) == LP_TIER0_ASCII_COUNT, "ASCII branch count");
+        const lp_tier0_record *a_full = lp_tier0_at(t0, 'A'), *a_ascii = lp_tier0_at(ascii_t0, 'A');
+        CHECK(a_full && a_ascii && memcmp(a_full, a_ascii, sizeof *a_full) == 0,
+              "ASCII branch preserves exact global coordinate and ID for U+0041");
+        CHECK(lp_tier0_at(ascii_t0, 0x00e9u) == NULL && lp_tier0_at(ascii_t0, 0x4e2du) == NULL,
+              "ASCII branch excludes non-ASCII scalars");
+    }
+
+    const lp_tier0_record *utf_t0 = lp_tier0_map_branches(path, LP_TIER0_BRANCH_ASCII | LP_TIER0_BRANCH_UTF);
+    CHECK(utf_t0 != NULL, "map UTF Tier-0 branch");
+    if (utf_t0) {
+        CHECK(lp_tier0_record_count(utf_t0) == LP_TIER0_ASCII_COUNT + LP_TIER0_UTF_COUNT, "UTF branch count");
+        const lp_tier0_record *e_full = lp_tier0_at(t0, 0x00e9u), *e_utf = lp_tier0_at(utf_t0, 0x00e9u);
+        CHECK(e_full && e_utf && memcmp(e_full, e_utf, sizeof *e_full) == 0,
+              "UTF branch preserves exact global coordinate and ID for U+00E9");
+        CHECK(lp_tier0_at(utf_t0, 0x4e2du) == NULL, "UTF branch excludes CJK scalars");
+    }
+
+    const lp_tier0_record *cjk_t0 = lp_tier0_map_branches(path, LP_TIER0_BRANCH_ASCII | LP_TIER0_BRANCH_CJK);
+    CHECK(cjk_t0 != NULL, "map ASCII+CJK Tier-0 branch");
+    if (cjk_t0) {
+        CHECK(lp_tier0_record_count(cjk_t0) == LP_TIER0_ASCII_COUNT + LP_TIER0_CJK_COUNT, "ASCII+CJK branch count");
+        const lp_tier0_record *han_full = lp_tier0_at(t0, 0x4e2du), *han_cjk = lp_tier0_at(cjk_t0, 0x4e2du);
+        CHECK(han_full && han_cjk && memcmp(han_full, han_cjk, sizeof *han_full) == 0,
+              "ASCII+CJK branch preserves exact global coordinate and ID for U+4E2D");
+        CHECK(lp_tier0_at(cjk_t0, 0x00e9u) == NULL, "ASCII+CJK branch excludes general UTF scalars");
+    }
+
     if (argc > 2) {
         const lp_tier0_record *other = lp_tier0_map(argv[2]);
         CHECK(other != NULL, "cannot map independently generated artifact %s", argv[2]);

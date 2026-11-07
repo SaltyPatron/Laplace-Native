@@ -1,12 +1,12 @@
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
 #endif
-/* Tier 0: the fixed 1,114,112-point Unicode codespace, sorted by content ID and mapped read-only.
- * Codepoint ordinals are process-local acceleration addresses, never file offsets or identities. */
-#include "laplace/tier0.h"
-#include "internal.h"
+/* Tier 0 generation: the fixed 1,114,112-point Unicode codespace projected onto S^3 by
+ * global DUCET collation rank and emitted both as a complete artifact and as modular shards. */
+#include "tier0_internal.h"
 #include "blake3.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <errno.h>
 #include <fenv.h>
 #include <math.h>
@@ -20,6 +20,8 @@
 #endif
 
 _Static_assert(sizeof(lp_tier0_record) == 64, "tier-0 records are 64 bytes");
+_Static_assert(LP_TIER0_ASCII_COUNT + LP_TIER0_UTF_COUNT + LP_TIER0_CJK_COUNT + LP_TIER0_EXT_COUNT == LP_TIER0_COUNT,
+               "modular Tier-0 shards partition the full Unicode codespace");
 
 double cr_sin(double), cr_cos(double);
 
@@ -35,8 +37,8 @@ static int record_order(const void *a, const void *b){
     return memcmp(((const lp_tier0_record *)a)->id.b, ((const lp_tier0_record *)b)->id.b, 16);
 }
 
-bool lp_tier0_write(const char *path, const lp_tier0_record *records){
-    if (!path || !*path || !records) { errno = EINVAL; return false; }
+bool lp_tier0_write_records(const char *path, const lp_tier0_record *records, size_t count){
+    if (!path || !*path || !records || !count) { errno = EINVAL; return false; }
     char temporary[4096]; FILE *file = NULL;
     static uint64_t sequence;
 #ifdef _WIN32
@@ -59,7 +61,7 @@ bool lp_tier0_write(const char *path, const lp_tier0_record *records){
         if (!file && errno != EEXIST) return false;
     }
     if (!file) return false;
-    bool ok = fwrite(records, sizeof *records, LP_TIER0_COUNT, file) == LP_TIER0_COUNT;
+    bool ok = fwrite(records, sizeof *records, count, file) == count;
     if (ok) ok = fflush(file) == 0;
 #ifdef _WIN32
     if (ok) ok = _commit(_fileno(file)) == 0;
@@ -85,6 +87,11 @@ bool lp_tier0_write(const char *path, const lp_tier0_record *records){
         errno = error;
     }
     return ok;
+}
+
+bool lp_tier0_write(const char *path, const lp_tier0_record *records){
+    if (!lp_tier0_write_records(path, records, LP_TIER0_COUNT)) return false;
+    return lp_tier0_write_shards(path, records);
 }
 
 typedef struct { uint16_t primary, secondary, tertiary; } CollationElement;
@@ -245,7 +252,7 @@ static bool read_collation(UnicodeOrder *u, const char *root){
         char *end; unsigned long cp = strtoul(s, &end, 16);
         if (end == s || cp >= LP_NCP) { ok = false; break; }
         while (*end == ' ' || *end == '\t') end++;
-        if (*end) continue; /* contractions are not a single scalar's collation */
+        if (*end) continue;
         u->element_offset[cp] = (uint32_t)u->ne;
         for (char *p = semi + 1; (p = strchr(p, '[')); p++) {
             unsigned a, b, c;
@@ -350,7 +357,6 @@ bool lp_tier0_from_ucd(const char *root, lp_tier0_record *out){
     if (!order || !scratch) { ok = false; goto done; }
     size_t count = 0;
     for (uint32_t cp = 0; cp < LP_NCP; cp++) order[count++] = cp;
-    /* Context-carrying merge sort keeps generation reentrant on both Windows and POSIX. */
     for (size_t width = 1; width < count; width *= 2) {
         for (size_t start = 0; start < count; start += 2 * width) {
             size_t mid = start + width < count ? start + width : count;
@@ -400,7 +406,6 @@ bool lp_tier0_build(const uint32_t *order, size_t count, lp_tier0_record *out){
     for (size_t rank = 0; rank < count; rank++) {
         lp_tier0_record *record = out + rank;
         const double *point = points[walk[rank].index]; lp_coord c;
-        /* The canonical 2^-53 grid truncates toward zero before enforcing the exact wall. */
         for (int d = 0; d < 4; d++) c.m[d] = (int64_t)(point[d] * LP_FIXED_ONE);
         for (;;) {
             __int128 norm = 0;
@@ -419,109 +424,4 @@ bool lp_tier0_build(const uint32_t *order, size_t count, lp_tier0_record *out){
     if (restored != 0) { errno = EDOM; return false; }
     qsort(out, count, sizeof *out, record_order);
     return true;
-}
-
-#ifndef LP_TIER0_DEFAULT
-#define LP_TIER0_DEFAULT "/repos/work/tier0/tier0.bin"
-#endif
-
-const char *lp_tier0_path(void){
-    const char *p = getenv("LAPLACE_TIER0");
-    return p && *p ? p : LP_TIER0_DEFAULT;
-}
-
-typedef struct Tier0Index {
-    const lp_tier0_record *table;
-    lp_idindex *ids;
-    uint32_t *slot_of_codepoint, *codepoint_of_slot;
-    struct Tier0Index *next;
-} Tier0Index;
-
-static Tier0Index *indexes;
-static lp_lock index_mu = LP_LOCK_INIT;
-
-static const Tier0Index *index_for(const lp_tier0_record *table){
-    for (const Tier0Index *x = __atomic_load_n(&indexes, __ATOMIC_ACQUIRE); x; x = x->next)
-        if (x->table == table) return x;
-    return NULL;
-}
-
-static void index_free(Tier0Index *x){
-    if (!x) return;
-    lp_idindex_free(x->ids); free(x->slot_of_codepoint); free(x->codepoint_of_slot); free(x);
-}
-
-static const void *tier0_open(const char *path){
-    const size_t bytes = (size_t)LP_TIER0_COUNT * sizeof(lp_tier0_record);
-    const lp_tier0_record *table = lp_map_file(path, bytes, NULL);
-    if (!table) return NULL;
-    Tier0Index *x = calloc(1, sizeof *x);
-    unsigned char *ranks = calloc(LP_TIER0_COUNT, 1);
-    if (!x || !ranks) goto invalid;
-    x->table = table;
-    x->slot_of_codepoint = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
-    x->codepoint_of_slot = malloc((size_t)LP_TIER0_COUNT * sizeof(uint32_t));
-    if (!x->slot_of_codepoint || !x->codepoint_of_slot) goto invalid;
-
-    /* Refuse corrupt, unsorted, duplicated or differently shaped artifacts before publishing a mapping. */
-    for (size_t i = 0; i < LP_TIER0_COUNT; i++) {
-        lp_coord c; memcpy(c.m, table[i].m, sizeof c.m);
-        if ((i && memcmp(table[i - 1].id.b, table[i].id.b, 16) >= 0)
-            || table[i].rank >= LP_TIER0_COUNT || ranks[table[i].rank]++
-            || table[i].pad || !lp_coord_inside(&c) || lp_hilbert4(&c) != table[i].hilbert)
-            goto invalid;
-    }
-    x->ids = lp_idindex_build(table, LP_TIER0_COUNT, sizeof *table);
-    if (!x->ids) goto invalid;
-    for (uint32_t cp = 0; cp < LP_NCP; cp++) {
-        lp_id id; lp_id_codepoint(cp, &id);
-        uint64_t probe = 0; int64_t slot = lp_idindex_find(x->ids, &id, &probe);
-        if (slot < 0) goto invalid;
-        x->slot_of_codepoint[cp] = (uint32_t)slot;
-        x->codepoint_of_slot[slot] = cp;
-    }
-    free(ranks);
-    lp_lock_take(&index_mu);
-    x->next = indexes;
-    __atomic_store_n(&indexes, x, __ATOMIC_RELEASE);
-    lp_lock_give(&index_mu);
-    return table;
-
-invalid:
-    free(ranks); index_free(x); lp_unmap_file(table, bytes); errno = EINVAL;
-    return NULL;
-}
-
-const lp_tier0_record *lp_tier0_map(const char *path){
-    return lp_cached("tier0", path && *path ? path : lp_tier0_path(), tier0_open);
-}
-
-const lp_tier0_record *lp_tier0_at(const lp_tier0_record *table, uint32_t cp){
-    if (cp >= LP_NCP) return NULL;
-    const Tier0Index *x = index_for(table);
-    return x ? table + x->slot_of_codepoint[cp] : NULL;
-}
-
-const lp_tier0_record *lp_tier0_find(const lp_tier0_record *table, const lp_id *id){
-    const Tier0Index *x = index_for(table);
-    if (!x || !id) return NULL;
-    uint64_t probe = 0; int64_t slot = lp_idindex_find(x->ids, id, &probe);
-    return slot < 0 ? NULL : table + slot;
-}
-
-bool lp_tier0_contains(const lp_tier0_record *table, const lp_id *id){
-    return lp_tier0_find(table, id) != NULL;
-}
-
-int64_t lp_tier0_codepoint(const lp_tier0_record *table, const lp_id *id){
-    const Tier0Index *x = index_for(table);
-    if (!x || !id) return -1;
-    uint64_t probe = 0; int64_t slot = lp_idindex_find(x->ids, id, &probe);
-    return slot < 0 ? -1 : (int64_t)x->codepoint_of_slot[slot];
-}
-
-void lp_tier0_fingerprint(const lp_tier0_record *t0, uint8_t out[32]){
-    blake3_hasher h; blake3_hasher_init(&h);
-    blake3_hasher_update(&h, t0, (size_t)LP_TIER0_COUNT * sizeof(lp_tier0_record));
-    blake3_hasher_finalize(&h, out, 32);
 }
