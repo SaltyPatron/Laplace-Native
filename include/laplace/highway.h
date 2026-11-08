@@ -9,6 +9,29 @@ extern "C" {
 typedef uint64_t lp_mask;
 #define LP_HIGHWAY_RETIRED UINT32_MAX
 
+/* Modular Highway domain shards:
+ *   CORE    (bit 0): Frozen mask banks (kind, upos, deprel, lexfile, vnrole, wnframe) + ISO 639 language
+ *   WORDNET (bit 1): CILI concepts (ili), WordNet synsets (Synset), and sentence templates (wnsentence)
+ *   FRAMES  (bit 2): PropBank (pbroleset), VerbNet (vnclass), FrameNet (fnframe, fnfe, fnlu), VerbAtlas (vaframe) */
+typedef enum {
+    LP_HIGHWAY_SHARD_CORE    = 0,
+    LP_HIGHWAY_SHARD_WORDNET = 1,
+    LP_HIGHWAY_SHARD_FRAMES  = 2,
+    LP_HIGHWAY_SHARD_COUNT   = 3
+} lp_highway_shard;
+
+enum {
+    LP_HIGHWAY_BRANCH_CORE    = 1u << LP_HIGHWAY_SHARD_CORE,
+    LP_HIGHWAY_BRANCH_WORDNET = (1u << LP_HIGHWAY_SHARD_CORE) | (1u << LP_HIGHWAY_SHARD_WORDNET),
+    LP_HIGHWAY_BRANCH_FRAMES  = (1u << LP_HIGHWAY_SHARD_CORE) | (1u << LP_HIGHWAY_SHARD_FRAMES),
+    LP_HIGHWAY_BRANCH_ALL     = (1u << LP_HIGHWAY_SHARD_COUNT) - 1u
+};
+
+LP_API lp_highway_shard lp_highway_list_shard(const char *list_name);
+LP_API uint32_t lp_highway_parse_branches(const char *spec);
+LP_API const lp_highway *lp_highway_map_branches(const char *path, uint32_t branches);
+LP_API uint32_t lp_highway_active_branches(const lp_highway *highway);
+
 /* Versioned, checksummed, single-file cache. All descriptors, textual lookup
  * keys, identifier bytes and crosswalk edges travel with the mapped records.
  * layout/keys are tab-separated descriptor rows, parsed only at map time.

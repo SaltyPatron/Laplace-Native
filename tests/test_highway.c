@@ -303,5 +303,8 @@ int main(void){
     banks_check(h, t0);
     identifiers_check(h,t0);
     envelope_check(h);
+    const lp_highway *core_hw = lp_highway_map_branches(NULL, LP_HIGHWAY_BRANCH_CORE);
+    CHECK(core_hw != NULL && lp_highway_active_branches(core_hw) == LP_HIGHWAY_BRANCH_CORE, "map core highway branch profile");
+    CHECK(core_hw && lp_highway_list(core_hw, "upos") != NULL && lp_highway_list(core_hw, "ili") == NULL, "core highway branch filters non-core lists");
     DONE("highway");
 }

@@ -10,6 +10,54 @@
 
 const char *lp_highway_path(void){ static char path[4096]; return lp_tier0_sibling("LAPLACE_HIGHWAY", ".highway", path, sizeof path); }
 
+lp_highway_shard lp_highway_list_shard(const char *list_name){
+    if (!list_name || !*list_name) return LP_HIGHWAY_SHARD_CORE;
+    if (!strcmp(list_name, "kind") || !strcmp(list_name, "upos") || !strcmp(list_name, "deprel")
+        || !strcmp(list_name, "lexfile") || !strcmp(list_name, "vnrole") || !strcmp(list_name, "wnframe")
+        || !strcmp(list_name, "language"))
+        return LP_HIGHWAY_SHARD_CORE;
+    if (!strcmp(list_name, "ili") || !strcmp(list_name, "Synset") || !strcmp(list_name, "wnsentence"))
+        return LP_HIGHWAY_SHARD_WORDNET;
+    return LP_HIGHWAY_SHARD_FRAMES;
+}
+
+static bool hw_token_eq(const char *s, size_t n, const char *lit){
+    size_t m = strlen(lit);
+    if (n != m) return false;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+        if (c != lit[i]) return false;
+    }
+    return true;
+}
+
+uint32_t lp_highway_parse_branches(const char *spec){
+    if (!spec) return LP_HIGHWAY_BRANCH_ALL;
+    while (*spec == ' ' || *spec == '\t') spec++;
+    if (!*spec) return LP_HIGHWAY_BRANCH_ALL;
+    uint32_t mask = 0;
+    const char *p = spec;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == '+' || *p == ',' || *p == '|' || *p == ':') p++;
+        if (!*p) break;
+        const char *start = p;
+        while (*p && *p != ' ' && *p != '\t' && *p != '+' && *p != ',' && *p != '|' && *p != ':') p++;
+        size_t n = (size_t)(p - start);
+        if (hw_token_eq(start, n, "core") || hw_token_eq(start, n, "banks"))
+            mask |= LP_HIGHWAY_BRANCH_CORE;
+        else if (hw_token_eq(start, n, "wordnet") || hw_token_eq(start, n, "ili"))
+            mask |= LP_HIGHWAY_BRANCH_WORDNET;
+        else if (hw_token_eq(start, n, "frames") || hw_token_eq(start, n, "roles"))
+            mask |= LP_HIGHWAY_BRANCH_FRAMES;
+        else if (hw_token_eq(start, n, "lexical") || hw_token_eq(start, n, "full") || hw_token_eq(start, n, "all"))
+            mask |= LP_HIGHWAY_BRANCH_ALL;
+        else
+            return 0u;
+    }
+    return mask;
+}
+
 /* The layout: "records N", "edges-count N", "list NAME SAY FIRST COUNT",
  * "bank NAME LIST GROUP CARRIER WIDTH OFFSET ENCODING" and
  * "edges A B FIRST COUNT" lines; the records are the file, and the edges follow them as 8-byte pairs. A bank names its
@@ -86,7 +134,20 @@ typedef struct {
     const char **parts; char *labels;
     uint8_t fingerprint[32]; lp_strmap *lists,*relations; uint32_t **row;
     lp_vec(KeyTarget) extra_keys;
+    uint32_t branches;
+    uint8_t *list_active;
 } Highway;
+
+static inline bool record_active(const Highway *mapped, size_t at){
+    if (mapped->branches == LP_HIGHWAY_BRANCH_ALL) return true;
+    const lp_highway *h = &mapped->public;
+    for (size_t i = 0; i < h->nlists; i++) {
+        if ((size_t)h->list[i].first <= at && at < (size_t)h->list[i].first + h->list[i].count)
+            return mapped->list_active[i] != 0;
+    }
+    return false;
+}
+
 static uint64_t read64(const uint8_t *p){
     uint64_t n = 0; for (unsigned i = 0; i < 8; i++) n |= (uint64_t)p[i] << (8 * i); return n;
 }
@@ -151,8 +212,6 @@ static bool lines(const char *bytes, size_t size, int fields, void (*visit)(void
     }
     free(copy); return true;
 }
-/* A source's key names existing content. Its namespace need not own a mask
- * list or another copy of that content's records. */
 static size_t key_bytes(const char *space,const char *text,char out[1032]){
     if (!space || !text || !*space || !*text) return 0;
     size_t ns=strlen(space),nt=strlen(text);
@@ -168,11 +227,12 @@ static void key_line(void *ctx, char **f, int n){
     uint32_t li=0; while (li<r->h->nlists && strcmp(r->h->list[li].name,target)) li++;
     uint64_t slot;
     if (li==r->h->nlists || !number(ordinal,UINT32_MAX,&slot) || slot>=r->h->list[li].count) { r->bad=true; return; }
+    Highway *mapped=(Highway *)r->h;
+    if (!mapped->list_active[li]) return;
     char key[1032]; size_t len=key_bytes(f[0],f[1],key);
     if (!len) { r->bad=true; return; }
     uint32_t at=r->h->list[li].first+(uint32_t)slot;
     if (r->h->rec[at].pad==LP_HIGHWAY_RETIRED) { r->bad=true; return; }
-    Highway *mapped=(Highway *)r->h;
     bool fresh; KeyTarget *value=lp_strmap_get(r->h->keys,key,len,&fresh);
     if (fresh) { *value=(KeyTarget){at,0}; return; }
     for (const KeyTarget *target=value; target; target=target->more ? mapped->extra_keys.v+target->more-1 : NULL)
@@ -216,7 +276,24 @@ static bool identifiers_read(Highway *mapped,const uint8_t *bytes,size_t size,si
     }
     return true;
 }
-static const void *highway_open(const char *path){
+static const void *highway_open(const char *spec){
+    char path[4096];
+    uint32_t branches = LP_HIGHWAY_BRANCH_ALL;
+    const char *at_sep = strrchr(spec, '@');
+    if (at_sep && at_sep > spec) {
+        size_t len = (size_t)(at_sep - spec);
+        if (len >= sizeof path) return NULL;
+        memcpy(path, spec, len);
+        path[len] = 0;
+        char *end = NULL;
+        unsigned long num = strtoul(at_sep + 1, &end, 10);
+        branches = (end && end > at_sep + 1 && !*end)
+            ? ((uint32_t)num & LP_HIGHWAY_BRANCH_ALL)
+            : lp_highway_parse_branches(at_sep + 1);
+        if (!branches) return NULL;
+    } else {
+        snprintf(path, sizeof path, "%s", spec);
+    }
     size_t size; const uint8_t *m=lp_map_file(path,0,&size); if (!m) return NULL;
     bool references=size>=HW_HEADER && !memcmp(m,"LPHW0003",8);
     Highway *mapped=NULL; bool ok=size>=HW_HEADER && (references || !memcmp(m,"LPHW0002",8)) && !read64(m+8);
@@ -233,6 +310,7 @@ static const void *highway_open(const char *path){
     lp_highway *h=mapped ? &mapped->public : NULL;
     if (ok) {
         mapped->mapping=m; mapped->size=size; memcpy(mapped->fingerprint,fp,32);
+        mapped->branches = branches;
         h->rec=(const lp_tier0_record *)(m+HW_HEADER); h->nrec=(size_t)nr;
         h->edge=(const lp_edge *)(h->rec+nr); h->nedges=(size_t)ne;
         const char *layout=(const char *)(h->edge+ne);
@@ -247,11 +325,15 @@ static const void *highway_open(const char *path){
         }
         ok=ok && covered==nr; covered=0;
         if (ok) {
+            mapped->list_active=calloc(h->nlists ? h->nlists : 1,1);
             mapped->lists=lp_strmap_lasting(sizeof(uint32_t));
             mapped->relations=lp_strmap_lasting(sizeof(uint32_t));
-            mapped->row=calloc(h->nedgelists+1,sizeof *mapped->row); ok=mapped->row!=NULL;
+            mapped->row=calloc(h->nedgelists+1,sizeof *mapped->row);
+            ok=mapped->list_active!=NULL && mapped->row!=NULL;
             for (size_t i=0; ok && i<h->nlists; i++) {
                 const lp_list *list=h->list+i; bool fresh;
+                lp_highway_shard sh = lp_highway_list_shard(list->name);
+                mapped->list_active[i] = (uint8_t)((branches & (1u << sh)) != 0);
                 uint32_t *at=lp_strmap_get(mapped->lists,list->name,strlen(list->name),&fresh);
                 if (!fresh && *at!=i) { ok=false; break; } *at=(uint32_t)i;
                 at=lp_strmap_get(mapped->lists,list->say,strlen(list->say),&fresh);
@@ -259,7 +341,10 @@ static const void *highway_open(const char *path){
             }
         }
         for (size_t i=0; ok && i<h->nedgelists; i++) {
-            const lp_edges *e=h->edges+i; const lp_list *a=lp_highway_list(h,e->a), *b=lp_highway_list(h,e->b);
+            const lp_edges *e=h->edges+i;
+            const uint32_t *ia=lp_strmap_lookup(mapped->lists,e->a,strlen(e->a));
+            const uint32_t *ib=lp_strmap_lookup(mapped->lists,e->b,strlen(e->b));
+            const lp_list *a=ia ? h->list+*ia : NULL, *b=ib ? h->list+*ib : NULL;
             ok=a && b && e->count && e->first==covered && e->count<=ne-covered;
             for (size_t j=0; ok && j<i; j++) ok=strcmp(e->a,h->edges[j].a) || strcmp(e->b,h->edges[j].b);
             for (size_t j=0; ok && j<e->count; j++) {
@@ -267,7 +352,7 @@ static const void *highway_open(const char *path){
                 ok=edge->from<a->count && edge->to<b->count
                     && (!j || edge[-1].from<edge->from || (edge[-1].from==edge->from && edge[-1].to<edge->to));
             }
-            if (ok) {
+            if (ok && mapped->list_active[*ia] && mapped->list_active[*ib]) {
                 mapped->row[i]=calloc((size_t)a->count+1,sizeof(uint32_t)); ok=mapped->row[i]!=NULL;
                 if (ok) {
                     for (size_t j=0; j<e->count; j++) mapped->row[i][h->edge[covered+j].from+1]++;
@@ -290,7 +375,7 @@ static const void *highway_open(const char *path){
     if (!ok) {
         if (h) {
             if (mapped->row) for (size_t i=0; i<h->nedgelists; i++) free(mapped->row[i]);
-            free(mapped->row); lp_vec_free(&mapped->extra_keys); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
+            free(mapped->row); free(mapped->list_active); lp_vec_free(&mapped->extra_keys); lp_strmap_free(mapped->lists); lp_strmap_free(mapped->relations);
             free(h->list); free(h->bank); free(h->edges); lp_strmap_free(h->keys); lp_idindex_free(h->by_id);
             free(mapped->identifier); free(mapped->parts); free(mapped->labels); free(mapped);
         }
@@ -312,30 +397,68 @@ size_t lp_highway_identifier_parts(const lp_highway *h,const lp_list *list,uint3
 size_t lp_highway_identifier_parts_for_id(const lp_highway *h,const lp_id *id,const char *const **parts){
     if(parts)*parts=NULL;
     if(!h || !id)return 0;
+    const Highway *mapped=(const Highway *)h;
     uint64_t probe=0;
     for(int64_t at;(at=lp_idindex_find(h->by_id,id,&probe))>=0;){
-        if(h->rec[at].pad==LP_HIGHWAY_RETIRED)continue;
-        const Identifier *identifier=((const Highway *)h)->identifier+at;
+        if(h->rec[at].pad==LP_HIGHWAY_RETIRED || !record_active(mapped,(size_t)at))continue;
+        const Identifier *identifier=mapped->identifier+at;
         if(parts)*parts=identifier->part;
         return identifier->count;
     }
     return 0;
 }
-const lp_highway *lp_highway_map(const char *path){ return lp_cached("highway", path && *path ? path : lp_highway_path(), highway_open); }
+
+const lp_highway *lp_highway_map_branches(const char *path, uint32_t branches){
+    const char *raw = path && *path ? path : lp_highway_path();
+    if (!branches) {
+        const char *env = getenv("LAPLACE_HIGHWAY_PROFILE");
+        if (!env || !*env) env = getenv("LAPLACE_HIGHWAY_BRANCHES");
+        branches = env && *env ? lp_highway_parse_branches(env) : LP_HIGHWAY_BRANCH_ALL;
+        if (!branches) return NULL;
+    }
+    branches &= LP_HIGHWAY_BRANCH_ALL;
+    if (!branches) return NULL;
+    char key[4200];
+    if (branches == LP_HIGHWAY_BRANCH_ALL) snprintf(key, sizeof key, "%s", raw);
+    else snprintf(key, sizeof key, "%s@%u", raw, branches);
+    return lp_cached("highway", key, highway_open);
+}
+
+const lp_highway *lp_highway_map(const char *path){
+    const char *raw = path && *path ? path : lp_highway_path();
+    const char *at = strrchr(raw, '@');
+    if (at && at > raw) {
+        char base[4096];
+        size_t len = (size_t)(at - raw);
+        if (len >= sizeof base) return NULL;
+        memcpy(base, raw, len);
+        base[len] = 0;
+        uint32_t mask = lp_highway_parse_branches(at + 1);
+        return mask ? lp_highway_map_branches(base, mask) : NULL;
+    }
+    return lp_highway_map_branches(raw, 0);
+}
+
+uint32_t lp_highway_active_branches(const lp_highway *h){
+    return h ? ((const Highway *)h)->branches : 0u;
+}
 
 const lp_tier0_record *lp_highway_find(const lp_highway *h, const lp_id *id){
     if (!h || !id) return NULL;
+    const Highway *mapped = (const Highway *)h;
     uint64_t probe = 0;
     for (int64_t at; (at=lp_idindex_find(h->by_id,id,&probe))>=0; )
-        if (h->rec[at].pad!=LP_HIGHWAY_RETIRED) return h->rec+at;
+        if (h->rec[at].pad!=LP_HIGHWAY_RETIRED && record_active(mapped, (size_t)at)) return h->rec+at;
     return NULL;
 }
 bool lp_highway_contains(const lp_highway *h, const lp_id *id){ return lp_highway_find(h,id)!=NULL; }
 
 const lp_list *lp_highway_list(const lp_highway *h, const char *name){
     if (!h || !name) return NULL;
-    const uint32_t *at=lp_strmap_lookup(((const Highway *)h)->lists,name,strlen(name));
-    return at ? h->list+*at : NULL;
+    const Highway *mapped = (const Highway *)h;
+    const uint32_t *at=lp_strmap_lookup(mapped->lists,name,strlen(name));
+    if (!at || !mapped->list_active[*at]) return NULL;
+    return h->list+*at;
 }
 const lp_tier0_record *lp_highway_at(const lp_highway *h, const lp_list *l, uint32_t slot){
     if (!l || slot >= l->count || (size_t)l->first + slot >= h->nrec) return NULL;
@@ -349,9 +472,11 @@ static const lp_idindex *by_id(const lp_highway *h){ return h->by_id; }
 
 /* The record's place among all the highway's records, in list l (any list when l is NULL), or -1. */
 static int64_t record_of(const lp_highway *h, const lp_list *l, const lp_id *id){
+    const Highway *mapped = (const Highway *)h;
     const lp_idindex *x = by_id(h); uint64_t probe = 0;
     for (int64_t i; (i = lp_idindex_find(x, id, &probe)) >= 0; )
-        if (h->rec[i].pad!=LP_HIGHWAY_RETIRED && (!l || ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count))) return i;
+        if (h->rec[i].pad!=LP_HIGHWAY_RETIRED && record_active(mapped, (size_t)i)
+            && (!l || ((size_t)i >= l->first && (size_t)i < (size_t)l->first + l->count))) return i;
     return -1;
 }
 int64_t lp_highway_slot(const lp_highway *h, const lp_list *l, const lp_id *id){
@@ -364,7 +489,7 @@ size_t lp_highway_edges(const lp_highway *h, const char *a, uint32_t slot, const
     char key[65]; memcpy(key,a,na); key[na]='\t'; memcpy(key+na+1,b,nb);
     const Highway *mapped=(const Highway *)h;
     const uint32_t *at=lp_strmap_lookup(mapped->relations,key,na+1+nb);
-    if (!at) return 0;
+    if (!at || !mapped->row[*at]) return 0;
     const lp_list *list=lp_highway_list(h,a); if (!list || slot>=list->count) return 0;
     const uint32_t *row=mapped->row[*at];
     *out=h->edge+h->edges[*at].first+row[slot]; return row[slot+1]-row[slot];

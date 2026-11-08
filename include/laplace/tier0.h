@@ -121,6 +121,14 @@ LP_API bool lp_tier0_write_shards(const char *base_path, const lp_tier0_record *
 /* Split an existing validated full tier0.bin on disk into its four modular shard files. */
 LP_API bool lp_tier0_split_file(const char *path);
 
+/* Modular UCD companion flags shards (.flags.ascii.bin, .flags.utf.bin, .flags.cjk.bin,
+ * .flags.ext.bin) partitioned along the exact same 4 branches as Tier-0. */
+LP_API bool lp_flags_shard_path(const char *base_path, lp_tier0_shard shard, char *out, size_t cap);
+LP_API bool lp_flags_write_shards(const char *base_path, const lp_flags *flags);
+LP_API bool lp_flags_split_file(const char *path);
+LP_API const lp_layout *lp_flags_map_branches(const char *base_path, uint32_t branches);
+LP_API uint32_t lp_flags_active_branches(const lp_layout *layout);
+
 #ifdef __cplusplus
 }
 #endif

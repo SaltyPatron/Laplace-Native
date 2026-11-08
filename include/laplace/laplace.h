@@ -105,39 +105,26 @@ LP_API bool lp_id_compose_runs(size_t count, lp_id_run_reader reader, void *cont
 /* The ID of a UTF-8 string taken as one composition of its codepoints. Returns false on invalid UTF-8. */
 LP_API bool lp_id_codepoints_utf8(const char *s, size_t len, lp_id *out);
 
-/* Ordered occurrence pairs at each logical offset lo..hi (inclusive). Runs
- * remain compressed: a callback receives the number of equal pairs represented
- * by an overlap, rather than one call per occurrence. All runs must be positive
- * and their sum fit uint64_t; invalid input is rejected before any callback.
- * lo must be positive. Empty input or offsets beyond its length emit nothing.
- * No allocation, geometry codec, vocabulary policy or aggregation is owned here.
- * false means invalid input or the visitor stopped; prior callbacks remain. */
+/* Ordered occurrence pairs at each logical offset lo..hi (inclusive). Runs remain compressed: a callback receives the
+ * number of equal pairs represented by an overlap. All runs must be positive and their sum fit uint64_t; lo must be
+ * positive. Empty input or offsets beyond its length emit nothing. false means invalid input or the visitor stopped. */
 typedef struct { lp_id id; uint64_t count; } lp_id_run;
 typedef bool (*lp_id_pair_visit)(void *context, const lp_id *subject,
     const lp_id *object, uint64_t gap, uint64_t occurrences);
 LP_API bool lp_id_run_pairs(const lp_id_run *runs, size_t n, uint64_t lo,
     uint64_t hi, lp_id_pair_visit visit, void *context);
 
-/* Dependency depth of an in-memory DAG, independently of semantic tier.
- * reader advances its cursor and returns 0 with a child index and edge distance, 1 at end,
- * negative on failure. Repeated edges are allowed. A leaf has level 1; a parent is at least
- * child level + distance. Distance 1 gives ordinary depth; distance 0 groups
- * dependencies that one owner commits atomically in a shared wave. Iterative traversal uses a stack bounded
- * by graph depth, with no recursion or expanded reverse-edge copy. All nodes
- * are checked before success, so callers can reject cycles before publishing.
- * levels holds n values and is usable only on success. errno reports malformed
- * indices/arguments (EINVAL), cycles (ELOOP), resource overflow or allocation.
- * The caller owns storage, ID lookup, admission and commit barriers. */
+/* Dependency depth of an in-memory DAG, independently of semantic tier. reader advances its cursor and returns 0 with
+ * a child index and edge distance, 1 at end, negative on failure. A leaf has level 1; a parent is at least child level
+ * + distance (distance 0 groups dependencies committed atomically in a shared wave). Iterative traversal uses a stack
+ * bounded by graph depth. All nodes are checked before success so callers can reject cycles (ELOOP) or invalid args
+ * (EINVAL) before publishing. levels holds n values and is usable only on success. */
 typedef int (*lp_dag_child_reader)(void *context, size_t node, size_t *cursor, size_t *child, size_t *distance);
 LP_API bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *levels);
 
-/* Strongly connected groups of a logical dependency graph. Uses the same
- * indexed child reader as lp_dag_levels; edge distances do not affect groups.
- * Every node receives a component in [0,count), numbered with dependencies
- * before their consumers. Cycles form one component, including self-edges.
- * Iterative O(nodes+edges) work and O(nodes) workspace; no reverse-edge copy.
- * Output is usable only on success; errno reports malformed input or storage
- * failure. Structural publication still uses lp_dag_levels to reject cycles. */
+/* Strongly connected groups of a logical dependency graph using the same indexed child reader as lp_dag_levels. Every
+ * node receives a component in [0,count), numbered with dependencies before their consumers; cycles form one component.
+ * Iterative O(nodes+edges) work and O(nodes) workspace; errno reports malformed input or storage failure. */
 LP_API bool lp_graph_components(size_t n, lp_dag_child_reader reader, void *context,
                                 size_t *components, size_t *count);
 
