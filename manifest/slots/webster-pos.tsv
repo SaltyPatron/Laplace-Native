@@ -1,0 +1,34 @@
+# The frozen slots of the highway list webster-pos (Webster's Unabridged part of speech), from Webster's Unabridged (1913) part-of-speech abbreviations (Laplace-Engine recipes/vocabularies/webster-pos.tsv).
+# A slot never moves; a new tag takes the next. key: the tag as sources write it; a fifth column is
+# the tag as the tagset writes it, its identifier. Written by scripts/tagsets.py; never edited by hand.
+slot	id	status	key
+0	490ff01c9a8cbbbbdeebb017b52a5521	live	a.
+1	c027fc9846287aae0bf7051a99e17688	live	adj.
+2	9ce72c39acfe18534b115445a8f5b925	live	adv.
+3	63acccc8a50b6e26362db9dc6ca5692c	live	conj.
+4	a338164b5db9836f2b3ac051deb79c54	live	imp.
+5	9b88044557ce2b39b3d2c00f07ed3f9c	live	interj.
+6	53976fa251caaca4c950d62d47d98cfa	live	n.
+7	8957314b3d9e452d354297a79e609bcc	live	p. a.
+8	3f34815e53b95d6dc5a3eda9894d40fc	live	p. p.
+9	6bd1fe80d8f9ded5eddf886862b226a4	live	p. pr.
+10	ede01390e9bf3cdef4d0f1efb3490f0c	live	p.a.
+11	034eb7c009403eb0a2c3cf54c15563b4	live	p.p.
+12	191d75a2dc83878a614531d68d8b06b0	live	p.pr.
+13	4c80fe2bc965517856ef5d9e2eb93797	live	pl.
+14	403e1e4bc7c0e5cd57036d0847adc49d	live	pref.
+15	3ce0d9837c6d5e11d10ac71390789630	live	prefix.
+16	515665ab90616fc62b26767f3021fc66	live	prep.
+17	29f68a448f4df90f024724efd9f0d8b4	live	pron.
+18	b172125a6b7ad6e42abf74ed8a17b2d7	live	prop.
+19	334c28fd74b9ed6f189e9614e71d515c	live	v.
+20	fe6751c24d874ac6f900bc7f274f185a	live	v. i.
+21	d69da8c7f64de0d6fc83b542868e9dc7	live	v. i. & i.
+22	dd5ced0fecb5ac96569b06014849c7d2	live	v. i. & t.
+23	30388a8fbf7830382534bd2b229068eb	live	v. i.&t.
+24	b96c7cd07e6309072eac29f8c3d9e714	live	v. t.
+25	17e2d445cac2bc5e24dfc03466e1224e	live	v. t. & i.
+26	24c83407a7ebba2fc69a399c64693e76	live	v. t.& i.
+27	86af9766c9c6fc5b1b763f5e9e6a1573	live	v.i.
+28	f5abf2dfcdec22f0ffb14dab7ad95cb6	live	v.t.
+29	2f0482cc519d2255900145a5e6249c3f	live	vb. n.

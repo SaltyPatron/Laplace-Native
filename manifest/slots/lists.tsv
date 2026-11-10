@@ -15,3 +15,7 @@ upos	Universal part of speech
 kind	kind
 Synset	WordNet synset identifier
 language	ISO 639 language identifier
+brown	Brown Corpus part-of-speech tag
+ptb	Penn Treebank part-of-speech tag
+wordnet-pos	WordNet part of speech
+webster-pos	Webster's Unabridged part of speech
