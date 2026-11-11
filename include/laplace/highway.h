@@ -11,6 +11,7 @@ typedef uint64_t lp_mask;
 
 /* Modular Highway domain shards:
  *   CORE    (bit 0): Frozen mask banks (kind, upos, deprel, lexfile, vnrole, wnframe) + ISO 639 language
+ *                    + part-of-speech tagsets crosswalked to upos (brown, ptb, wordnet-pos, webster-pos)
  *   WORDNET (bit 1): CILI concepts (ili), WordNet synsets (Synset), and sentence templates (wnsentence)
  *   FRAMES  (bit 2): PropBank (pbroleset), VerbNet (vnclass), FrameNet (fnframe, fnfe, fnlu), VerbAtlas (vaframe) */
 typedef enum {

@@ -248,6 +248,52 @@ static void banks_check(const lp_highway *h, const lp_tier0_record *t0){
     lp_text_free(text);
 }
 
+/* The universal part of speech a tagset's key reaches by its crosswalk edge; -1 for no edge, -2 for no such key. */
+static int64_t crosswalk(const lp_highway *h, const char *tagset, const char *key){
+    const lp_list *list = lp_highway_list(h, tagset); int64_t slot = list ? lp_highway_key(h, list, key) : -1;
+    if (slot < 0) return -2;
+    const lp_edge *e; size_t n = lp_highway_edges(h, tagset, (uint32_t)slot, "upos", &e);
+    return n == 1 ? (int64_t)e[0].to : n ? -3 : -1;
+}
+/* Part-of-speech tagsets: highway lists in the core profile, each tag's crosswalk an edge to its upos slot. */
+static void tagsets_check(const lp_highway *h, const lp_list *upos){
+    static const struct { const char *name; uint32_t count, linked; } tagsets[] = {
+        {"brown", 472, 472}, {"ptb", 68, 68}, {"wordnet-pos", 10, 5}, {"webster-pos", 30, 18}};
+    CHECK(h && upos, "the tagsets' highway and its upos list");
+    if (!h || !upos) return;
+    for (size_t i = 0; i < sizeof tagsets / sizeof *tagsets; i++) {
+        const lp_list *list = lp_highway_list(h, tagsets[i].name);
+        CHECK(list && list->count == tagsets[i].count, "%s: %u tags", tagsets[i].name, list ? list->count : 0);
+        if (!list) continue;
+        uint32_t linked = 0;
+        for (uint32_t slot = 0; slot < list->count; slot++) {
+            const lp_edge *e; size_t n = lp_highway_edges(h, tagsets[i].name, slot, "upos", &e);
+            CHECK(n <= 1 && (!n || e[0].to < upos->count), "%s slot %u: at most one edge, inside upos", tagsets[i].name, slot);
+            linked += n == 1;
+            const char *identifier = lp_highway_identifier(h, list, slot);
+            CHECK(identifier && lp_highway_key(h, list, identifier) == (int64_t)slot, "%s slot %u resolves by its own identifier", tagsets[i].name, slot);
+        }
+        CHECK(linked == tagsets[i].linked, "%s: %u tags with a universal part of speech", tagsets[i].name, linked);
+    }
+    /* NLTK's universal tags carried to UD's: '.' is PUNCT, PRT is PART, CONJ is CCONJ, X stays X. */
+    CHECK(crosswalk(h, "brown", "nn-tl") == 7 && crosswalk(h, "brown", "NN-TL") == 7, "Brown nn-tl, as the corpus or the tagset writes it, is NOUN");
+    CHECK(crosswalk(h, "brown", ".") == 12 && crosswalk(h, "brown", "rp") == 9 && crosswalk(h, "brown", "cc") == 4
+          && crosswalk(h, "brown", "fw-nn") == 16, "Brown's universal ., PRT, CONJ and X reach PUNCT, PART, CCONJ and X");
+    const lp_list *brown = lp_highway_list(h, "brown");
+    const char *title = brown ? lp_highway_identifier(h, brown, (uint32_t)lp_highway_key(h, brown, "nn-tl")) : NULL;
+    CHECK(title && !strcmp(title, "NN-TL"), "a Brown tag's identifier is the tagset's capitals");
+    CHECK(crosswalk(h, "ptb", "-LRB-") == 12 && crosswalk(h, "ptb", "PRP$") == 10 && crosswalk(h, "ptb", "CC") == 4
+          && crosswalk(h, "ptb", "MD") == 15, "Penn Treebank tags reach PUNCT, PRON, CCONJ and VERB");
+    CHECK(crosswalk(h, "wordnet-pos", "s") == 0 && crosswalk(h, "wordnet-pos", "r") == 2 && crosswalk(h, "wordnet-pos", "t") == -1,
+          "WordNet's satellite is ADJ, r is ADV, and a phrase is its own category");
+    CHECK(crosswalk(h, "webster-pos", "v. t.") == 15 && crosswalk(h, "webster-pos", "p. p.") == -1 && crosswalk(h, "webster-pos", "zz") == -2,
+          "Webster's v. t. is VERB, its past participle its own category, an unknown abbreviation no key");
+    const lp_edge *e; CHECK(lp_highway_edges(h, "upos", 7, "brown", &e) == 52, "the crosswalk reads both ways: 52 Brown tags are NOUN");
+    const lp_tier0_record *nn = brown ? lp_highway_at(h, brown, (uint32_t)lp_highway_key(h, brown, "nn")) : NULL;
+    CHECK(nn && !lp_highway_bank(h, "brown") && !lp_highway_bank(h, "ptb") && !lp_highway_bank_of(h, &nn->id, NULL),
+          "a tagset is a list, never a bank: NN filters nothing itself");
+}
+
 int main(void){
     const lp_tier0_record *t0 = lp_tier0_map(LAPLACE_TIER0);
     CHECK(t0, "map the complete Tier-0 scalar cache");
@@ -306,5 +352,7 @@ int main(void){
     const lp_highway *core_hw = lp_highway_map_branches(NULL, LP_HIGHWAY_BRANCH_CORE);
     CHECK(core_hw != NULL && lp_highway_active_branches(core_hw) == LP_HIGHWAY_BRANCH_CORE, "map core highway branch profile");
     CHECK(core_hw && lp_highway_list(core_hw, "upos") != NULL && lp_highway_list(core_hw, "ili") == NULL, "core highway branch filters non-core lists");
+    tagsets_check(h, upos);
+    tagsets_check(core_hw, core_hw ? lp_highway_list(core_hw, "upos") : NULL);
     DONE("highway");
 }

@@ -1,0 +1,14 @@
+# The frozen slots of the highway list wordnet-pos (WordNet part of speech), from the WordNet and WN-LMF part-of-speech letters (Laplace-Engine recipes/vocabularies/wordnet-pos.tsv).
+# A slot never moves; a new tag takes the next. key: the tag as sources write it; a fifth column is
+# the tag as the tagset writes it, its identifier. Written by scripts/tagsets.py; never edited by hand.
+slot	id	status	key
+0	a74e0b1433b54b7a33bfe58e60093239	live	n
+1	fbf7129093429293d558b3993ca13988	live	v
+2	17762fddd969a453925d65717ac3eea2	live	a
+3	3d1d92230feb6db469532f26d9e2d7ab	live	s
+4	b2dea48d667b2821a9bcf69eded39a24	live	r
+5	0538661423236a5d8df6286a8633369e	live	t
+6	ea7aa1fc9efdbe106dbb70369a75e967	live	c
+7	73f291693e31fe77be7bfb78ebc9042b	live	p
+8	3ae7d805f6789a6402acb70ad4096a85	live	x
+9	135e48e7e8a6c46c54b691dc13e3ce20	live	u

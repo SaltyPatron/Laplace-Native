@@ -14,7 +14,8 @@ lp_highway_shard lp_highway_list_shard(const char *list_name){
     if (!list_name || !*list_name) return LP_HIGHWAY_SHARD_CORE;
     if (!strcmp(list_name, "kind") || !strcmp(list_name, "upos") || !strcmp(list_name, "deprel")
         || !strcmp(list_name, "lexfile") || !strcmp(list_name, "vnrole") || !strcmp(list_name, "wnframe")
-        || !strcmp(list_name, "language"))
+        || !strcmp(list_name, "language") || !strcmp(list_name, "brown") || !strcmp(list_name, "ptb")
+        || !strcmp(list_name, "wordnet-pos") || !strcmp(list_name, "webster-pos"))
         return LP_HIGHWAY_SHARD_CORE;
     if (!strcmp(list_name, "ili") || !strcmp(list_name, "Synset") || !strcmp(list_name, "wnsentence"))
         return LP_HIGHWAY_SHARD_WORDNET;
