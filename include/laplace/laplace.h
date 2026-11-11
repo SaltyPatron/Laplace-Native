@@ -122,6 +122,14 @@ LP_API bool lp_id_run_pairs(const lp_id_run *runs, size_t n, uint64_t lo,
 typedef int (*lp_dag_child_reader)(void *context, size_t node, size_t *cursor, size_t *child, size_t *distance);
 LP_API bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *levels);
 
+/* How many times each node stands under top: counts[top] = 1 and every child accumulates parent count x edge times, in
+ * topological order. reader advances its cursor and returns 0 with a child index and the edge's times (its run), 1 at
+ * end, negative on failure. counts holds n values, usable only on success; a cycle is ELOOP, bad input EINVAL. One walk
+ * for every reader that tallies testimony under a trunk (the Engine's replay and held, the extension's contained
+ * series). */
+typedef int (*lp_dag_edge_reader)(void *context, size_t node, size_t *cursor, size_t *child, uint64_t *times);
+LP_API bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *context, size_t top, double *counts);
+
 /* Strongly connected groups of a logical dependency graph using the same indexed child reader as lp_dag_levels. Every
  * node receives a component in [0,count), numbered with dependencies before their consumers; cycles form one component.
  * Iterative O(nodes+edges) work and O(nodes) workspace; errno reports malformed input or storage failure. */

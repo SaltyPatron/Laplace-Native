@@ -1,6 +1,7 @@
 #include "laplace/laplace.h"
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct { size_t node, cursor, depth, pending; } DagFrame;
 bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, size_t *levels){
@@ -92,4 +93,32 @@ bool lp_graph_components(size_t n,lp_dag_child_reader reader,void *context,size_
     *count=groups;free(frames);free(storage);return true;
 components_fail:
     free(frames);free(storage);return false;
+}
+
+bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *context, size_t top, double *counts){
+    if (!reader || !counts || top >= n) { errno = EINVAL; return false; }
+    if (n > SIZE_MAX / sizeof(size_t)) { errno = EOVERFLOW; return false; }
+    size_t *indegree = calloc(n, sizeof *indegree), *queue = malloc(n * sizeof *queue);
+    if (!indegree || !queue) { free(indegree); free(queue); errno = ENOMEM; return false; }
+    for (size_t node = 0; node < n; node++) {
+        size_t cursor = 0, child; uint64_t times; int result;
+        while ((result = reader(context, node, &cursor, &child, &times)) == 0) {
+            if (child >= n) { free(indegree); free(queue); errno = EINVAL; return false; }
+            indegree[child]++;
+        }
+        if (result != 1) { free(indegree); free(queue); errno = EINVAL; return false; }
+    }
+    memset(counts, 0, n * sizeof *counts); counts[top] = 1;
+    size_t head = 0, tail = 0;
+    for (size_t node = 0; node < n; node++) if (!indegree[node]) queue[tail++] = node;
+    while (head < tail) {
+        size_t parent = queue[head++], cursor = 0, child; uint64_t times;
+        while (reader(context, parent, &cursor, &child, &times) == 0) {
+            if (counts[parent] > 0) counts[child] += counts[parent] * (double)times;
+            if (!--indegree[child]) queue[tail++] = child;
+        }
+    }
+    bool acyclic = tail == n; free(indegree); free(queue);
+    if (!acyclic) { errno = ELOOP; return false; }
+    return true;
 }

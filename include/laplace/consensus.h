@@ -37,6 +37,20 @@ LP_API lp_series_entry lp_series_observation(lp_id root, uint64_t games, double 
  * wins (the sum of outcomes) in [0, games]; signed trust in [-1, 1], where a negative trust is a witness that
  * reliably says the opposite: its outcomes are reversed (wins = games - wins) and it weighs |trust|. false: the row is
  * not a valid observation and *out is untouched. */
+/* Testimony under a trunk, tallied: the one law for every walk that counts what a trunk's records say. An edge to a
+ * claim, under a parent that stands count times, is said games = count (count x times where the vertex is a record, a
+ * count the source states), tokens = count x times, and wins = games x the outcome's score. A tally adds them and keeps
+ * the least positive position. */
+typedef struct { double games, tokens, wins; uint32_t position; } lp_tally;
+static inline void lp_tally_add(lp_tally *t, double games, double tokens, double wins, uint32_t position){
+    t->games += games; t->tokens += tokens; t->wins += wins;
+    if (position && (!t->position || position < t->position)) t->position = position;
+}
+static inline void lp_tally_edge(lp_tally *t, double count, uint64_t times, bool record, uint32_t outcome, uint32_t spare,
+                                 uint32_t position){
+    double games = record ? count * (double)times : count;
+    lp_tally_add(t, games, count * (double)times, games * lp_outcome_score(outcome, spare), position);
+}
 LP_API bool lp_series_attested(lp_id root, double games, double wins, double trust, lp_series_entry *out);
 
 /* Trust bounds each root's mean vote: s_eff = 0.5 + t*(wins/games - 0.5).
