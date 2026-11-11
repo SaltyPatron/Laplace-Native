@@ -258,6 +258,9 @@ LP_API void   lp_path_times(lp_path, const lp_id *ids, size_t n, uint64_t *times
 /* Whether any of ids stands between its first constituent and its last, runs counted as what they repeat: the place a
  * claim's predicate takes. */
 LP_API bool   lp_path_middle_any(lp_path, const lp_id *ids, size_t n);
+/* What vertex i is said to be within the path (LP_SAID_*), 0 none. */
+LP_API uint32_t lp_path_said(lp_path, size_t i);
+
 /* Every place the phrase occurs as a run inside it, the ID of the constituent that follows: lp_follows on a path. */
 LP_API size_t lp_path_follows(lp_path, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
 
@@ -487,6 +490,50 @@ LP_API int64_t lp_tier0_codepoint(const lp_tier0_record *t0, const lp_id *id);
 /* The fingerprint of a tier 0: BLAKE3-256 of the table. Two installs with one fingerprint give the same coordinates
  * to the same content. */
 LP_API void lp_tier0_fingerprint(const lp_tier0_record *t0, uint8_t out[32]);
+
+/* ---------------------------------------------------------------- realization: an entity back to its text
+ * One walk for every reader that turns a Merkle DAG back into bytes: the engine's reader, the extension's text and
+ * labels, and every tool. The caller owns the fetch; Native owns the law. The walk is iterative (DAG height takes no
+ * C stack), checks cycles on the active path (ELOOP), and allocates nothing per node beyond a workspace the caller
+ * keeps across calls.
+ *
+ * A node is read through the caller's reader: a tier-0 codepoint never is (it is UTF-8, lp_utf8_put); any other ID is
+ * known with its children in order, pending (not fetched yet: skipped, counted, so the caller fetches every pending
+ * node at once and walks again), or absent (no content). A known node's children stay where the reader put them until
+ * lp_realize returns.
+ *
+ * LP_REALIZE_TEXT, exact text: every child written out run times, in order. What a record says, its claims and the
+ * voices that say them (LP_SAID_CLAIM, LP_SAID_VOICE), is no part of its content: they are left out, so a record reads
+ * as its thing. Absent and pending nodes write nothing.
+ * LP_REALIZE_LABELS, a display: a node whose whole surface is text is its text; a tuple, or an opaque node with
+ * children, whose surface is not, is "[" its children joined by " · " "]", a run shown once with " × n"; anything else
+ * (an opaque leaf, an absent node) is its ID in hex. Whether a surface is text is remembered in the workspace until
+ * lp_realizer_forget, while the reader's answers stay the same. */
+typedef struct { lp_id id; uint32_t run, said; } lp_realize_child;          /* said: LP_SAID_* of the vertex, 0 none */
+#define LP_REALIZE_TUPLE  1u    /* things that together name one thing */
+#define LP_REALIZE_OPAQUE 2u    /* a record, a file, a claim: shown by its structure, never read as a text surface */
+#define LP_REALIZE_SCALAR 4u    /* every child is a codepoint: a tuple whose surface is still text */
+typedef struct { const lp_realize_child *child; size_t n; uint32_t flags; } lp_realize_node;
+#define LP_REALIZE_KNOWN   0
+#define LP_REALIZE_PENDING 1
+#define LP_REALIZE_ABSENT  2
+/* One of LP_REALIZE_KNOWN (node filled), _PENDING or _ABSENT. */
+typedef int (*lp_realize_reader)(void *context, const lp_id *id, lp_realize_node *node);
+/* Bytes out, in order; nonzero stops the walk (a byte limit). */
+typedef int (*lp_realize_sink)(void *context, const uint8_t *bytes, size_t n);
+#define LP_REALIZE_TEXT   0u
+#define LP_REALIZE_LABELS 1u
+typedef struct lp_realizer lp_realizer;
+LP_API lp_realizer *lp_realizer_new(void);
+LP_API void         lp_realizer_free(lp_realizer *);
+LP_API void         lp_realizer_forget(lp_realizer *);                       /* what it remembers of surfaces */
+/* pending: the pending nodes met (each once per run it stands in); stopped: the sink stopped the walk; cycle: the
+ * node met again on its own active path, on ELOOP. */
+typedef struct { size_t pending; bool stopped; lp_id cycle; } lp_realize_result;
+/* Walk root in mode, writing to sink. False with errno ELOOP on a cycle or EINVAL on bad arguments; what was written
+ * before stays written. */
+LP_API bool lp_realize(lp_realizer *, const lp_tier0_record *t0, const lp_id *root, uint32_t mode,
+                       lp_realize_reader reader, lp_realize_sink sink, void *context, lp_realize_result *result);
 
 /* ---------------------------------------------------------------- the flags that go with tier 0
  * One 256-bit record per codepoint: a bit for each binary property and a field for each enumerated property of the

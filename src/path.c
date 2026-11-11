@@ -12,6 +12,7 @@ lp_path lp_path_of(const uint8_t *ewkb, size_t len){ lp_path p = { NULL, 0 }; p.
 static inline double m_of(lp_path p, size_t i){ double m; memcpy(&m, p.v + i * LP_VERTEX_BYTES + 24, 8); return m; }
 lp_id lp_path_id(lp_path p, size_t i){ double xyz[3]; lp_id id; memcpy(xyz, p.v + i * LP_VERTEX_BYTES, 24); lp_xyz_to_id(xyz, &id); return id; }
 uint32_t lp_path_run(lp_path p, size_t i){ return lp_m_run(m_of(p, i)); }
+uint32_t lp_path_said(lp_path p, size_t i){ return lp_m_said(m_of(p, i)); }
 size_t lp_path_len(lp_path p){ size_t n = 0; for (size_t i = 0; i < p.n; i++) n += lp_path_run(p, i); return n; }
 
 size_t lp_path_expand(lp_path p, lp_id *out, size_t cap){
