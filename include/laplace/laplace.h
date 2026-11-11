@@ -129,6 +129,11 @@ LP_API bool lp_dag_levels(size_t n, lp_dag_child_reader reader, void *context, s
  * series). */
 typedef int (*lp_dag_edge_reader)(void *context, size_t node, size_t *cursor, size_t *child, uint64_t *times);
 LP_API bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *context, size_t top, double *counts);
+/* The same walk in two steps, for a reader that counts under many tops of one DAG: lp_dag_order writes a topological
+ * order of all n nodes once (ELOOP on a cycle); lp_dag_count then counts under one top along it and allocates nothing,
+ * so a reader interrupted mid-count leaks nothing. Each count is bit-identical to lp_dag_multiplicity's. */
+LP_API bool lp_dag_order(size_t n, lp_dag_edge_reader reader, void *context, size_t *order);
+LP_API bool lp_dag_count(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, double *counts);
 
 /* Strongly connected groups of a logical dependency graph using the same indexed child reader as lp_dag_levels. Every
  * node receives a component in [0,count), numbered with dependencies before their consumers; cycles form one component.
