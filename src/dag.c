@@ -129,6 +129,20 @@ bool lp_dag_count(size_t n, lp_dag_edge_reader reader, void *context, const size
     }
     return true;
 }
+bool lp_dag_count_exact(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, uint64_t *counts){
+    if (!reader || !order || !counts || top >= n) { errno = EINVAL; return false; }
+    memset(counts, 0, n * sizeof *counts); counts[top] = 1;
+    for (size_t i = 0; i < n; i++) {
+        size_t parent = order[i], cursor = 0, child; uint64_t times, add; int result;
+        if (!counts[parent]) continue;
+        while ((result = reader(context, parent, &cursor, &child, &times)) == 0) {
+            if (__builtin_mul_overflow(counts[parent], times, &add) || __builtin_add_overflow(counts[child], add, &counts[child])) {
+                errno = EOVERFLOW; return false; }
+        }
+        if (result != 1) { errno = EINVAL; return false; }
+    }
+    return true;
+}
 bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *context, size_t top, double *counts){
     if (!reader || !counts || top >= n) { errno = EINVAL; return false; }
     if (n > SIZE_MAX / sizeof(size_t)) { errno = EOVERFLOW; return false; }

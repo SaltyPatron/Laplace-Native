@@ -229,6 +229,10 @@ static void testimony_law(void){
     CHECK(lp_dag_order(4, tiny_edge, &d, order) && lp_dag_count(4, tiny_edge, &d, order, 0, again)
           && !memcmp(again, counts, sizeof counts), "order once, count per top: the same counts");
     CHECK(lp_dag_count(4, tiny_edge, &d, order, 1, again) && again[0] == 0 && again[1] == 1 && again[3] == 3, "under 1: 3 stands 3 times");
+    uint64_t exact[4];
+    CHECK(lp_dag_count_exact(4, tiny_edge, &d, order, 0, exact) && exact[3] == 7 && exact[1] == 2, "exact count: 7");
+    TinyDag big = { {0, 0, 1, 2}, {1, 2, 3, 3}, {UINT64_MAX, 1, 2, 1} };
+    CHECK(lp_dag_order(4, tiny_edge, &big, order) && !lp_dag_count_exact(4, tiny_edge, &big, order, 0, exact) && errno == EOVERFLOW, "exact overflow refused");
     lp_tally said = {0}, recorded = {0};
     lp_tally_edge(&said, 2, 38, false, LP_OUTCOME_WIN, 0, 5);
     lp_tally_edge(&recorded, 2, 38, true, LP_OUTCOME_WIN, 0, 5);

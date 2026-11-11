@@ -134,6 +134,8 @@ LP_API bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *conte
  * so a reader interrupted mid-count leaks nothing. Each count is bit-identical to lp_dag_multiplicity's. */
 LP_API bool lp_dag_order(size_t n, lp_dag_edge_reader reader, void *context, size_t *order);
 LP_API bool lp_dag_count(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, double *counts);
+/* The same count in exact whole numbers, for readers that report occurrences as integers; EOVERFLOW past 2^64-1. */
+LP_API bool lp_dag_count_exact(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, uint64_t *counts);
 
 /* Strongly connected groups of a logical dependency graph using the same indexed child reader as lp_dag_levels. Every
  * node receives a component in [0,count), numbered with dependencies before their consumers; cycles form one component.
