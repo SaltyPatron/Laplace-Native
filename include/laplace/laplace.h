@@ -644,7 +644,7 @@ typedef lp_ref (*lp_compose_fn)(void *sink, const lp_ref *children, uint32_t n, 
 LP_API size_t lp_factor(const lp_ref *children, size_t n, lp_ref *out, lp_compose_fn compose, void *sink);
 
 /* ---------------------------------------------------------------- text (liblaplace_text; needs ICU)
- * UAX #29: codepoint -> grapheme -> word segment -> sentence -> paragraph -> text, tiers 0 to 5. Nothing is dropped:
+ * UAX #29: codepoint -> grapheme -> word segment -> sentence -> paragraph -> text. These are roles, not tiers: a node's tier is\n * its height (1 + its highest constituent's, a single constituent being that constituent), so [H,e,l,l,o] is tier 1 as\n * a word and as a sentence of one word. Nothing is dropped:
  * whitespace and punctuation are constituents like everything else, so the text recomposes byte for byte. A single line
  * break inside a paragraph is read as a space for segmentation only; what is recorded is the original. One lp_text
  * per thread. */
