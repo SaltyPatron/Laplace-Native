@@ -114,6 +114,13 @@ lp_series_entry lp_series_observation(lp_id root, uint64_t games, double wins, d
                              .opponent = { LP_GLICKO_RATING, 0, LP_GLICKO_VOLATILITY } };
 }
 
+bool lp_series_attested(lp_id root, double games, double wins, double trust, lp_series_entry *out){
+    if (!isfinite(games) || games < 1 || games > 9007199254740992.0 || floor(games) != games) return false;
+    if (!isfinite(wins) || wins < 0 || wins > games || !isfinite(trust) || fabs(trust) > 1) return false;
+    *out = lp_series_observation(root, (uint64_t)games, trust < 0 ? games - wins : wins, fabs(trust));
+    return true;
+}
+
 typedef struct { double games, score, anchor, weight, precision, performance, information; lp_id id; } SeriesRoot;
 
 static void series_likelihood(const SeriesRoot *r, double x, double *score, double *information){

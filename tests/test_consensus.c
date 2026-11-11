@@ -196,8 +196,26 @@ static void rooted_series(void){
 /* A stock claim (1500/350) after one witness's series. */
 static lp_rating series(double t, uint32_t n, double s){ lp_rating r = lp_rating_stock(); lp_attest_series(&r, t, n, s, LP_ATTEST_FLOOR); return r; }
 
+/* lp_series_attested: one law for every reader of an attestation row. A negative trust reverses the outcomes and
+ * weighs |trust|; anything outside the row's domain is refused. */
+static void attested_rows(void){
+    lp_id root; lp_id_codepoint('a', &root); lp_series_entry e, same;
+    CHECK(lp_series_attested(root, 4, 3, 0.8, &e) && e.games == 4 && e.wins == 3 && e.trust == 0.8, "a plain row");
+    CHECK(lp_series_attested(root, 4, 3, -0.8, &e) && e.games == 4 && e.wins == 1 && e.trust == 0.8, "negative trust reverses");
+    same = lp_series_observation(root, 4, 1, 0.8);
+    CHECK(!memcmp(&e.dependence_root, &same.dependence_root, sizeof e.dependence_root) && e.wins == same.wins
+          && e.opponent.rating == same.opponent.rating, "the same entry as a direct observation");
+    CHECK(!lp_series_attested(root, 0, 0, 0.5, &e), "no games");
+    CHECK(!lp_series_attested(root, 2.5, 1, 0.5, &e), "fractional games");
+    CHECK(!lp_series_attested(root, 4, 5, 0.5, &e), "more wins than games");
+    CHECK(!lp_series_attested(root, 4, -1, 0.5, &e), "negative wins");
+    CHECK(!lp_series_attested(root, 4, 2, 1.5, &e), "trust beyond 1");
+    CHECK(!lp_series_attested(root, 4, NAN, 0.5, &e), "non-finite wins");
+}
+
 int main(void){
     rooted_series();
+    attested_rows();
     /* Glickman, "Example of the Glicko-2 system": 1500/200/0.06 plays 1400/30 (win), 1550/100 (loss),
      * 1700/300 (loss) with tau 0.5, and ends at 1464.06 / 151.52 / 0.05999. */
     lp_rating r = { 1500, 200, 0.06 };

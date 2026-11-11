@@ -33,6 +33,12 @@ typedef struct {
  * witness still has nonzero uncertainty, independently of that anchor. */
 LP_API lp_series_entry lp_series_observation(lp_id root, uint64_t games, double wins, double trust);
 
+/* An attestation row as a series entry: the one law for every reader of attestation. games in [1, 2^53] and whole;
+ * wins (the sum of outcomes) in [0, games]; signed trust in [-1, 1], where a negative trust is a witness that
+ * reliably says the opposite: its outcomes are reversed (wins = games - wins) and it weighs |trust|. false: the row is
+ * not a valid observation and *out is untouched. */
+LP_API bool lp_series_attested(lp_id root, double games, double wins, double trust, lp_series_entry *out);
+
 /* Trust bounds each root's mean vote: s_eff = 0.5 + t*(wins/games - 0.5).
  * The root has ONE shared uncertain performance x_r, not games independent
  * copies of the witness's reliability. In Glicko-2 units the joint posterior is
