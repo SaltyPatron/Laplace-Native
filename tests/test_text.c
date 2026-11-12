@@ -10,6 +10,14 @@ static lp_ref height_sink(void *context,const lp_ref *children,uint32_t count,ui
     CHECK(count>=2 && tier==lp_tier_above(children,count),"every emitted text composition has its exact recursive Merkle DAG height");
     return lp_ref_compose(children,count,tier);
 }
+static lp_ref atom(const lp_tier0_record *t0, char c){ return lp_ref_atom(t0, (uint32_t)(unsigned char)c); }
+static lp_ref block(const lp_ref *children, size_t n){ return lp_ref_compose(children, n, lp_tier_above(children, n)); }
+typedef struct { lp_id want; size_t hits; } Seen;
+static lp_ref seen_sink(void *context, const lp_ref *children, uint32_t count, uint8_t tier){
+    Seen *s = context; lp_ref r = lp_ref_compose(children, count, tier);
+    if (lp_id_eq(&r.id, &s->want)) s->hits++;
+    return r;
+}
 typedef struct { const char *bytes; size_t offset, count; lp_text *reader; } Segments;
 static void check_segment(void *context, size_t offset, size_t length, const lp_ref *value){
     Segments *s = context; lp_id independent;
@@ -59,17 +67,47 @@ int main(void){
     CHECK(n == 3 && !memcmp(&parts[0].id, &ms[0], 16) && !memcmp(&parts[1].id, &ms[1], 16) && !memcmp(&parts[2].id, &ms[2], 16) && r.tier == 2, "microsoft.com is [microsoft] [.] [com] (%zu parts, tier %d)", n, r.tier);
     r = lp_text_parts(tx, (const uint8_t *)"3.14 can't word_1", 17, parts, 16, &n);
     CHECK(n == 11, "3.14 can't word_1 is [3] [.] [14] [ ] [can] ['] [t] [ ] [word] [_] [1] (%zu parts)", n);
-    /* Repetition changes occurrence counts, not the admitted UAX boundaries. */
-    const char *repeated_words[] = {"banana", "mississippi", "aaaa", "abababab"};
-    for (size_t w = 0; w < sizeof repeated_words / sizeof *repeated_words; w++) {
-        const char *text = repeated_words[w]; size_t length = strlen(text);
-        r = lp_text_parts(tx, (const uint8_t *)text, length, parts, 16, &n);
-        lp_id direct = word(text);
-        CHECK(n == length && r.tier == 1 && lp_id_eq(&r.id, &direct),
-              "%s is one word composed directly from its %zu codepoints", text, length);
-        for (size_t i = 0; i < n; i++)
-            CHECK(parts[i].tier == 0 && lp_tier0_codepoint(t0, &parts[i].id) == text[i],
-                  "%s retains scalar occurrence %zu", text, i);
+    /* Repeats, factored from the content alone at every tier (Storage: Compositions): one constituent repeated is a
+     * run; a block of two or more repeated adjacently is its own composition, standing once per repeat; leftmost,
+     * the shortest period, recursively. */
+    {
+        lp_ref a=atom(t0,'a'), b=atom(t0,'b'), c=atom(t0,'c'), h=atom(t0,'h'), i=atom(t0,'i'), m=atom(t0,'m'),
+               nn=atom(t0,'n'), p=atom(t0,'p'), s=atom(t0,'s'), x=atom(t0,'x'), space=atom(t0,' ');
+        lp_ref an_[]={a,nn}, ab_[]={a,b}, abc_[]={a,b,c}, iss_[]={i,s,s}, ha_[]={h,a};
+        lp_ref an=block(an_,2), ab=block(ab_,2), abc=block(abc_,3), iss=block(iss_,3), ha=block(ha_,2);
+        lp_ref x_[]={c,ab,ab}; lp_ref cabab=block(x_,3);
+        lp_ref hs_[]={ha,space}; lp_ref hs=block(hs_,2);
+        lp_ref aaaa[]={a,a,a,a}, banana[]={b,an,an,a}, abab[]={ab,ab}, abababab[]={ab,ab,ab,ab}, abcabcx[]={abc,abc,x},
+               mississippi[]={m,iss,iss,i,p,p,i}, nested[]={cabab,cabab}, haha[]={hs,hs,ha},
+               holmes[]={atom(t0,'H'),atom(t0,'o'),atom(t0,'l'),atom(t0,'m'),atom(t0,'e'),atom(t0,'s')},
+               abcab[]={a,b,c,a,b}, abcd[]={a,b,c,atom(t0,'d')};
+        struct { const char *text; const lp_ref *parts; size_t n; uint8_t tier; } vectors[]={
+            {"aaaa",aaaa,4,1},                 /* a run, not a block: [a,a,a,a], one vertex of run 4 */
+            {"banana",banana,4,2},             /* b [an]x2 a */
+            {"abab",abab,2,2},                 /* [ab]x2 */
+            {"abababab",abababab,4,2},         /* the shortest period: [ab]x4, not [abab]x2 */
+            {"abcabcx",abcabcx,3,2},           /* [abc]x2 x */
+            {"mississippi",mississippi,7,2},   /* m [iss]x2 i p p i: leftmost */
+            {"cababcabab",nested,2,3},         /* [c [ab]x2]x2: the block factored the same way */
+            {"ha ha ha",haha,3,3},             /* [[ha] ' ']x2 [ha]: segments factor like codepoints */
+            {"Holmes",holmes,6,1},             /* no period: unchanged */
+            {"abcab",abcab,5,1},               /* a copy too short to repeat whole: unchanged */
+            {"abcd",abcd,4,1},
+        };
+        for (size_t v=0; v<sizeof vectors/sizeof *vectors; v++) {
+            const char *text=vectors[v].text; size_t length=strlen(text);
+            lp_ref expect=block(vectors[v].parts,vectors[v].n);
+            r = lp_text_parts(tx, (const uint8_t *)text, length, parts, 16, &n);
+            CHECK(n==vectors[v].n && r.tier==vectors[v].tier && lp_id_eq(&r.id,&expect.id) && !memcmp(&r.c,&expect.c,sizeof r.c),
+                  "%s factors to its %zu parts at tier %u (got %zu parts, tier %u)", text, vectors[v].n, vectors[v].tier, n, r.tier);
+            for (size_t k=0; k<n && k<vectors[v].n; k++)
+                CHECK(lp_id_eq(&parts[k].id,&vectors[v].parts[k].id) && parts[k].tier==vectors[v].parts[k].tier,"%s part %zu", text, k);
+            lp_id flat=word(text);
+            CHECK(lp_id_eq(&flat,&r.id)==(vectors[v].n==length),"%s differs from its flat codepoint ID exactly when it factors", text);
+        }
+        Seen seen={an.id,0}; lp_ref whole=block(banana,4);
+        r = lp_text_decompose(tx,(const uint8_t *)"banana",6,seen_sink,&seen);
+        CHECK(seen.hits==1 && lp_id_eq(&r.id,&whole.id),"the block [a,n] is composed through the recording sink once");
     }
 
     r = lp_text_parts(tx, (const uint8_t *)"n", 1, parts, 16, &n);
@@ -103,7 +141,7 @@ int main(void){
     CHECK(r.tier==2 && n==2 && parts[0].tier==1,"punctuation creates a sentence composition at DAG height 1 + max(1, 0) = 2");
     lp_id none; memset(&none, 0xAB, 16);
     CHECK(lp_tier0_codepoint(t0, &none) == -1, "an ID that is no codepoint");
-    const char *height_cases[]={"Holmes","Sherlock Holmes","banana","mississippi","aaaa","abababab","e\xcc\x81","First sentence. Another sentence.\n\nA paragraph."};
+    const char *height_cases[]={"Holmes","Sherlock Holmes","banana","mississippi","aaaa","abababab","cababcabab","ha ha ha","e\xcc\x81","First sentence. Another sentence.\n\nA paragraph."};
     for (size_t i=0; i<sizeof height_cases/sizeof *height_cases; i++)
         lp_text_decompose(tx,(const uint8_t *)height_cases[i],strlen(height_cases[i]),height_sink,NULL);
     for (size_t i=0; i<lp_trust_class_count(); i++) {

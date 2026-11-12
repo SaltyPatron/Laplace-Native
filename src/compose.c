@@ -74,8 +74,20 @@ lp_ref lp_ref_codepoints(const lp_tier0_record *t0, const uint8_t *s, size_t n, 
     return r;
 }
 static int same(const lp_ref *a, const lp_ref *b, size_t L){ for (size_t i = 0; i < L; i++) if (memcmp(&a[i].id, &b[i].id, 16)) return 0; return 1; }
+/* Where each constituent next stands again (n when it does not): a candidate period at i is only ever a distance to a
+ * later copy of ch[i], so the search walks these instead of every length, and a sequence of mostly distinct
+ * constituents (a text's paragraphs, a paragraph's sentences) factors in linear time. Short sequences scan directly. */
+enum { FACTOR_DIRECT = 64 };
+static size_t *next_copies(const lp_ref *ch, size_t n){
+    size_t *next = lp_alloc(n * sizeof *next); lp_idmap *last = lp_idmap_sized(sizeof(size_t));
+    for (size_t j = n; j-- > 0; ) {
+        bool fresh; size_t *at = lp_idmap_get(last, &ch[j].id, &fresh);
+        next[j] = fresh ? n : *at; *at = j;
+    }
+    lp_idmap_free(last); return next;
+}
 size_t lp_factor(const lp_ref *ch, size_t n, lp_ref *out, lp_compose_fn compose, void *sink){
-    size_t m = 0, run_end = 0;
+    size_t m = 0, run_end = 0, *next = n > FACTOR_DIRECT ? next_copies(ch, n) : NULL;
     for (size_t i = 0; i < n; ) {
         /* A non-uniform repeated block cannot be shorter than the initial
          * run: it would either be homogeneous or cross the run boundary in
@@ -86,7 +98,9 @@ size_t lp_factor(const lp_ref *ch, size_t n, lp_ref *out, lp_compose_fn compose,
         }
         size_t first = run_end - i; if (first < 2) first = 2;
         size_t best = 0, k = 0;
-        for (size_t L = first; L <= (n - i) / 2 && !best; L++) {               /* the shortest non-uniform block that repeats here */
+        /* the shortest non-uniform block that repeats here: each length L >= first whose ch[i + L] is ch[i] again,
+         * in increasing order (next[run_end - 1] is the first copy of ch[i] at or past i + first) */
+        for (size_t L = next ? next[run_end - 1] - i : first; L <= (n - i) / 2 && !best; L = next ? next[i + L] - i : L + 1) {
             if (memcmp(&ch[i].id, &ch[i + L].id, 16) || !same(&ch[i], &ch[i + L], L)) continue;
             { size_t d = 1; while (d < L && !memcmp(&ch[i].id, &ch[i + d].id, 16)) d++; if (d == L) continue; }   /* one constituent over and over is a run, not a block */
             k = 2; while (i + (k + 1) * L <= n && same(&ch[i], &ch[i + k * L], L)) k++;
@@ -101,5 +115,6 @@ size_t lp_factor(const lp_ref *ch, size_t n, lp_ref *out, lp_compose_fn compose,
         for (size_t r = 0; r < k; r++) out[m++] = block;
         i += best * k;
     }
+    lp_free(next);
     return m;
 }

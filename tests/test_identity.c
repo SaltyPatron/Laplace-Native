@@ -97,6 +97,21 @@ static void factors(const lp_tier0_record *t0){
         }
     }
     CHECK(checked==18032,"all binary/ternary factor definitions checked: %zu",checked);
+    /* Past 64 constituents the search walks each constituent's next copy instead of every length: the same factors. */
+    lp_ref wide[4]={alphabet[0],alphabet[1],alphabet[2],lp_ref_atom(t0,'D')};
+    uint64_t state=0x9e3779b97f4a7c15u; size_t long_checked=0;
+    for (unsigned radix=2; radix<=4; radix++) for (size_t length=65; length<=128; length++) for (unsigned round=0; round<8; round++) {
+        lp_ref seq[128], want[128], got_v[128];
+        size_t period=1+(size_t)(state>>59)%24;                      /* a periodic body, perturbed, so blocks of every size occur */
+        for (size_t i=0; i<length; i++) {
+            state=state*6364136223846793005u+1442695040888963407u;
+            seq[i]=i<period || (state>>60)<2 ? wide[(state>>33)%radix] : seq[i-period];
+        }
+        size_t count=factor_definition(seq,length,want), got=lp_factor(seq,length,got_v,NULL,NULL);
+        CHECK(count==got && !memcmp(want,got_v,count*sizeof *want),"long factor parity radix %u length %zu round %u",radix,length,round);
+        long_checked++;
+    }
+    CHECK(long_checked==1536,"long sequences checked against the definition: %zu",long_checked);
     const size_t length=160680;
     lp_ref *run=malloc((length+3)*sizeof *run), *out=malloc((length+3)*sizeof *out);
     CHECK(run && out,"allocate the real-size run regression");
