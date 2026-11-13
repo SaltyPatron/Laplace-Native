@@ -130,6 +130,9 @@ int main(void){
         size_t nw = 0; for (size_t s0 = 0; s0 + np < n; s0++) { size_t j = 0; while (j < np && lp_id_eq(&seq[s0 + j], &phrase[j])) j++; if (j == np) want[nw++] = seq[s0 + np]; }
         size_t ng = lp_path_follows(p, phrase, np, got, 40000);
         CHECK(ng == nw && !memcmp(got, want, 16 * nw), "trial %d: %zu continuations, expected %zu", trial, ng, nw);
+        nw = 0; for (size_t s0 = 1; s0 + np <= n; s0++) { size_t j = 0; while (j < np && lp_id_eq(&seq[s0 + j], &phrase[j])) j++; if (j == np) want[nw++] = seq[s0 - 1]; }
+        ng = lp_path_precedes(p, phrase, np, got, 40000);
+        CHECK(ng == nw && !memcmp(got, want, 16 * nw), "trial %d: %zu antecedents, expected %zu", trial, ng, nw);
         /* holds, keys, times, middle */
         /* Extraction writes every stored vertex before sorting/deduplicating.
          * The output needs p.n slots, even when there are only five values. */
