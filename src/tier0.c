@@ -37,8 +37,8 @@ static int record_order(const void *a, const void *b){
     return memcmp(((const lp_tier0_record *)a)->id.b, ((const lp_tier0_record *)b)->id.b, 16);
 }
 
-bool lp_tier0_write_records(const char *path, const lp_tier0_record *records, size_t count){
-    if (!path || !*path || !records || !count) { errno = EINVAL; return false; }
+bool lp_write_atomic(const char *path, const void *bytes, size_t count){
+    if (!path || !*path || !bytes || !count) { errno = EINVAL; return false; }
     char temporary[4096]; FILE *file = NULL;
     static uint64_t sequence;
 #ifdef _WIN32
@@ -61,7 +61,7 @@ bool lp_tier0_write_records(const char *path, const lp_tier0_record *records, si
         if (!file && errno != EEXIST) return false;
     }
     if (!file) return false;
-    bool ok = fwrite(records, sizeof *records, count, file) == count;
+    bool ok = fwrite(bytes, 1, count, file) == count;
     if (ok) ok = fflush(file) == 0;
 #ifdef _WIN32
     if (ok) ok = _commit(_fileno(file)) == 0;
@@ -87,6 +87,10 @@ bool lp_tier0_write_records(const char *path, const lp_tier0_record *records, si
         errno = error;
     }
     return ok;
+}
+bool lp_tier0_write_records(const char *path, const lp_tier0_record *records, size_t count){
+    if (!records || !count || count > SIZE_MAX / sizeof *records) { errno = EINVAL; return false; }
+    return lp_write_atomic(path, records, count * sizeof *records);
 }
 
 bool lp_tier0_write(const char *path, const lp_tier0_record *records){

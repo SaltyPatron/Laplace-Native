@@ -83,6 +83,9 @@ lp_strmap *lp_strmap_lasting(size_t value_bytes);
 /* A perf-cache opened once per path for the life of the process: open runs the first time a path is asked for, and
  * every later caller shares what it made; a failure is not kept, so a cache generated later is found. */
 const void *lp_cached(const char *kind, const char *path, const void *(*open)(const char *path));
+/* A file's whole bytes published at path: written to a fresh temporary beside it, flushed to the device, and renamed
+ * over path, so a reader sees the old file or the new one and never a part. False (errno set) leaves path as it was. */
+bool lp_write_atomic(const char *path, const void *bytes, size_t count);
 /* A file beside another (a perf-cache's .layout or .keys): the path with ending appended, in out. */
 void lp_beside(const char *path, const char *ending, char *out, size_t cap);
 /* Where a perf-cache that goes with tier 0 is: the environment's variable when it is set, else tier 0's path with
