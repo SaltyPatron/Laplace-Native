@@ -74,8 +74,10 @@ bool lp_path_middle_any(lp_path p, const lp_id *ids, size_t n){
  * first constituent, and from each the rest of the window is compared on the IDs' own bits, the path read with its runs
  * written out; only what follows is decoded. A vertex of run r holds r copies of its constituent, and the phrase may
  * start at any of them; where the phrase's leading constituent repeats L times and something else follows, only the
- * last L copies can start it (every earlier start meets that something else inside the run), so only those are tried. */
-size_t lp_path_follows(lp_path p, const lp_id *phrase, size_t np, lp_id *out, size_t cap){
+ * last L copies can start it (every earlier start meets that something else inside the run), so only those are tried.
+ * Antecedents are the same matches read the other way: the copy before a start inside a run is that run's own
+ * constituent, and before a run's first copy stands the vertex before it. */
+static size_t path_neighbours(lp_path p, const lp_id *phrase, size_t np, lp_id *out, size_t cap, bool before){
     if (!p.n || !np) return 0;
     lp_scan_fn scan = lp_kernels()->scan;
     uint8_t stack[24 * 64], *key = np <= 64 ? stack : lp_alloc(24 * np);
@@ -91,14 +93,22 @@ size_t lp_path_follows(lp_path p, const lp_id *phrase, size_t np, lp_id *out, si
                 j++; left--;
                 if (left == 0) { vi++; if (vi >= nv) break; left = lp_path_run(p, vi); }
             }
-            if (!ok || j < np || vi >= nv) continue;                   /* no vertex follows the phrase */
-            if (found < cap) out[found] = lp_path_id(p, vi);
+            if (!ok || j < np) continue;
+            if (before) {
+                if (!off && !i) continue;                              /* nothing stands before the phrase */
+                if (found < cap) out[found] = lp_path_id(p, off ? i : i - 1);
+            } else {
+                if (vi >= nv) continue;                                /* no vertex follows the phrase */
+                if (found < cap) out[found] = lp_path_id(p, vi);
+            }
             found++;
         }
     }
     if (key != stack) lp_free(key);
     return found;
 }
+size_t lp_path_follows(lp_path p, const lp_id *phrase, size_t np, lp_id *out, size_t cap){ return path_neighbours(p, phrase, np, out, cap, false); }
+size_t lp_path_precedes(lp_path p, const lp_id *phrase, size_t np, lp_id *out, size_t cap){ return path_neighbours(p, phrase, np, out, cap, true); }
 
 /* ---- tuples */
 int lp_tuple_other(const lp_id *part, size_t n, const lp_id *at){

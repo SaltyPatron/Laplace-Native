@@ -1,4 +1,4 @@
-/* Continuations: the SIMD scan and the run-length walk find exactly what a brute-force scan of the expanded path
+/* Continuations and antecedents: the SIMD scan and the run-length walk find exactly what a brute-force scan of the expanded path
  * finds, on random paths with repeats, at whatever dispatch level LAPLACE_ISA selects. */
 #include "laplace/laplace.h"
 #include "check.h"
@@ -31,6 +31,14 @@ int main(void){
         size_t ng = lp_follows(buf, len, phrase, np, got, 6000);
         CHECK(ng == nw, "trial %d: %zu continuations, expected %zu (n=%zu np=%zu)", trial, ng, nw, n, np);
         if (ng == nw) CHECK(!memcmp(got, want, 16 * nw), "trial %d: continuations differ", trial);
+        size_t nb = 0;                                                        /* antecedents: the same matches, read the other way */
+        for (size_t s = 1; s + np <= n; s++) {
+            size_t j = 0; while (j < np && !memcmp(&seq[s + j], &phrase[j], 16)) j++;
+            if (j == np) want[nb++] = seq[s - 1];
+        }
+        size_t gb = lp_precedes(buf, len, phrase, np, got, 6000);
+        CHECK(gb == nb, "trial %d: %zu antecedents, expected %zu (n=%zu np=%zu)", trial, gb, nb, n, np);
+        if (gb == nb) CHECK(!memcmp(got, want, 16 * nb), "trial %d: antecedents differ", trial);
     }
     free(buf); free(seq);
     DONE("follows");

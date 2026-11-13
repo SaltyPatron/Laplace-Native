@@ -91,6 +91,8 @@ static void nested_geometry(void){
     lp_ewkb_slice pieces[] = { { left, ln }, { right, rr } };
     size_t lines_n = lp_ewkb_collection_zm(LP_MULTILINESTRING, pieces, 2, NULL, lines, sizeof lines);
     CHECK(lines_n && lp_follows(lines, lines_n, ids + 1, 1, following, 8) == 0, "continuations never join two line members");
+    CHECK(lines_n && lp_precedes(lines, lines_n, ids + 2, 1, following, 8) == 0, "antecedents never join two line members");
+    CHECK(lp_precedes(line, line_n, ids + 1, 1, following, 8) == 1 && lp_id_eq(following, ids), "big-endian antecedents");
     lp_ewkb_slice dots[] = { { point, point_n }, { point, point_n } };
     size_t dots_n = lp_ewkb_collection_zm(LP_MULTIPOINT, dots, 2, NULL, lines, sizeof lines);
     CHECK(dots_n && lp_ewkb_keys(lines, dots_n, keys, 20, &count) && count == 1, "MULTIPOINT indexes its distinct IDs");

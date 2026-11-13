@@ -48,6 +48,7 @@ size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap){
 typedef struct {
     const lp_id *phrase;
     size_t np, cap, count;
+    bool before;
     lp_id *out;
     lp_buf converted;
     uint8_t local[128 * LP_VERTEX_BYTES];
@@ -65,14 +66,21 @@ static bool follow_span(void *context, const lp_ewkb_span *span){
         vertices = copy;
     }
     size_t room = f->count < f->cap ? f->cap - f->count : 0;
-    size_t found = lp_path_follows(lp_path_block(vertices, span->count), f->phrase, f->np,
-                                  room ? f->out + f->count : NULL, room);
+    lp_path block = lp_path_block(vertices, span->count); lp_id *dst = room ? f->out + f->count : NULL;
+    size_t found = f->before ? lp_path_precedes(block, f->phrase, f->np, dst, room) : lp_path_follows(block, f->phrase, f->np, dst, room);
     if (found > SIZE_MAX - f->count) { errno = EOVERFLOW; return false; }
     f->count += found; return true;
 }
 size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap){
     if (!np || !phrase) return 0;
     GeometryFollows f = { .phrase = phrase, .np = np, .out = out, .cap = out ? cap : 0 };
+    bool ok = lp_ewkb_visit(ewkb, len, follow_span, &f, NULL);
+    lp_buf_free(&f.converted);
+    return ok ? f.count : 0;
+}
+size_t lp_precedes(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap){
+    if (!np || !phrase) return 0;
+    GeometryFollows f = { .phrase = phrase, .np = np, .out = out, .cap = out ? cap : 0, .before = true };
     bool ok = lp_ewkb_visit(ewkb, len, follow_span, &f, NULL);
     lp_buf_free(&f.converted);
     return ok ? f.count : 0;

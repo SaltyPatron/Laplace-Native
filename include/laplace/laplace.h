@@ -227,6 +227,9 @@ LP_API size_t lp_ewkb_vertices(const uint8_t *ewkb, size_t len, const uint8_t **
  * that follows it. Matching compares raw vertex bytes; only continuations are decoded. Returns the number of
  * continuations found; at most cap are written. */
 LP_API size_t lp_follows(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
+/* The same matches, the ID of the constituent that stands before each: within a run its own constituent, before the
+ * run's first copy the vertex before it. Never crosses a component boundary. */
+LP_API size_t lp_precedes(const uint8_t *ewkb, size_t len, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
 
 /* ---------------------------------------------------------------- paths, as every reader meets them
  * A path is its vertex block: n vertices of 32 bytes, X, Y, Z (a constituent's ID, packed) and M (its run, and what it
@@ -263,6 +266,8 @@ LP_API uint32_t lp_path_said(lp_path, size_t i);
 
 /* Every place the phrase occurs as a run inside it, the ID of the constituent that follows: lp_follows on a path. */
 LP_API size_t lp_path_follows(lp_path, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
+/* Every place the phrase occurs as a run inside it, the ID of the constituent before it: lp_precedes on a path. */
+LP_API size_t lp_path_precedes(lp_path, const lp_id *phrase, size_t np, lp_id *out, size_t cap);
 
 /* The same, from EWKB as the database sends it. */
 LP_API size_t lp_path_ids(const uint8_t *ewkb, size_t len, lp_id *out, size_t cap);
