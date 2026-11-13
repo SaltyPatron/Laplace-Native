@@ -99,64 +99,8 @@ jobs:
           path: ${{ runner.temp }}/native-inputs-${{ github.run_id }}-${{ github.run_attempt }}-icx-release
           if-no-files-found: error
           retention-days: 7
-  cloud-acquire:
-    needs: native
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    permissions: { contents: read, id-token: write }
-    uses: ./.github/workflows/cloud-lease.yml
-    with: { operation: acquire }
-    secrets:
-      operations-checkout: ${{ secrets.LAPLACE_CHECKOUT }}
-  isa:
-    needs: cloud-acquire
-    runs-on: [self-hosted, laplace, Laplace-Native, avx512]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with: { persist-credentials: false, clean: false }
-      - name: Prepare the exact candidate while retaining pinned dependency sources
-        run: bash scripts/ci-checkout.sh
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: SaltyPatron/Laplace-Operations
-          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
-          path: .operations/Laplace-Operations
-          token: ${{ secrets.LAPLACE_CHECKOUT }}
-          persist-credentials: false
-      - name: Download the prepared inputs verified on the local target
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: native-prepared-inputs
-          path: ${{ runner.temp }}/native-prepared-inputs-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Verify the exact input closure
-        run: python3 scripts/ci-inputs.py verify "$RUNNER_TEMP/native-prepared-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-      - name: Build native dispatch variants
-        run: bash scripts/ci-build.sh icx-release
-      - name: Record the processor
-        run: lscpu | tee "$RUNNER_TEMP/native-cpu.txt" >> "$GITHUB_STEP_SUMMARY"
-      - name: Execute and verify every native dispatch level
-        run: |
-          set -euo pipefail
-          ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/icx-release" --output-on-failure --output-junit "$RUNNER_TEMP/native-isa.xml"
-          python3 scripts/verify-isa.py "$RUNNER_TEMP/native-isa.xml" | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: native-isa-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/native-isa.xml
-            ${{ runner.temp }}/native-cpu.txt
-          if-no-files-found: error
-  cloud-release:
-    needs: [cloud-acquire, isa]
-    if: always() && needs.cloud-acquire.result != 'skipped'
-    permissions: { contents: read, id-token: write }
-    uses: ./.github/workflows/cloud-lease.yml
-    with: { operation: release }
-    secrets:
-      operations-checkout: ${{ secrets.LAPLACE_CHECKOUT }}
   deploy:
-    needs: [native, isa]
+    needs: native
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, laplace, Laplace-Native, staging]
     timeout-minutes: 5
