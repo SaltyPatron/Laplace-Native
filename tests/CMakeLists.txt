@@ -2,7 +2,7 @@
 add_test(NAME path_selection COMMAND ${CMAKE_COMMAND}
   "-DSOURCE=${PROJECT_SOURCE_DIR}" "-DWORK=${PROJECT_BINARY_DIR}/path-selection-test"
   -P "${CMAKE_CURRENT_SOURCE_DIR}/path-selection.cmake")
-foreach(name identity sequence dag realize geometry coord follows consensus shape s3 pull flags highway core kernels)
+foreach(name identity sequence dag realize geometry coord follows consensus shape s3 pull flags highway perfcache core kernels)
   add_executable(test_${name} test_${name}.c)
   target_link_libraries(test_${name} PRIVATE laplace_static BLAKE3::blake3 ${LP_SYSLIBS})
   target_compile_options(test_${name} PRIVATE ${LP_C_FLAGS})
