@@ -134,6 +134,15 @@ LP_API bool lp_dag_multiplicity(size_t n, lp_dag_edge_reader reader, void *conte
  * so a reader interrupted mid-count leaks nothing. Each count is bit-identical to lp_dag_multiplicity's. */
 LP_API bool lp_dag_order(size_t n, lp_dag_edge_reader reader, void *context, size_t *order);
 LP_API bool lp_dag_count(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, double *counts);
+/* The same count under one top over the nodes it reaches alone, for a reader that counts under many tops of one large
+ * DAG (each top's work is its own reach, never all n nodes). rank: each node's place in lp_dag_order's order (the
+ * inverse of order). counts and mark: n entries, zero on entry; counts is left set on the reach (the caller reads them
+ * and zeroes them, and mark, for the next top: lp_dag_reach_clear). reach: n entries of scratch, written with the nodes
+ * top reaches in the order's order; stack: n entries of scratch. The count of the reach, or (size_t)-1 with errno set.
+ * Each count is bit-identical to lp_dag_count's: a child adds its parents' counts in the same order. */
+LP_API size_t lp_dag_count_reach(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, const size_t *rank,
+                                 size_t top, double *counts, uint8_t *mark, size_t *reach, size_t *stack);
+LP_API void lp_dag_reach_clear(const size_t *reach, size_t count, double *counts, uint8_t *mark);
 /* The same count in exact whole numbers, for readers that report occurrences as integers; EOVERFLOW past 2^64-1. */
 LP_API bool lp_dag_count_exact(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, uint64_t *counts);
 
