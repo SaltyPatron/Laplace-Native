@@ -129,6 +129,34 @@ bool lp_dag_count(size_t n, lp_dag_edge_reader reader, void *context, const size
     }
     return true;
 }
+static int by_size(const void *a, const void *b){ size_t x = *(const size_t *)a, y = *(const size_t *)b; return x < y ? -1 : x > y; }
+size_t lp_dag_count_reach(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, const size_t *rank,
+                          size_t top, double *counts, uint8_t *mark, size_t *reach, size_t *stack){
+    if (!reader || !order || !rank || !counts || !mark || !reach || !stack || top >= n) { errno = EINVAL; return (size_t)-1; }
+    size_t found = 0, depth = 0; int result;
+    stack[depth++] = top; mark[top] = 1;
+    while (depth) {                                            /* the reach: every node below top, once */
+        size_t node = stack[--depth], cursor = 0, child; uint64_t times;
+        reach[found++] = rank[node];
+        while ((result = reader(context, node, &cursor, &child, &times)) == 0) {
+            if (child >= n) { errno = EINVAL; return (size_t)-1; }
+            if (!mark[child]) { mark[child] = 1; stack[depth++] = child; } }
+        if (result != 1) { errno = EINVAL; return (size_t)-1; }
+    }
+    qsort(reach, found, sizeof *reach, by_size);                  /* by rank: the order's order */
+    for (size_t i = 0; i < found; i++) reach[i] = order[reach[i]];
+    counts[top] = 1;
+    for (size_t i = 0; i < found; i++) {
+        size_t parent = reach[i], cursor = 0, child; uint64_t times;
+        if (counts[parent] == 0) continue;
+        while ((result = reader(context, parent, &cursor, &child, &times)) == 0) counts[child] += counts[parent] * (double)times;
+        if (result != 1) { errno = EINVAL; return (size_t)-1; }
+    }
+    return found;
+}
+void lp_dag_reach_clear(const size_t *reach, size_t count, double *counts, uint8_t *mark){
+    for (size_t i = 0; i < count; i++) { counts[reach[i]] = 0; mark[reach[i]] = 0; }
+}
 bool lp_dag_count_exact(size_t n, lp_dag_edge_reader reader, void *context, const size_t *order, size_t top, uint64_t *counts){
     if (!reader || !order || !counts || top >= n) { errno = EINVAL; return false; }
     memset(counts, 0, n * sizeof *counts); counts[top] = 1;

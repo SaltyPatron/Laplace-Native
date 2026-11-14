@@ -229,6 +229,18 @@ static void testimony_law(void){
     CHECK(lp_dag_order(4, tiny_edge, &d, order) && lp_dag_count(4, tiny_edge, &d, order, 0, again)
           && !memcmp(again, counts, sizeof counts), "order once, count per top: the same counts");
     CHECK(lp_dag_count(4, tiny_edge, &d, order, 1, again) && again[0] == 0 && again[1] == 1 && again[3] == 3, "under 1: 3 stands 3 times");
+    size_t rank[4], reach[4], stack[4]; uint8_t mark[4] = {0}; double each[4] = {0};
+    for (size_t i = 0; i < 4; i++) rank[order[i]] = i;
+    for (size_t top = 0; top < 4; top++) {                        /* under every top, its reach alone: lp_dag_count's counts */
+        CHECK(lp_dag_count(4, tiny_edge, &d, order, top, again), "count under %zu", top);
+        size_t k = lp_dag_count_reach(4, tiny_edge, &d, order, rank, top, each, mark, reach, stack);
+        CHECK(k != (size_t)-1 && !memcmp(each, again, sizeof again), "under %zu its reach counts as the whole DAG does", top);
+        for (size_t i = 1; i < k; i++) CHECK(rank[reach[i - 1]] < rank[reach[i]], "the reach in the order's order");
+        lp_dag_reach_clear(reach, k, each, mark);
+        CHECK(!each[0] && !each[1] && !each[2] && !each[3] && !mark[0] && !mark[1] && !mark[2] && !mark[3], "cleared for the next top");
+    }
+    CHECK(lp_dag_count_reach(4, tiny_edge, &d, order, rank, 1, each, mark, reach, stack) == 2, "1 reaches itself and 3");
+    lp_dag_reach_clear(reach, 2, each, mark);
     uint64_t exact[4];
     CHECK(lp_dag_count_exact(4, tiny_edge, &d, order, 0, exact) && exact[3] == 7 && exact[1] == 2, "exact count: 7");
     TinyDag big = { {0, 0, 1, 2}, {1, 2, 3, 3}, {UINT64_MAX, 1, 2, 1} };
