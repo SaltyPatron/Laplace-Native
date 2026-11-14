@@ -4,6 +4,9 @@
 #include "check.h"
 #include "blake3.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 static int cmp16(const void *a, const void *b){ return memcmp(a, b, 16); }
 
@@ -71,8 +74,10 @@ static size_t factor_definition(const lp_ref *in, size_t n, lp_ref *out){
             break;
         }
         if (!period) { out[used++]=in[at++]; continue; }
-        lp_ref inner[64]; size_t count=factor_definition(in+at,period,inner);
+        lp_ref stack[64], *inner=period<=64?stack:malloc(period*sizeof *inner);
+        size_t count=factor_definition(in+at,period,inner);
         lp_ref block=lp_ref_compose(inner,count,lp_tier_above(inner,count)); block.said=0;
+        if (inner!=stack) free(inner);
         for (size_t j=0; j<copies; j++) out[used++]=block;
         at+=period*copies;
     }
@@ -112,6 +117,56 @@ static void factors(const lp_tier0_record *t0){
         long_checked++;
     }
     CHECK(long_checked==1536,"long sequences checked against the definition: %zu",long_checked);
+    /* Longer still, where squares nest and overlap: random periodic bodies, perturbed, and Fibonacci words (the most
+     * runs a sequence can hold), each in place as well. */
+    size_t longer_checked=0;
+    for (unsigned radix=2; radix<=4; radix++) for (unsigned round=0; round<12; round++) {
+        state=state*6364136223846793005u+1442695040888963407u;
+        size_t length=129+(size_t)(state>>40)%1900, period=1+(size_t)(state>>20)%97;
+        lp_ref *seq=malloc(length*sizeof *seq), *want=malloc(length*sizeof *want), *got_v=malloc(length*sizeof *got_v);
+        for (size_t i=0; i<length; i++) {
+            state=state*6364136223846793005u+1442695040888963407u;
+            seq[i]=i<period || (state>>60)<1 ? wide[(state>>33)%radix] : seq[i-period];
+        }
+        size_t count=factor_definition(seq,length,want), got=lp_factor(seq,length,got_v,NULL,NULL);
+        CHECK(count==got && !memcmp(want,got_v,count*sizeof *want),"longer factor parity radix %u length %zu period %zu",radix,length,period);
+        got=lp_factor(seq,length,seq,NULL,NULL);
+        CHECK(count==got && !memcmp(want,seq,count*sizeof *want),"longer in-place factor parity radix %u length %zu",radix,length);
+        free(seq); free(want); free(got_v); longer_checked++;
+    }
+    for (size_t length=65; length<=1597; length=length*3/2) {
+        lp_ref *seq=malloc(length*sizeof *seq), *want=malloc(length*sizeof *want), *got_v=malloc(length*sizeof *got_v);
+        for (size_t i=0; i<length; i++)                            /* the Fibonacci word: ABAABABAABAAB... */
+            seq[i]=wide[(size_t)((double)(i+2)/1.6180339887498949)-(size_t)((double)(i+1)/1.6180339887498949)];
+        size_t count=factor_definition(seq,length,want), got=lp_factor(seq,length,got_v,NULL,NULL);
+        CHECK(count==got && !memcmp(want,got_v,count*sizeof *want),"Fibonacci factor parity length %zu",length);
+        free(seq); free(want); free(got_v); longer_checked++;
+    }
+    CHECK(longer_checked==44,"longer sequences checked against the definition: %zu",longer_checked);
+    /* A generated table: one long sequence whose constituents recur every few places (its brackets, names and
+     * spaces) while each row differs (its index). Every later copy of a constituent was a candidate period, so
+     * factoring took the square of its length; here a 1,500-row table agrees with the definition and a
+     * 40,000-row one factors in about as many steps as it has constituents. */
+    {
+        lp_ref tok[16]; for (unsigned t=0; t<16; t++) tok[t]=lp_ref_atom(t0,0x41+t);
+        size_t rows=40000, per=16, length=rows*per;
+        lp_ref *table=malloc(length*sizeof *table), *out=malloc(length*sizeof *out), *want=malloc(length*sizeof *want);
+        lp_ref *index=malloc(rows*sizeof *index);
+        for (size_t r=0; r<rows; r++) {                            /* [r] = {.lex_state = 37},\n */
+            char digits[16]; int nd=snprintf(digits,sizeof digits,"%zu",r);
+            lp_ref d[16]; for (int k=0; k<nd; k++) d[k]=lp_ref_atom(t0,(uint32_t)digits[k]);
+            index[r]=nd==1?d[0]:lp_ref_compose(d,(size_t)nd,lp_tier_above(d,(size_t)nd));
+        }
+        static const unsigned row[16]={0,99,1,2,3,2,4,5,6,2,3,2,7,8,9,10};
+        for (size_t r=0; r<rows; r++) for (size_t k=0; k<per; k++) table[r*per+k]=row[k]==99?index[r]:tok[row[k]];
+        size_t small=1500*per, count=factor_definition(table,small,want), got=lp_factor(table,small,out,NULL,NULL);
+        CHECK(count==got && !memcmp(want,out,count*sizeof *want),"a generated table of %zu constituents agrees with the definition",small);
+        clock_t started=clock();
+        got=lp_factor(table,length,out,NULL,NULL);
+        double seconds=(double)(clock()-started)/CLOCKS_PER_SEC;
+        CHECK(got>0 && seconds<20.0,"a generated table of %zu constituents factors in %.2f s",length,seconds);
+        free(table); free(out); free(want); free(index);
+    }
     const size_t length=160680;
     lp_ref *run=malloc((length+3)*sizeof *run), *out=malloc((length+3)*sizeof *out);
     CHECK(run && out,"allocate the real-size run regression");
