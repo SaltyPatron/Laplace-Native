@@ -218,6 +218,44 @@ if(PROJECT_IS_TOP_LEVEL)
     add_subdirectory(tests)
   endif()
 
+  # The C# binding (tools/csharp): generated from the public headers' AST, never written by hand (target
+  # csharp_bindings); checked against this library's own layout and calls (test csharp_abi); packed as the NuGet
+  # package Laplace.Native.Interop with this platform's native library (target csharp_package).
+  find_program(LP_NODE node)
+  find_program(LP_DOTNET dotnet)
+  if(LP_NODE AND CMAKE_C_COMPILER_ID MATCHES "IntelLLVM|Clang")
+    set(LP_CSHARP ${CMAKE_CURRENT_BINARY_DIR}/csharp)
+    file(GLOB LP_PUBLIC_HEADERS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/include/laplace/*.h)
+    add_custom_command(OUTPUT ${LP_CSHARP}/LaplaceNative.g.cs ${LP_CSHARP}/Abi.g.cs ${LP_CSHARP}/abi.g.c
+      COMMAND ${CMAKE_COMMAND} -DCC=${CMAKE_C_COMPILER} -DNODE=${LP_NODE} -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}
+              -DOUT=${LP_CSHARP} -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/csharp/generate.cmake
+      DEPENDS ${LP_PUBLIC_HEADERS} tools/csharp/api.c tools/csharp/generate.mjs tools/csharp/generate.cmake
+      COMMENT "C# binding from the public headers" VERBATIM)
+    add_custom_target(csharp_bindings ALL DEPENDS ${LP_CSHARP}/LaplaceNative.g.cs)
+    add_executable(csharp_abi_c ${LP_CSHARP}/abi.g.c)
+    target_link_libraries(csharp_abi_c PRIVATE laplace_static ${LP_SYSLIBS})
+    if(LP_DOTNET AND LAPLACE_NATIVE_TESTS)
+      add_test(NAME csharp_abi COMMAND ${CMAKE_COMMAND} -DABI=$<TARGET_FILE:csharp_abi_c> -DDOTNET=${LP_DOTNET}
+        -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR} -DGENERATED=${LP_CSHARP} -DLIBDIR=$<TARGET_FILE_DIR:laplace>
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/csharp-test -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/csharp.cmake)
+    endif()
+    if(LP_DOTNET)
+      if(WIN32)
+        set(LP_RID win-x64)
+      else()
+        set(LP_RID linux-x64)
+      endif()
+      # The package version: this project's, or (CI) 0.0.0-<UTC date>.<commit> until a release is cut.
+      set(LAPLACE_PACKAGE_VERSION "${PROJECT_VERSION}" CACHE STRING "Laplace.Native.Interop package version")
+      add_custom_target(csharp_package
+        COMMAND ${LP_DOTNET} pack ${CMAKE_CURRENT_SOURCE_DIR}/bindings/csharp/Laplace.Native.Interop.csproj -c Release
+                --artifacts-path ${CMAKE_CURRENT_BINARY_DIR}/csharp-package -o ${CMAKE_CURRENT_BINARY_DIR}/nuget
+                -p:LaplaceNativeGenerated=${LP_CSHARP} -p:LaplaceNativeVersion=${LAPLACE_PACKAGE_VERSION}
+                -p:LaplaceNativeRuntime=$<TARGET_FILE:laplace> -p:LaplaceNativeRid=${LP_RID}
+        DEPENDS csharp_bindings laplace VERBATIM)
+    endif()
+  endif()
+
   # The package: libraries, headers, the tier-0 tool, and the CMake that builds against them under the same
   # floating-point contract (LaplaceFlags with the contract Native was built under, LaplacePaths, the UTF-8 manifest).
   include(GNUInstallDirs)

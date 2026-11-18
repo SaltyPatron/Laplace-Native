@@ -1,0 +1,9 @@
+/* Every public header of Laplace-Native, the unit whose AST tools/csharp/generate.mjs reads. */
+#include "laplace/laplace.h"
+#include "laplace/tier0.h"
+#include "laplace/highway.h"
+#include "laplace/consensus.h"
+#include "laplace/geometry.h"
+#include "laplace/perfcache.h"
+#include "laplace/json.h"
+#include "laplace/linalg.h"
