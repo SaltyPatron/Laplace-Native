@@ -55,7 +55,7 @@ LP_API void lp_bench(void){
     row("exact centroid, 16 points (per point)", LP_NCP, now() - t, 0);
 
     printf("\ncontinuations: vertex scan over a 1M-vertex path (no match, full pass)\n");
-    size_t nv = lp_ewkb_vertices(buf, len, (const uint8_t **)&path) ; const uint8_t *v; nv = lp_ewkb_vertices(buf, len, &v);
+    const uint8_t *v; size_t nv = lp_ewkb_vertices(buf, len, &v);
     uint8_t key[24]; memset(key, 0x5A, 24); int reps = 20;
     t = now(); for (int r = 0; r < reps; r++) sink += lp_scan_scalar(v, 0, nv, key); row("scalar", (double)nv * reps, now() - t, (double)nv * reps * 32);
     if (f & LP_CPU_AVX2) { t = now(); for (int r = 0; r < reps; r++) sink += lp_scan_avx2(v, 0, nv, key); row("AVX2", (double)nv * reps, now() - t, (double)nv * reps * 32); }
@@ -75,10 +75,22 @@ LP_API void lp_bench(void){
         char label[64]; snprintf(label, sizeof label, "discrete Frechet, %zu x %zu vertices (per call)", n, n);
         int k = n == 100 ? 2000 : 20; t = now(); for (int r = 0; r < k; r++) sink += (uint64_t)(lp_frechet4(a, n, b, n) * 1e6);
         row(label, k, now() - t, 0); free(a); free(b);
+    }
+
+    printf("\nshape measures, 1,000 x 1,000 vertices (per call)\n");
+    { size_t n = 1000; double *a = malloc(sizeof(double) * 4 * n), *b = malloc(sizeof(double) * 4 * n);
+      for (size_t j = 0; j < 4 * n; j++) { a[j] = (double)(next() >> 11) / 9007199254740992.0; b[j] = (double)(next() >> 11) / 9007199254740992.0; }
+      t = now(); for (int r = 0; r < 20; r++) sink += (uint64_t)(lp_dtw4(a, n, b, n, NULL) * 1e6); row("DTW", 20, now() - t, 0);
+      t = now(); for (int r = 0; r < 20; r++) sink += lp_edr4(a, n, b, n, 0.1); row("EDR", 20, now() - t, 0);
       t = now(); for (int r = 0; r < 5; r++) sink += (uint64_t)(lp_frechet4_outliers(a, n, b, n, 1) * 1e6); row("Frechet, 1 outlier skipped", 5, now() - t, 0);
       free(a); free(b); }
 
-    printf("\ntext and the pull\n");
+    printf("\nthe pull\n");
+    { lp_frontier *fr = lp_frontier_new(); size_t nf = 1000000; lp_rating rr = { 1700, 80, 0.06 };
+      t = now(); for (size_t i = 0; i < nf; i++) lp_frontier_reach(fr, &ids[i], NULL, NULL, (double)(next() >> 40) + lp_cost(&rr, 2, 0.05), 0, 1);
+      while (lp_frontier_next(fr)) sink++;
+      row("frontier: reach and take, 1M entities (per entity)", nf, now() - t, 0); lp_frontier_free(fr); }
+
     printf("\nconsensus\n");
     lp_rating rt = { 1500, 350, 0.06 }; N = 1000000;
     t = now(); for (size_t i = 0; i < N; i++) { lp_attest(&rt, 0.9, (double)(i & 1), 1500, 0.5, 30); } row("Glicko-2 attestation (one matchup)", N, now() - t, 0);
