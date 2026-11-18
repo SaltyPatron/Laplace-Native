@@ -166,14 +166,22 @@ static int one_value(Parser *ps, uint32_t *out){
     }
 }
 
-LP_API lp_json *lp_json_parse(const char *text, size_t len){
+static lp_json *parse(const char *text, size_t len, size_t *used){
     if (!text) return NULL;
     lp_json *j = lp_zalloc(sizeof *j); j->text = text;
     Parser ps = { text, text + len, j, 0 };
     uint32_t root;
     /* The root is node 0: the first node a value makes. */
-    if (!value(&ps, &root) || root != LP_JSON_ROOT || (ws(&ps), ps.p != ps.end)) { lp_json_free(j); return NULL; }
+    if (!value(&ps, &root) || root != LP_JSON_ROOT) { lp_json_free(j); return NULL; }
+    ws(&ps);
+    if (used) *used = (size_t)(ps.p - text);
+    else if (ps.p != ps.end) { lp_json_free(j); return NULL; }
     return j;
+}
+LP_API lp_json *lp_json_parse(const char *text, size_t len){ return parse(text, len, NULL); }
+LP_API lp_json *lp_json_parse_prefix(const char *text, size_t len, size_t *used){
+    size_t ignored;
+    return parse(text, len, used ? used : &ignored);
 }
 
 LP_API void lp_json_free(lp_json *j){

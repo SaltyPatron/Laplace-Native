@@ -38,6 +38,13 @@ static void reads(void){
     CHECK(s && n == 6 && !memcmp(s, "\"a\\\"b\"", n), "a string's own text, quotes and escapes");
     lp_json_free(j);
 
+    /* The value a text begins with, the rest left for its reader. */
+    { const char *t = "{\"a\":[1]} , \"b\":2}"; size_t used = 0;
+      j = lp_json_parse_prefix(t, strlen(t), &used);
+      CHECK(j && used == 10 && lp_json_count(j, LP_JSON_ROOT) == 1, "a leading value and what it took (%zu)", used);
+      lp_json_free(j);
+      CHECK(!lp_json_parse(t, strlen(t)), "the same text is no single value"); }
+
     /* A key inside a string or a nested object is no member of the root. */
     j = parse("{\"q\":\"\\\"text\\\":1\",\"inner\":{\"text\":2}}");
     CHECK(j && lp_json_get(j, LP_JSON_ROOT, "text") == LP_JSON_NONE, "only the root's own members");

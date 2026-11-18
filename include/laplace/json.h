@@ -22,6 +22,9 @@ typedef enum { LP_JSON_NULL, LP_JSON_FALSE, LP_JSON_TRUE, LP_JSON_NUMBER, LP_JSO
 typedef struct lp_json lp_json;
 
 LP_API lp_json     *lp_json_parse(const char *text, size_t len);     /* NULL: not one well-formed JSON value */
+/* The one value text begins with, and what follows it left unread: *used is the bytes it took, white space after it
+ * included. For a value handed on inside a larger text. */
+LP_API lp_json     *lp_json_parse_prefix(const char *text, size_t len, size_t *used);
 LP_API void         lp_json_free(lp_json *);
 LP_API lp_json_type lp_json_kind(const lp_json *, uint32_t node);     /* LP_JSON_NULL for LP_JSON_NONE */
 LP_API uint32_t     lp_json_count(const lp_json *, uint32_t node);    /* an array's elements, an object's members; else 0 */
