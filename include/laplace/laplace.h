@@ -83,6 +83,12 @@ static inline void     lp_buf_be_f32(lp_buf *b, float f){ uint32_t u; memcpy(&u,
 LP_API void lp_hex(const void *bytes, size_t n, char *out);
 LP_API bool lp_unhex(const char *s, size_t n, void *out);
 
+/* A whole file mapped read-only and shared (paths are UTF-8 on every platform), its size in *size when size is given;
+ * NULL when it cannot be opened or mapped, is empty, or (want not 0) is not exactly want bytes. The one way a Laplace
+ * program maps a file: tier 0, the highway, a model's tensors, a tablebase. */
+LP_API const void *lp_map_file(const char *path, size_t want, size_t *size);
+LP_API void        lp_unmap_file(const void *p, size_t size);
+
 /* Sorting that gives the same order on every platform: stable, so what compares equal keeps the order it came in
  * (the C library's qsort promises neither, and differs between releases). */
 LP_API void lp_sort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
