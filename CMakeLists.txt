@@ -203,7 +203,8 @@ include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplacePaths.cmake")
 include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplaceFlags.cmake")
 include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplaceWindowsUtf8.cmake")
 ]=] @ONLY)
-  set(LaplaceNative_DIR ${CMAKE_CURRENT_BINARY_DIR}/package CACHE PATH "LaplaceNative package (this build's own Native)" FORCE)
+  # Not forced: a build given an installed package (-DLaplaceNative_DIR) keeps it.
+  set(LaplaceNative_DIR ${CMAKE_CURRENT_BINARY_DIR}/package CACHE PATH "LaplaceNative package (this build's own Native)")
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)
