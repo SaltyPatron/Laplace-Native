@@ -39,6 +39,9 @@ enum {
 LP_API uint32_t    lp_cpu_features(void);    /* what this CPU supports */
 LP_API uint32_t    lp_cpu_active(void);      /* what the dispatcher uses (LAPLACE_ISA may lower it) */
 LP_API const char *lp_cpu_describe(uint32_t features);
+/* Every Native operation measured on this machine, one line each on stdout (rate, ns per operation, bandwidth), each
+ * SIMD kernel beside its scalar form; `laplace bench` prints it. */
+LP_API void        lp_bench(void);
 
 /* ---------------------------------------------------------------- memory: one way to grow, one allocator
  * Working memory (arrays, maps, buffers) comes from lp_realloc and goes back through lp_free, which a host may point at
