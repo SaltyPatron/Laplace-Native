@@ -18,7 +18,7 @@ find_dependency(blake3 CONFIG HINTS "${PACKAGE_PREFIX_DIR}" NO_DEFAULT_PATH)
 if(@LP_HAVE_MODEL@)
   find_dependency(OpenMP)
   set(MKL_LINK sdl)
-  find_dependency(MKL CONFIG)
+  find_dependency(MKL CONFIG HINTS "@MKL_DIR@")   # where Native found it
 endif()
 # laplace-math links libm after itself as its own imported name (a plain m would fold into an earlier -lm).
 if(NOT WIN32 AND NOT TARGET laplace_math_libm)
