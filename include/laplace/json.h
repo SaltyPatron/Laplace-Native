@@ -33,6 +33,8 @@ LP_API bool         lp_json_number(const lp_json *, uint32_t node, double *out);
 LP_API bool         lp_json_integer(const lp_json *, uint32_t node, int64_t *out); /* a number written without fraction
                                                                                       or exponent that int64 holds */
 LP_API bool         lp_json_bool(const lp_json *, uint32_t node, bool *out);
+/* A value's own bytes in the text it was parsed from (which the caller keeps): to pass a member on as it came. */
+LP_API const char  *lp_json_text(const lp_json *, uint32_t node, size_t *len);
 
 /* s (len bytes) as a JSON string, quoted, onto b: " and \ escaped, \n \r \t \b \f by name, every other control
  * character as \u00XX; every other byte as it is. */

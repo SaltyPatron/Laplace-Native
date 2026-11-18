@@ -30,6 +30,14 @@ static void reads(void){
     CHECK(lp_json_count(j, lp_json_get(j, LP_JSON_ROOT, "empty")) == 0 && lp_json_count(j, lp_json_get(j, LP_JSON_ROOT, "none")) == 0, "empty");
     lp_json_free(j);
 
+    /* A member as it came: its own bytes, nothing around them. */
+    j = parse("{ \"id\" : \"a\\\"b\" , \"params\":{\"x\":[1, 2]} }");
+    s = j ? lp_json_text(j, lp_json_get(j, LP_JSON_ROOT, "params"), &n) : NULL;
+    CHECK(s && n == 12 && !memcmp(s, "{\"x\":[1, 2]}", n), "an object's own text");
+    s = j ? lp_json_text(j, lp_json_get(j, LP_JSON_ROOT, "id"), &n) : NULL;
+    CHECK(s && n == 6 && !memcmp(s, "\"a\\\"b\"", n), "a string's own text, quotes and escapes");
+    lp_json_free(j);
+
     /* A key inside a string or a nested object is no member of the root. */
     j = parse("{\"q\":\"\\\"text\\\":1\",\"inner\":{\"text\":2}}");
     CHECK(j && lp_json_get(j, LP_JSON_ROOT, "text") == LP_JSON_NONE, "only the root's own members");

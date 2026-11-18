@@ -10,9 +10,10 @@ typedef struct {
     uint32_t n, first;             /* containers: members or elements, and where their node numbers start in kids */
     size_t str, len;               /* strings: offset in the string arena and length */
     double num; int64_t i;
+    size_t at, span;               /* the value's own bytes in the parsed text */
 } Node;
 
-struct lp_json { lp_vec(Node) nodes; lp_vec(uint32_t) kids; lp_buf strs; };
+struct lp_json { lp_vec(Node) nodes; lp_vec(uint32_t) kids; lp_buf strs; const char *text; };
 
 typedef struct { const char *p, *end; lp_json *j; int depth; } Parser;
 
@@ -140,8 +141,15 @@ static int literal(Parser *ps, const char *word, lp_json_type t, uint32_t *out){
     ps->p += n; *out = node(ps, t); return 1;
 }
 
+static int one_value(Parser *ps, uint32_t *out);
 static int value(Parser *ps, uint32_t *out){
     ws(ps);
+    const char *begin = ps->p;
+    if (!one_value(ps, out)) return 0;
+    Node *n = &ps->j->nodes.v[*out]; n->at = (size_t)(begin - ps->j->text); n->span = (size_t)(ps->p - begin);
+    return 1;
+}
+static int one_value(Parser *ps, uint32_t *out){
     if (ps->p >= ps->end) return 0;
     switch (*ps->p) {
     case '{': return container(ps, 1, out);
@@ -160,7 +168,7 @@ static int value(Parser *ps, uint32_t *out){
 
 LP_API lp_json *lp_json_parse(const char *text, size_t len){
     if (!text) return NULL;
-    lp_json *j = lp_zalloc(sizeof *j);
+    lp_json *j = lp_zalloc(sizeof *j); j->text = text;
     Parser ps = { text, text + len, j, 0 };
     uint32_t root;
     /* The root is node 0: the first node a value makes. */
@@ -214,6 +222,9 @@ LP_API bool lp_json_integer(const lp_json *j, uint32_t k, int64_t *out){
 LP_API bool lp_json_bool(const lp_json *j, uint32_t k, bool *out){
     const Node *n = at(j, k); if (!n || (n->type != LP_JSON_TRUE && n->type != LP_JSON_FALSE)) return false;
     *out = n->type == LP_JSON_TRUE; return true;
+}
+LP_API const char *lp_json_text(const lp_json *j, uint32_t k, size_t *len){
+    const Node *n = at(j, k); if (!n) return NULL; if (len) *len = n->span; return j->text + n->at;
 }
 
 LP_API void lp_json_str(lp_buf *b, const char *s, size_t len){
