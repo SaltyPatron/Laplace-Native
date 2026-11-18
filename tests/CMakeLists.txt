@@ -97,3 +97,9 @@ if(TARGET laplace_linalg)
   add_test(NAME linalg COMMAND test_laplace_linalg)
   add_test(NAME linalg_base COMMAND test_laplace_linalg_base)
 endif()
+
+# The installed package builds a consumer on its own (no source tree, no add_subdirectory).
+add_test(NAME package COMMAND ${CMAKE_COMMAND}
+  "-DBUILD=${PROJECT_BINARY_DIR}" "-DSOURCE=${PROJECT_SOURCE_DIR}" "-DWORK=${PROJECT_BINARY_DIR}/package-test"
+  "-DGENERATOR=${CMAKE_GENERATOR}" "-DC_COMPILER=${CMAKE_C_COMPILER}" "-DTOOLCHAIN=${CMAKE_TOOLCHAIN_FILE}"
+  -P "${CMAKE_CURRENT_SOURCE_DIR}/package.cmake")

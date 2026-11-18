@@ -1,0 +1,12 @@
+# A consumer of the installed LaplaceNative package and nothing else: no Native source tree, no add_subdirectory.
+cmake_minimum_required(VERSION 3.24)
+project(LaplaceNativeConsumer C)
+find_package(LaplaceNative CONFIG REQUIRED)
+string(LENGTH "${LaplaceNative_SOURCE_ID}" _id_length)
+if(NOT _id_length EQUAL 64 OR NOT LaplaceNative_SOURCE_ID MATCHES "^[0-9a-f]+$")
+  message(FATAL_ERROR "LaplaceNative_SOURCE_ID missing: '${LaplaceNative_SOURCE_ID}'")
+endif()
+add_executable(consumer consumer.c)
+laplace_utf8_executable(consumer)
+target_compile_options(consumer PRIVATE ${LP_C_FLAGS})
+target_link_libraries(consumer PRIVATE Laplace::laplace_static ${LP_SYSLIBS})

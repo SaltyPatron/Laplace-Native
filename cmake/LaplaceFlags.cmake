@@ -8,11 +8,18 @@
 # VNNI is its own flag, given only to the VNNI kernels: a v3 or v4 file the compiler might otherwise vectorize with
 # vpdpwssd would fault on hart-server's Broadwell-E (v3, no AVX-VNNI) or a Skylake-SP (v4, no VNNI).
 # LP_ISA_BASE (x86-64: SSE2, no FMA) is the reference a scalar result is checked against.
+# The installed package carries the contract Native was built under beside this file; a source build reads it from
+# Laplace-Operations.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/toolchain/flags.cmake")
+  set(LP_CONTRACT_DIR "${CMAKE_CURRENT_LIST_DIR}/toolchain")
+else()
+  set(LP_CONTRACT_DIR "${LAPLACE_OPERATIONS}/toolchain")
+endif()
 if(CMAKE_C_COMPILER_ID MATCHES "^(IntelLLVM|GNU|Clang)$")
-  if(NOT EXISTS "${LAPLACE_OPERATIONS}/toolchain/flags.cmake")
-    message(FATAL_ERROR "LAPLACE_OPERATIONS: no floating-point contract at '${LAPLACE_OPERATIONS}/toolchain'")
+  if(NOT EXISTS "${LP_CONTRACT_DIR}/flags.cmake")
+    message(FATAL_ERROR "no floating-point contract at '${LP_CONTRACT_DIR}' (LAPLACE_OPERATIONS)")
   endif()
-  include("${LAPLACE_OPERATIONS}/toolchain/flags.cmake")
+  include("${LP_CONTRACT_DIR}/flags.cmake")
   laplace_fp_flags(LP_FP_COMPILE LP_FP_LINK)
 endif()
 

@@ -1,0 +1,38 @@
+# LaplaceNative: the installed Laplace-Native package.
+#   find_package(LaplaceNative CONFIG REQUIRED)    from a project that has enabled C (the flags are per compiler)
+# Targets: Laplace::laplace (shared), Laplace::laplace_static, Laplace::math (laplace-math ahead of every libm),
+#   Laplace::text (ICU), Laplace::model (MKL, OpenMP), Laplace::linalg (Eigen, Spectra), Laplace::tier0 (tool),
+#   each present when Native was built with it.
+# Also defines what a build under the same contract needs: LP_C_FLAGS, LP_ISA_*, LP_SYSLIBS (LaplaceFlags), the
+# laplace_path() locations (LaplacePaths), laplace_utf8_executable() (LaplaceWindowsUtf8), and
+# LaplaceNative_SOURCE_ID, the digest of the sources this package was built from.
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+
+set(LaplaceNative_SOURCE_ID "@LaplaceNative_SOURCE_ID@")
+include("${CMAKE_CURRENT_LIST_DIR}/LaplacePaths.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/LaplaceFlags.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/LaplaceWindowsUtf8.cmake")
+
+find_dependency(blake3 CONFIG HINTS "${PACKAGE_PREFIX_DIR}" NO_DEFAULT_PATH)
+if(@LP_HAVE_MODEL@)
+  find_dependency(OpenMP)
+  set(MKL_LINK sdl)
+  find_dependency(MKL CONFIG HINTS "@MKL_DIR@")   # where Native found it
+endif()
+# laplace-math links libm after itself as its own imported name (a plain m would fold into an earlier -lm).
+if(NOT WIN32 AND NOT TARGET laplace_math_libm)
+  add_library(laplace_math_libm INTERFACE IMPORTED)
+  set_target_properties(laplace_math_libm PROPERTIES IMPORTED_LIBNAME m)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/LaplaceNativeTargets.cmake")
+# CMake exports the whole-archive link of laplace-math ($<LINK_LIBRARY:WHOLE_ARCHIVE,laplace_math>) with the build's
+# target name; here it is the imported archive.
+if(TARGET Laplace::math)
+  get_target_property(_lp_math_links Laplace::math INTERFACE_LINK_LIBRARIES)
+  string(REPLACE ",laplace_math>" ",Laplace::math_archive>" _lp_math_links "${_lp_math_links}")
+  set_target_properties(Laplace::math PROPERTIES INTERFACE_LINK_LIBRARIES "${_lp_math_links}")
+  unset(_lp_math_links)
+endif()
+check_required_components(LaplaceNative)
