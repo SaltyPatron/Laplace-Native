@@ -27,4 +27,12 @@ if(NOT WIN32 AND NOT TARGET laplace_math_libm)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/LaplaceNativeTargets.cmake")
+# CMake exports the whole-archive link of laplace-math ($<LINK_LIBRARY:WHOLE_ARCHIVE,laplace_math>) with the build's
+# target name; here it is the imported archive.
+if(TARGET Laplace::math)
+  get_target_property(_lp_math_links Laplace::math INTERFACE_LINK_LIBRARIES)
+  string(REPLACE ",laplace_math>" ",Laplace::math_archive>" _lp_math_links "${_lp_math_links}")
+  set_target_properties(Laplace::math PROPERTIES INTERFACE_LINK_LIBRARIES "${_lp_math_links}")
+  unset(_lp_math_links)
+endif()
 check_required_components(LaplaceNative)
