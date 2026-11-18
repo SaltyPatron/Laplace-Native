@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(LaplaceNative VERSION 0.2.0 LANGUAGES C CXX ASM)
 
-# Laplace-Native: the library with the shared code. Laplace-Engine and Laplace-postgres build it as part of themselves
-# (add_subdirectory) and keep no copy of anything in it. Every ISA is compiled in and chosen at run time.
+# Laplace-Native: the library with the shared code, installed as the CMake package LaplaceNative
+# (find_package(LaplaceNative CONFIG REQUIRED), targets Laplace::*). Every ISA is compiled in and chosen at run time.
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)             # linked into PostgreSQL extensions
@@ -34,7 +34,15 @@ if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM" AND NOT WIN32)   # BLAKE3's CMake kn
                                                               # (on Windows icx is MSVC to it, and takes its MASM sources)
   set(BLAKE3_AMD64_ASM_SOURCES blake3_avx2_x86-64_unix.S blake3_avx512_x86-64_unix.S blake3_sse2_x86-64_unix.S blake3_sse41_x86-64_unix.S)
 endif()
-add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3 EXCLUDE_FROM_ALL)
+# Built and installed with Native when Native is the project (BLAKE3's own package, blake3-config.cmake, lands in the
+# same prefix and LaplaceNativeConfig finds it); inside another build it is only what Native links.
+if(PROJECT_IS_TOP_LEVEL)
+  add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3)
+  # BLAKE3 installs its pkg-config file from the top build directory but writes it in its own (1.8.3).
+  file(COPY_FILE ${CMAKE_CURRENT_BINARY_DIR}/blake3/libblake3.pc ${CMAKE_BINARY_DIR}/libblake3.pc ONLY_IF_DIFFERENT)
+else()
+  add_subdirectory(${LAPLACE_BLAKE3_DIR} blake3 EXCLUDE_FROM_ALL)
+endif()
 
 # The registries' law, generated from the manifests (Sequence 6.10): the manifest is the single input, and a change
 # to it regenerates the header at the next configure.
@@ -98,7 +106,8 @@ endif()
 # ICU's symbols carry its version, so it loads beside the ICU a PostgreSQL server was built with.
 if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
   add_library(laplace_text STATIC src/text.c src/ids.c)
-  target_include_directories(laplace_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${LAPLACE_ICU_DIR}/include)
+  target_include_directories(laplace_text PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
+                                          PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
   if(WIN32)                                         # ICU's Windows release: lib64, linked by full path so LIB cannot shadow it
     target_link_libraries(laplace_text PUBLIC laplace_static
@@ -121,7 +130,7 @@ set(MKL_LINK sdl)
 find_package(MKL CONFIG QUIET)
 if(MKL_FOUND AND OpenMP_C_FOUND)
   add_library(laplace_model STATIC src/rowsig.c src/knn.c)
-  target_include_directories(laplace_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_include_directories(laplace_model PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_compile_options(laplace_model PRIVATE ${LP_C_FLAGS})
   target_link_libraries(laplace_model PUBLIC MKL::MKL OpenMP::OpenMP_C ${LP_SYSLIBS})
 else()
@@ -138,7 +147,7 @@ file(TO_CMAKE_PATH "${LAPLACE_SPECTRA_DIR}" LP_SPECTRA)
 function(lp_linalg_library name)                    # extra arguments: compile options after the contract's
   add_library(${name} STATIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src/linalg.cpp)
   set_target_properties(${name} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_VISIBILITY_PRESET hidden)
-  target_include_directories(${name} PUBLIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/include)
+  target_include_directories(${name} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_FUNCTION_LIST_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_include_directories(${name} SYSTEM PRIVATE ${LP_EIGEN} ${LP_SPECTRA}/include)
   target_compile_definitions(${name} PRIVATE EIGEN_DONT_VECTORIZE EIGEN_NO_CPUID EIGEN_DONT_PARALLELIZE)
   target_compile_options(${name} PRIVATE ${LP_C_FLAGS} ${ARGN})
@@ -150,15 +159,73 @@ else()
   message(STATUS "laplace_linalg not built: set LAPLACE_EIGEN_DIR and LAPLACE_SPECTRA_DIR")
 endif()
 
+# The package's names, the same in a build that includes Native and in one that finds it installed.
+add_library(Laplace::laplace ALIAS laplace)
+add_library(Laplace::laplace_static ALIAS laplace_static)
+set(LP_EXPORTED laplace laplace_static)
+foreach(t text model linalg)
+  if(TARGET laplace_${t})
+    add_library(Laplace::${t} ALIAS laplace_${t})
+    set_target_properties(laplace_${t} PROPERTIES EXPORT_NAME ${t})
+    list(APPEND LP_EXPORTED laplace_${t})
+  endif()
+endforeach()
+if(TARGET laplace_math_link)
+  add_library(Laplace::math ALIAS laplace_math_link)
+  set_target_properties(laplace_math_link PROPERTIES EXPORT_NAME math)
+  set_target_properties(laplace_math PROPERTIES EXPORT_NAME math_archive)
+  list(APPEND LP_EXPORTED laplace_math_link laplace_math)
+endif()
+
+# What a consumer's reading contract records of Native: its sources, headers and manifests, line endings normalized,
+# each framed by its relative path. The installed package carries it as LaplaceNative_SOURCE_ID in place of the tree.
+set(LP_SOURCE_CONTRACT "")
+file(GLOB_RECURSE LP_CONTRACT_INPUTS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.inc"
+     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/manifest/*.tsv"
+     "${CMAKE_CURRENT_SOURCE_DIR}/manifest/*.toml")
+list(SORT LP_CONTRACT_INPUTS)
+foreach(input IN LISTS LP_CONTRACT_INPUTS)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${input}" content)
+  string(REPLACE "\r\n" "\n" content "${content}")
+  string(SHA256 digest "${content}")
+  string(LENGTH "${input}" length)
+  string(APPEND LP_SOURCE_CONTRACT "${length}:${input}:${digest}\n")
+endforeach()
+string(SHA256 LaplaceNative_SOURCE_ID "${LP_SOURCE_CONTRACT}")
+if(NOT PROJECT_IS_TOP_LEVEL)
+  set(LaplaceNative_SOURCE_ID "${LaplaceNative_SOURCE_ID}" PARENT_SCOPE)
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
   add_executable(laplace_tier0 tools/tier0.c)
-  set_target_properties(laplace_tier0 PROPERTIES OUTPUT_NAME laplace-tier0)
+  set_target_properties(laplace_tier0 PROPERTIES OUTPUT_NAME laplace-tier0 EXPORT_NAME tier0)
   target_compile_options(laplace_tier0 PRIVATE ${LP_C_FLAGS})
   target_link_libraries(laplace_tier0 PRIVATE laplace_static)
   enable_testing()
   add_subdirectory(tests)
+
+  # The package: libraries, headers, the tier-0 tool, and the CMake that builds against them under the same
+  # floating-point contract (LaplaceFlags with the contract Native was built under, LaplacePaths, the UTF-8 manifest).
   include(GNUInstallDirs)
-  install(TARGETS laplace laplace_static LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(TARGETS laplace_tier0 RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  include(CMakePackageConfigHelpers)
+  set(LP_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/LaplaceNative)
+  install(TARGETS ${LP_EXPORTED} laplace_tier0 EXPORT LaplaceNativeTargets
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   install(DIRECTORY include/laplace DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(EXPORT LaplaceNativeTargets NAMESPACE Laplace:: DESTINATION ${LP_PACKAGE_DIR})
+  if(TARGET laplace_model)
+    set(LP_HAVE_MODEL ON)
+  else()
+    set(LP_HAVE_MODEL OFF)
+  endif()
+  configure_package_config_file(cmake/LaplaceNativeConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/LaplaceNativeConfig.cmake
+                                INSTALL_DESTINATION ${LP_PACKAGE_DIR})
+  write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/LaplaceNativeConfigVersion.cmake COMPATIBILITY ExactVersion)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/LaplaceNativeConfig.cmake ${CMAKE_CURRENT_BINARY_DIR}/LaplaceNativeConfigVersion.cmake
+                cmake/LaplacePaths.cmake cmake/LaplaceFlags.cmake cmake/LaplaceWindowsUtf8.cmake cmake/WindowsUtf8.manifest
+          DESTINATION ${LP_PACKAGE_DIR})
+  install(FILES ${LAPLACE_OPERATIONS}/toolchain/flags.cmake ${LAPLACE_OPERATIONS}/toolchain/determinism.tsv
+          DESTINATION ${LP_PACKAGE_DIR}/toolchain)
 endif()
