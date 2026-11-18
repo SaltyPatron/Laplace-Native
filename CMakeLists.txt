@@ -194,7 +194,16 @@ foreach(input IN LISTS LP_CONTRACT_INPUTS)
 endforeach()
 string(SHA256 LaplaceNative_SOURCE_ID "${LP_SOURCE_CONTRACT}")
 if(NOT PROJECT_IS_TOP_LEVEL)
-  set(LaplaceNative_SOURCE_ID "${LaplaceNative_SOURCE_ID}" PARENT_SCOPE)
+  # A build that includes Native (the monorepo, until it consumes packages) finds it the same way a standalone one
+  # does: find_package(LaplaceNative CONFIG REQUIRED) reads this build-tree config, whose targets are the ALIASes above.
+  file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/package/LaplaceNativeConfig.cmake CONTENT [=[
+# LaplaceNative inside a build that includes Laplace-Native: the targets are that build's own (Laplace::* ALIASes).
+set(LaplaceNative_SOURCE_ID "@LaplaceNative_SOURCE_ID@")
+include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplacePaths.cmake")
+include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplaceFlags.cmake")
+include("@CMAKE_CURRENT_SOURCE_DIR@/cmake/LaplaceWindowsUtf8.cmake")
+]=] @ONLY)
+  set(LaplaceNative_DIR ${CMAKE_CURRENT_BINARY_DIR}/package CACHE PATH "LaplaceNative package (this build's own Native)" FORCE)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)
