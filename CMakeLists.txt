@@ -211,8 +211,11 @@ if(PROJECT_IS_TOP_LEVEL)
   set_target_properties(laplace_tier0 PROPERTIES OUTPUT_NAME laplace-tier0 EXPORT_NAME tier0)
   target_compile_options(laplace_tier0 PRIVATE ${LP_C_FLAGS})
   target_link_libraries(laplace_tier0 PRIVATE laplace_static)
-  enable_testing()
-  add_subdirectory(tests)
+  option(LAPLACE_NATIVE_TESTS "Build and register Native's tests (off for a package-only build)" ON)
+  if(LAPLACE_NATIVE_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+  endif()
 
   # The package: libraries, headers, the tier-0 tool, and the CMake that builds against them under the same
   # floating-point contract (LaplaceFlags with the contract Native was built under, LaplacePaths, the UTF-8 manifest).
