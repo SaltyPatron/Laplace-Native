@@ -5,10 +5,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
-/* The whole file mapped read-only and shared, its size in *size when size is given; NULL when it cannot be opened or
- * mapped, is empty, or (want not 0) is not exactly want bytes. */
-const void *lp_map_file(const char *path, size_t want, size_t *size);
-void lp_unmap_file(const void *p, size_t size);
+/* lp_map_file and lp_unmap_file: declared in laplace/laplace.h, where every Laplace program finds them. */
+#include "laplace/laplace.h"
 
 #ifdef _WIN32
 typedef struct { void *state; } lp_lock;            /* an SRWLOCK: one pointer, all zero when unlocked */
