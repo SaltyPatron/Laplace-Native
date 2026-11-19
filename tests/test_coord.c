@@ -3,6 +3,7 @@
 #include "laplace/tier0.h"
 #include "check.h"
 #include "../src/internal.h"
+#include <math.h>
 #include <string.h>
 
 int main(void){
@@ -107,5 +108,80 @@ int main(void){
       for (uint32_t k = 0; k < 600; k++) { uint32_t g[4] = { 0, 0, 0, k }; uint64_t h = lp_hilbert4_grid(g); int in = 0;
           for (size_t i = 0; i < n8 && !in; i++) in = h >= r[i].lo && h <= r[i].hi; miss += !in; }
       CHECK(n8 >= 1 && n8 <= 8 && bad == 0 && miss == 0, "the same at budget 8: %zu ranges, ordered, disjoint, every cell covered", n8); }
+
+    /* Glome / Unit 4-ball ranges: 100% recall on Tier-0 S^3 points and interior B^4 points, strictly fewer
+     * covered Hilbert cells than the bounding 4-box due to B^4_1 exterior + 4-ball corner pruning. */
+    { static lp_coord sample[12000];
+      size_t n_sample = 0;
+      for (uint32_t cp = 0; cp < LP_TIER0_COUNT && n_sample < 6000; cp += LP_TIER0_COUNT / 6000) {
+          memcpy(sample[n_sample].m, t0[cp].m, 32);
+          n_sample++;
+      }
+      uint64_t x = 0xD1B54A32D192ED03ull;
+      while (n_sample < 12000) {
+          lp_coord q;
+          for (int d = 0; d < 4; d++) {
+              x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+              q.m[d] = (int64_t)(x >> 10) - (INT64_C(1) << 53);
+          }
+          if (lp_coord_inside(&q)) sample[n_sample++] = q;
+      }
+      lp_coord centers[4];
+      centers[0] = (lp_coord){ { 0, 0, 0, 0 } };
+      centers[1] = (lp_coord){ { INT64_C(1) << 51, -(INT64_C(1) << 51), INT64_C(1) << 51, 0 } };
+      memcpy(centers[2].m, t0[(uint32_t)'d'].m, 32);
+      memcpy(centers[3].m, t0[0x1F600u].m, 32);
+      double radii[4] = { 0.05, 0.2, 0.5, 1.0 };
+      size_t caps[4] = { 1, 16, 64, 256 };
+      static lp_hrange br[256], boxr[256];
+      size_t ball_miss = 0, ball_bad = 0, span_bad = 0;
+      for (int ci = 0; ci < 4; ci++) {
+          double cx[4]; lp_coord_xyzm(&centers[ci], cx);
+          for (int ri = 0; ri < 4; ri++) {
+              double rad = radii[ri];
+              for (int ki = 0; ki < 4; ki++) {
+                  size_t cap = caps[ki];
+                  size_t bn = lp_hilbert4_ball_ranges(&centers[ci], rad, br, cap);
+                  if (bn == 0 || bn > cap) ball_bad++;
+                  for (size_t i = 0; i < bn; i++) {
+                      if (br[i].lo > br[i].hi || (i && br[i].lo <= br[i - 1].hi + 1 && br[i - 1].hi != UINT64_MAX))
+                          ball_bad++;
+                  }
+                  for (size_t si = 0; si < n_sample; si++) {
+                      double sx[4]; lp_coord_xyzm(&sample[si], sx);
+                      if (lp_distance4(cx, sx) <= rad) {
+                          uint64_t h = lp_hilbert4(&sample[si]);
+                          int hit = 0;
+                          for (size_t i = 0; i < bn && !hit; i++) hit = (h >= br[i].lo && h <= br[i].hi);
+                          ball_miss += !hit;
+                      }
+                  }
+              }
+          }
+          /* Check exact B^4_1 + ball pruning gain over the axis-aligned bounding box at cap 256, r = 0.25 */
+          double r = 0.25;
+          uint32_t blo[4], bhi[4];
+          for (int d = 0; d < 4; d++) {
+              blo[d] = lp_hilbert4_axis(cx[d] - r);
+              bhi[d] = lp_hilbert4_axis(cx[d] + r);
+          }
+          size_t bn = lp_hilbert4_ball_ranges(&centers[ci], r, br, 256);
+          size_t xn = lp_hilbert4_ranges(blo, bhi, boxr, 256);
+          unsigned __int128 bspan = 0, xspan = 0;
+          for (size_t i = 0; i < bn; i++) bspan += (unsigned __int128)(br[i].hi - br[i].lo) + 1u;
+          for (size_t i = 0; i < xn; i++) xspan += (unsigned __int128)(boxr[i].hi - boxr[i].lo) + 1u;
+          if (bspan >= xspan) span_bad++;
+          /* Also check boundary center on S^3 retains strict sub-half coverage vs cube/box */
+          if (ci >= 2 && bspan * 2 > xspan) span_bad++;
+      }
+      CHECK(ball_bad == 0, "%zu invalid ball range results", ball_bad);
+      CHECK(ball_miss == 0, "%zu B^4_1 sample points missed by lp_hilbert4_ball_ranges", ball_miss);
+      CHECK(span_bad == 0, "%zu ball covers failed to strictly shrink bounding 4-box Hilbert span", span_bad);
+      /* Edge cases: negative radius, NaN, outside B^4_1 small ball, zero radius */
+      lp_coord far_pt = { { INT64_C(1) << 53, INT64_C(1) << 53, 0, 0 } };
+      CHECK(lp_hilbert4_ball_ranges(&far_pt, 0.1, br, 16) == 0, "small ball strictly outside B^4_1 returns 0 ranges");
+      CHECK(lp_hilbert4_ball_ranges(&centers[0], -1.0, br, 16) == 0, "negative radius returns 0 ranges");
+      CHECK(lp_hilbert4_ball_ranges(&centers[0], 0.0, br, 16) == 1 && br[0].lo == br[0].hi && br[0].lo == lp_hilbert4(&centers[0]), "zero radius returns exact center cell");
+    }
     DONE("coord");
 }

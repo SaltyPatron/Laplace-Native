@@ -1,6 +1,7 @@
 /* Fixed-point coordinates: exact integer centroids, the wall, and 4D Hilbert order. */
 #include "laplace/laplace.h"
 #include "internal.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -218,6 +219,227 @@ size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange 
     }
     if (!full || !n) { free(full); out[0].lo = 0; out[0].hi = UINT64_MAX; return 1; }   /* no memory: the whole space, which covers */
     size_t m = merge_to_cap(full, n, cap);
+    memcpy(out, full, sizeof *full * m);
+    free(full);
+    return m;
+}
+
+/* Unit 4-ball B^4_1 (m . m <= 2^106) + Euclidean query ball ||x - center||_2 <= radius pruning.
+ * Every axis cell [o, e] at level L spans normalized coordinate interval [-1 + o/32768, -1 + (e+1)/32768]
+ * (in exact dyadic multiples of 2^-15), so B^4_1 bounds are exact 64-bit integer arithmetic with UNIT_R2 = 2^30. */
+#define LP_B4_UNIT_R2 (UINT64_C(1) << 30)
+
+static void cell_bounds_b4(uint64_t p, int L, double x_lo[4], double x_hi[4], uint64_t *min_r2, uint64_t *max_r2){
+    int shift = 4 * (16 - L);
+    uint32_t side = 1u << (16 - L);
+    uint32_t g[4];
+    lp_hilbert4_decode(p << shift, g);
+    uint64_t min2 = 0, max2 = 0;
+    for (int d = 0; d < 4; d++) {
+        uint32_t o = g[d] & ~(side - 1u), e = o + side - 1u;
+        int64_t a = (int64_t)o - 32768;
+        int64_t b = (int64_t)(e + 1u) - 32768;
+        uint64_t min_a = (a <= 0 && b >= 0) ? 0u : (uint64_t)(a > 0 ? a : -b);
+        uint64_t aa = (uint64_t)(a < 0 ? -a : a), bb = (uint64_t)(b < 0 ? -b : b);
+        uint64_t max_a = aa > bb ? aa : bb;
+        min2 += min_a * min_a;
+        max2 += max_a * max_a;
+        if (x_lo) x_lo[d] = -1.0 + (double)o / 32768.0;
+        if (x_hi) x_hi[d] = -1.0 + (double)(e + 1u) / 32768.0;
+    }
+    if (min_r2) *min_r2 = min2;
+    if (max_r2) *max_r2 = max2;
+}
+
+static int cell_vs_b4(uint64_t p, int L){
+    uint64_t min2 = 0, max2 = 0;
+    cell_bounds_b4(p, L, NULL, NULL, &min2, &max2);
+    if (min2 > LP_B4_UNIT_R2) return 0;
+    if (max2 <= LP_B4_UNIT_R2) return 1;
+    return 2;
+}
+
+/* 0 = outside B^4_1 or outside query ball; 1 = wholly inside B^4_1 and query ball; 2 = crossing boundary. */
+static int cell_vs_ball_glome(uint64_t p, int L, const double cx[4], double r2_hi, double r2_lo){
+    double x_lo[4], x_hi[4];
+    uint64_t min2 = 0, max2 = 0;
+    cell_bounds_b4(p, L, x_lo, x_hi, &min2, &max2);
+    if (min2 > LP_B4_UNIT_R2) return 0;
+    double min_d2 = 0.0, max_d2 = 0.0;
+    for (int d = 0; d < 4; d++) {
+        double gd = cx[d] < x_lo[d] ? x_lo[d] - cx[d] : cx[d] > x_hi[d] ? cx[d] - x_hi[d] : 0.0;
+        double fd1 = cx[d] - x_lo[d]; if (fd1 < 0.0) fd1 = -fd1;
+        double fd2 = cx[d] - x_hi[d]; if (fd2 < 0.0) fd2 = -fd2;
+        double fd = fd1 > fd2 ? fd1 : fd2;
+        min_d2 += gd * gd;
+        max_d2 += fd * fd;
+    }
+    if (min_d2 > r2_hi) return 0;
+    if (max2 <= LP_B4_UNIT_R2 && max_d2 <= r2_lo) return 1;
+    return 2;
+}
+
+static size_t exact_cover_ball(const double cx[4], double r2_hi, double r2_lo, lp_hrange *out, size_t room, bool *overflow){
+    uint64_t stack[16 * 16]; int lvl[16 * 16]; size_t sp = 0, n = 0, work = 0;
+    *overflow = false;
+    for (int k = 15; k >= 0; k--) { stack[sp] = (uint64_t)k; lvl[sp] = 1; sp++; }
+    while (sp) {
+        uint64_t p = stack[--sp]; int L = lvl[sp];
+        int r = cell_vs_ball_glome(p, L, cx, r2_hi, r2_lo);
+        if (r == 0) continue;
+        if (++work > room) { *overflow = true; return 0; }
+        if (r == 1 || L == 16) {
+            if (out) {
+                int shift = 4 * (16 - L);
+                uint64_t lo = p << shift, hi = lo | ((UINT64_C(1) << shift) - 1u);
+                if (n && lo == out[n - 1].hi + 1u) out[n - 1].hi = hi;
+                else { out[n].lo = lo; out[n].hi = hi; n++; }
+            } else {
+                n++;
+            }
+            continue;
+        }
+        for (int k = 15; k >= 0; k--) { stack[sp] = (p << 4) | (uint64_t)k; lvl[sp] = L + 1; sp++; }
+    }
+    return n;
+}
+
+static size_t level_cover_ball(const double cx[4], double r2_hi, double r2_lo, lp_hrange *full, size_t room){
+    cell *cross = malloc(sizeof *cross * room), *next = malloc(sizeof *next * room);
+    if (!cross || !next) { free(cross); free(next); return 0; }
+    size_t n = 0, ncross = 1; cross[0].prefix = 0;
+    int level = 0;
+    for (; level < 16 && ncross; level++) {
+        if (n + ncross * 16 > room) break;
+        size_t nn = 0;
+        for (size_t c = 0; c < ncross; c++) {
+            for (uint64_t k = 0; k < 16; k++) {
+                uint64_t p = (cross[c].prefix << 4) | k;
+                int r = cell_vs_ball_glome(p, level + 1, cx, r2_hi, r2_lo);
+                if (r == 0) continue;
+                if (r == 1) {
+                    int shift = 4 * (15 - level);
+                    full[n].lo = p << shift;
+                    full[n].hi = full[n].lo | ((UINT64_C(1) << shift) - 1u);
+                    n++;
+                } else {
+                    next[nn++].prefix = p;
+                }
+            }
+        }
+        cell *t = cross; cross = next; next = t; ncross = nn;
+    }
+    int shift = 4 * (16 - level);
+    for (size_t c = 0; c < ncross && n < room; c++) {
+        uint64_t first = shift == 64 ? 0 : cross[c].prefix << shift;
+        full[n].lo = first;
+        full[n].hi = shift == 64 ? UINT64_MAX : first | ((UINT64_C(1) << shift) - 1u);
+        n++;
+    }
+    free(cross); free(next);
+    return n;
+}
+
+static uint64_t b4_estimate_cell(uint64_t p, int L, int depth_left){
+    int s = cell_vs_b4(p, L);
+    if (s == 0) return 0;
+    uint64_t vol = UINT64_C(1) << (4 * (16 - L));
+    if (s == 1 || L == 16) return vol;
+    if (depth_left <= 0) return vol / 2u;
+    uint64_t sum = 0;
+    for (uint64_t k = 0; k < 16; k++) sum += b4_estimate_cell((p << 4) | k, L + 1, depth_left - 1);
+    return sum;
+}
+
+static uint64_t gap_live_b4_weight(uint64_t lo, uint64_t hi){
+    if (lo > hi) return 0;
+    uint64_t weight = 0, cur = lo;
+    for (;;) {
+        int best_L = 16;
+        uint64_t rem = hi - cur;
+        for (int L = 1; L < 16; L++) {
+            int shift = 4 * (16 - L);
+            uint64_t mask = (UINT64_C(1) << shift) - 1u;
+            if ((cur & mask) == 0 && rem >= mask) { best_L = L; break; }
+        }
+        int shift = 4 * (16 - best_L);
+        uint64_t mask = shift == 0 ? 0u : ((UINT64_C(1) << shift) - 1u);
+        weight += b4_estimate_cell(cur >> shift, best_L, 1);
+        if (rem == mask) break;
+        cur += mask + 1u;
+    }
+    return weight;
+}
+
+typedef struct { uint64_t live; uint64_t width; size_t at; } ball_gap;
+static int ball_gap_cmp(const void *a, const void *b){
+    const ball_gap *x = a, *y = b;
+    if (x->live != y->live) return x->live < y->live ? -1 : 1;
+    if (x->width != y->width) return x->width < y->width ? -1 : 1;
+    return x->at < y->at ? -1 : x->at > y->at;
+}
+
+static size_t merge_ball_to_cap(lp_hrange *r, size_t n, size_t cap){
+    qsort(r, n, sizeof *r, range_cmp);
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (m && r[i].lo <= r[m - 1].hi + (r[m - 1].hi == UINT64_MAX ? 0u : 1u)) {
+            if (r[i].hi > r[m - 1].hi) r[m - 1].hi = r[i].hi;
+            continue;
+        }
+        r[m++] = r[i];
+    }
+    if (m <= cap) return m;
+    ball_gap *g = malloc(sizeof *g * (m - 1));
+    unsigned char *shut = calloc(m, 1);
+    if (!g || !shut) { free(g); free(shut); r[0].hi = r[m - 1].hi; return 1; }
+    for (size_t i = 1; i < m; i++) {
+        uint64_t glo = r[i - 1].hi + 1u;
+        uint64_t ghi = r[i].lo - 1u;
+        g[i - 1].live = gap_live_b4_weight(glo, ghi);
+        g[i - 1].width = r[i].lo - r[i - 1].hi;
+        g[i - 1].at = i;
+    }
+    qsort(g, m - 1, sizeof *g, ball_gap_cmp);
+    for (size_t i = 0; i < m - cap; i++) shut[g[i].at] = 1;
+    free(g);
+    size_t w = 0;
+    for (size_t i = 0; i < m; i++) {
+        if (i && shut[i]) { r[w - 1].hi = r[i].hi; continue; }
+        r[w++] = r[i];
+    }
+    free(shut);
+    return w;
+}
+
+size_t lp_hilbert4_ball_ranges(const lp_coord *center, double radius, lp_hrange *out, size_t cap){
+    if (!center || !out || cap == 0 || isnan(radius) || radius < 0.0) return 0;
+    if (radius == 0.0) {
+        if (!lp_coord_inside(center)) return 0;
+        uint64_t h = lp_hilbert4(center);
+        out[0].lo = h;
+        out[0].hi = h;
+        return 1;
+    }
+    double cx[4];
+    lp_coord_xyzm(center, cx);
+    double eps = (1.0 + radius) * 1e-13;
+    double r_hi = radius + eps;
+    double r_lo = radius > eps ? radius - eps : 0.0;
+    double r2_hi = r_hi * r_hi;
+    double r2_lo = r_lo * r_lo;
+
+    size_t room = LP_HRANGE_WORK;
+    bool overflow = false;
+    size_t n = exact_cover_ball(cx, r2_hi, r2_lo, NULL, room, &overflow);
+    if (!overflow && n == 0) return 0;
+    lp_hrange *full = malloc(sizeof *full * (overflow ? room : n));
+    if (full) {
+        if (!overflow) n = exact_cover_ball(cx, r2_hi, r2_lo, full, room, &overflow);
+        else n = level_cover_ball(cx, r2_hi, r2_lo, full, room);
+    }
+    if (!full || n == 0) { free(full); out[0].lo = 0; out[0].hi = UINT64_MAX; return 1; }
+    size_t m = merge_ball_to_cap(full, n, cap);
     memcpy(out, full, sizeof *full * m);
     free(full);
     return m;

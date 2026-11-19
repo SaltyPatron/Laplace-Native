@@ -199,6 +199,10 @@ LP_API void lp_hilbert4_decode(uint64_t h, uint32_t g[4]);
 #define LP_HRANGE_WORK 4096
 typedef struct { uint64_t lo, hi; } lp_hrange;
 LP_API size_t lp_hilbert4_ranges(const uint32_t lo[4], const uint32_t hi[4], lp_hrange *out, size_t cap);
+/* Same as lp_hilbert4_ranges, pruned simultaneously against the unit 4-ball B^4_1 (||x||_2 <= 1, since 69.16% of
+ * [-1,1]^4 is empty exterior space) and the exact Euclidean 4-ball ||x - center||_2 <= radius. Gap coalescing
+ * weights each gap by its live B^4_1 overlap so exterior dead space merges at cost 0. */
+LP_API size_t lp_hilbert4_ball_ranges(const lp_coord *center, double radius, lp_hrange *out, size_t cap);
 /* The Hilbert value as it is stored: its top bit flipped, so bigint order is Hilbert order. */
 static inline int64_t lp_hilbert_key(uint64_t h){ return (int64_t)(h ^ 0x8000000000000000ull); }
 /* A coordinate as the four doubles it is, m / 2^53; and back, false when a double is not on the fixed-point grid (or
