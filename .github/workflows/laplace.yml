@@ -25,14 +25,18 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Operations
-          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
+          ref: main
           path: .operations/Laplace-Operations
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
+      # Sibling revisions from the version lock (Laplace-Operations components.lock.tsv), never pinned SHAs.
+      - name: Sibling revisions from the version lock
+        id: lock
+        run: awk -F'\t' '!/^#/ && NF == 3 { print $1 "=" $3 }' .operations/Laplace-Operations/components.lock.tsv | tee -a "$GITHUB_OUTPUT"
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Engine
-          ref: de00247c295c20b5fd37ee072c2c313be1663f6b
+          ref: ${{ steps.lock.outputs.engine }}
           path: .engine/Laplace-Engine
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
@@ -40,7 +44,8 @@ jobs:
         run: |
           . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
           export LAPLACE_NATIVE="$GITHUB_WORKSPACE" LAPLACE_MANIFEST="$GITHUB_WORKSPACE/manifest"
-          cmake -S .engine/Laplace-Engine -B "$LAPLACE_BUILD/Laplace-Engine/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release -DLAPLACE_NATIVE="$LAPLACE_NATIVE"
+          native_pkg=$(bash .operations/Laplace-Operations/native-package.sh "$GITHUB_WORKSPACE")/lib/cmake/LaplaceNative
+          cmake -S .engine/Laplace-Engine -B "$LAPLACE_BUILD/Laplace-Engine/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release -DLaplaceNative_DIR:PATH="$native_pkg" -DLAPLACE_OPERATIONS:PATH="$LAPLACE_OPERATIONS" -DLAPLACE_TIER0:FILEPATH="$RUNNER_TEMP/native-generated-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/tier0.bin"
           cmake --build "$LAPLACE_BUILD/Laplace-Engine/icx-release" --target laplace_engine
           python3 scripts/ci-inputs.py prepare "$RUNNER_TEMP/native-generated-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --engine "$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace" --ucd "${LAPLACE_UCD:-/vault/Data/UCD}/Public/UCD/latest"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -64,7 +69,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace-Operations
-          ref: e7b2014826239fc5af9d74763ecb232d4ceafe14
+          ref: main
           path: .operations/Laplace-Operations
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
