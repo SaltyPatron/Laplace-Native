@@ -75,9 +75,11 @@ static void kernels_pick(void){
     uint32_t f = lp_cpu_active();
     kernels.scan = lp_scan_scalar; kernels.row_d2 = lp_row_d2_scalar; kernels.interleave = lp_hilbert4_interleave_scalar;
     kernels.half_chord = lp_half_chord_scalar;
+    kernels.f16_to_f32 = lp_f16_to_f32_scalar; kernels.bf16_to_f32 = lp_bf16_to_f32_scalar;
 #if defined(LP_HAVE_AVX2)
     if (f & LP_CPU_AVX2) { kernels.scan = lp_scan_avx2; kernels.row_d2 = lp_row_d2_avx2; kernels.interleave = lp_hilbert4_interleave_bmi2;   /* x86-64-v3 includes BMI2 */
-                           kernels.half_chord = lp_half_chord_avx2; }
+                           kernels.half_chord = lp_half_chord_avx2;
+                           kernels.f16_to_f32 = lp_f16_to_f32_avx2; kernels.bf16_to_f32 = lp_bf16_to_f32_avx2; }
 #endif
 #if defined(LP_HAVE_AVX512)
     if (f & LP_CPU_AVX512) { kernels.scan = lp_scan_avx512; kernels.row_d2 = lp_row_d2_avx512; }

@@ -61,8 +61,21 @@ typedef size_t   (*lp_scan_fn)(const uint8_t *, size_t, size_t, const uint8_t[24
 typedef void     (*lp_row_fn)(const double *, const double *, const double *, const double *, const double *, size_t, size_t, double *);
 typedef uint64_t (*lp_interleave_fn)(const uint64_t[4]);
 typedef void     (*lp_half_chord_fn)(const double *, const double *, size_t, size_t, double *);
-typedef struct { lp_scan_fn scan; lp_row_fn row_d2; lp_interleave_fn interleave; lp_half_chord_fn half_chord; } lp_kernel_set;
+typedef void     (*lp_u16_f32_fn)(const uint16_t *, size_t, float *);
+typedef struct {
+    lp_scan_fn scan;
+    lp_row_fn row_d2;
+    lp_interleave_fn interleave;
+    lp_half_chord_fn half_chord;
+    lp_u16_f32_fn f16_to_f32;
+    lp_u16_f32_fn bf16_to_f32;
+} lp_kernel_set;
 const lp_kernel_set *lp_kernels(void);
+
+void lp_f16_to_f32_scalar(const uint16_t *in, size_t n, float *out);
+void lp_f16_to_f32_avx2(const uint16_t *in, size_t n, float *out);
+void lp_bf16_to_f32_scalar(const uint16_t *in, size_t n, float *out);
+void lp_bf16_to_f32_avx2(const uint16_t *in, size_t n, float *out);
 
 /* s / n truncated toward zero, where the quotient is known to fit in 64 bits (a sum of n coordinates over n). One
  * hardware 128-by-64 division instead of the compiler's software routine for __int128; the same value, bit for bit. */

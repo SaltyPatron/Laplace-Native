@@ -1,7 +1,7 @@
 /* AVX-512 VNNI int8 dot (vpdpbusd, EVEX encoding), 64 bytes per step, the tail one masked step: a is taken as
  * a ^ 0x80 = a + 128, unsigned, and 128 * sum(b) taken off again, as in the AVX-VNNI kernel. A masked-off byte of b
  * is 0, so it adds nothing to either sum. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 static inline __mmask64 tail(size_t left){ return left >= 64 ? ~0ull : (1ull << left) - 1; }

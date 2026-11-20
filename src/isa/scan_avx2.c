@@ -1,5 +1,5 @@
 /* AVX2 vertex scan: one 256-bit load per vertex (X, Y, Z, M), compared to the key on X, Y, Z. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 size_t lp_scan_avx2(const uint8_t *v, size_t s, size_t n, const uint8_t key[24]){

@@ -7,8 +7,10 @@
 #ifndef LAPLACE_H
 #define LAPLACE_H
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -70,6 +72,31 @@ typedef struct { uint8_t *b; size_t n, cap; } lp_buf;
 LP_API uint8_t *lp_buf_room(lp_buf *, size_t k);                    /* k more bytes at the end: where they go */
 static inline void lp_buf_put(lp_buf *b, const void *p, size_t k){ if (k) memcpy(lp_buf_room(b, k), p, k); }
 static inline void lp_buf_free(lp_buf *b){ lp_free(b->b); b->b = NULL; b->n = b->cap = 0; }
+static inline void lp_buf_clear(lp_buf *b){ if (!b) return; b->n = 0; if (b->b) b->b[0] = 0; }
+static inline void lp_buf_byte(lp_buf *b, uint8_t c){ *lp_buf_room(b, 1) = c; }
+static inline void lp_buf_str(lp_buf *b, const char *s, size_t len){ if (s && len) lp_buf_put(b, s, len); }
+static inline void lp_buf_cstr(lp_buf *b, const char *s){ if (s && *s) lp_buf_put(b, s, strlen(s)); }
+LP_API char *lp_buf_take(lp_buf *b);
+LP_API void lp_buf_i64(lp_buf *b, int64_t v);
+LP_API void lp_buf_u64(lp_buf *b, uint64_t v);
+LP_API void lp_buf_hex(lp_buf *b, const void *bytes, size_t n);
+static inline size_t lp_buf_vfmt(lp_buf *b, const char *fmt, va_list ap){
+    if (!b || !fmt) return 0;
+    va_list copy; va_copy(copy, ap);
+    int need = vsnprintf(NULL, 0, fmt, copy);
+    va_end(copy);
+    if (need <= 0) return 0;
+    uint8_t *dst = lp_buf_room(b, (size_t)need + 1);
+    vsnprintf((char *)dst, (size_t)need + 1, fmt, ap);
+    b->n--;
+    return (size_t)need;
+}
+static inline size_t lp_buf_fmt(lp_buf *b, const char *fmt, ...){
+    va_list ap; va_start(ap, fmt);
+    size_t n = lp_buf_vfmt(b, fmt, ap);
+    va_end(ap);
+    return n;
+}
 
 /* Big-endian, as the database writes and reads every binary value. */
 static inline uint64_t lp_be(const void *p, int n){ const uint8_t *b = (const uint8_t *)p; uint64_t u = 0; for (int i = 0; i < n; i++) u = u << 8 | b[i]; return u; }
@@ -99,6 +126,7 @@ static inline bool lp_id_eq(const lp_id *a, const lp_id *b){ return !memcmp(a->b
 static inline int  lp_id_cmp(const void *a, const void *b){ return memcmp(a, b, 16); }      /* byte order: the database's */
 static inline void lp_id_hex(const lp_id *id, char out[33]){ lp_hex(id->b, 16, out); }
 static inline bool lp_id_unhex(const char *s, lp_id *out){ return lp_unhex(s, 16, out->b); }
+LP_API void lp_buf_id_hex(lp_buf *b, const lp_id *id);
 
 /* A codepoint's ID: BLAKE3-128 of its UTF-8 bytes; surrogates are written in the generalized 3-byte form. */
 LP_API void lp_id_codepoint(uint32_t cp, lp_id *out);
@@ -779,6 +807,22 @@ LP_API const lp_reached *lp_frontier_next(lp_frontier *);
 LP_API double lp_frontier_least(lp_frontier *);
 LP_API const lp_reached *lp_frontier_find(const lp_frontier *, const lp_id *id);
 LP_API size_t lp_frontier_count(const lp_frontier *);
+
+/* Universal compositional decimal scalars: identical Merkle structure to UAX #29 without ICU. */
+typedef struct lp_scalars lp_scalars;
+LP_API size_t lp_decimal_u64(uint64_t v, char *out, size_t cap);
+LP_API size_t lp_decimal_i64(int64_t v, char *out, size_t cap);
+LP_API size_t lp_decimal_u32(uint32_t v, char *out, size_t cap);
+LP_API size_t lp_decimal_i32(int32_t v, char *out, size_t cap);
+LP_API lp_ref lp_ref_u64(const lp_tier0_record *t0, uint64_t v, lp_compose_fn compose, void *sink);
+LP_API lp_ref lp_ref_i64(const lp_tier0_record *t0, int64_t v, lp_compose_fn compose, void *sink);
+LP_API bool   lp_id_u64(const lp_tier0_record *t0, uint64_t v, lp_id *out);
+LP_API bool   lp_id_i64(const lp_tier0_record *t0, int64_t v, lp_id *out);
+LP_API lp_scalars *lp_scalars_of(const lp_tier0_record *t0, lp_compose_fn compose, void *sink);
+LP_API void   lp_scalars_free(lp_scalars *s);
+LP_API lp_ref lp_scalar_u8(const lp_scalars *s, uint8_t v);
+LP_API lp_ref lp_scalar_u16(const lp_scalars *s, uint16_t v);
+LP_API lp_ref lp_scalar_i16(const lp_scalars *s, int16_t v);
 
 #ifdef __cplusplus
 }

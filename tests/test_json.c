@@ -96,6 +96,37 @@ static void writes(void){
     const char *s = j ? lp_json_string(j, LP_JSON_ROOT, &n) : NULL;
     CHECK(s && n == sizeof raw - 1 && !memcmp(s, raw, n), "what the writer writes, the reader reads back");
     lp_json_free(j); lp_buf_free(&b);
+
+    /* Accessor and builder helpers */
+    const char *obj_src = "{\"s\":\"ok\",\"n\":42,\"d\":1.5,\"b\":true,\"arr\":[7,2.25]}";
+    lp_json *p = lp_json_parse(obj_src, strlen(obj_src));
+    CHECK(p != NULL, "parse helper doc");
+    if (p) {
+        size_t slen = 0; char cbuf[16]; double dv = 0; int64_t iv = 0; bool bv = false;
+        CHECK(!memcmp(lp_json_get_str(p, LP_JSON_ROOT, "s", &slen), "ok", 2) && slen == 2, "get_str");
+        CHECK(lp_json_copy_str(p, LP_JSON_ROOT, "s", cbuf, sizeof cbuf) && !strcmp(cbuf, "ok"), "copy_str");
+        CHECK(!lp_json_copy_str(p, LP_JSON_ROOT, "s", cbuf, 2), "copy_str short cap");
+        CHECK(lp_json_get_i64(p, LP_JSON_ROOT, "n", &iv) && iv == 42, "get_i64");
+        CHECK(lp_json_try_i64(p, LP_JSON_ROOT, "missing", -9) == -9, "try_i64 fallback");
+        CHECK(lp_json_get_num(p, LP_JSON_ROOT, "d", &dv) && dv == 1.5, "get_num");
+        CHECK(lp_json_get_bool(p, LP_JSON_ROOT, "b", &bv) && bv && lp_json_get_flag(p, LP_JSON_ROOT, "missing", true), "bool+flag");
+        uint32_t arr = lp_json_get(p, LP_JSON_ROOT, "arr");
+        CHECK(lp_json_at_i64(p, arr, 0, &iv) && iv == 7 && lp_json_at_num(p, arr, 1, &dv) && dv == 2.25, "at_i64+at_num");
+        lp_json_free(p);
+    }
+    lp_buf jb = {0}; bool first = true; lp_id id = {0}; id.b[0] = 0xAB; id.b[15] = 0xCD;
+    lp_buf_byte(&jb, '{');
+    lp_json_key_out(&jb, "k", &first); lp_json_cstr(&jb, "v\"1");
+    lp_json_key_out(&jb, "i", &first); lp_json_i64(&jb, -7);
+    lp_json_key_out(&jb, "u", &first); lp_json_u64(&jb, 9);
+    lp_json_key_out(&jb, "f", &first); lp_json_f64(&jb, 1.25);
+    lp_json_key_out(&jb, "id", &first); lp_json_id(&jb, &id);
+    lp_buf_byte(&jb, '}');
+    char *js = lp_buf_take(&jb);
+    CHECK(js && !strcmp(js, "{\"k\":\"v\\\"1\",\"i\":-7,\"u\":9,\"f\":1.25,\"id\":\"ab0000000000000000000000000000cd\"}"), "json builders: %s", js ? js : "");
+    lp_free(js);
+    char ebuf[16]; size_t need = lp_json_escape_buf(ebuf, sizeof ebuf, "a\nb", 3);
+    CHECK(need == 4 && !strcmp(ebuf, "a\\nb"), "escape_buf");
 }
 
 int main(void){

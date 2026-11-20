@@ -1,5 +1,5 @@
 /* AVX-512 vertex scan: two vertices per 512-bit load, compared to the key on X, Y, Z of each. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 size_t lp_scan_avx512(const uint8_t *v, size_t s, size_t n, const uint8_t key[24]){

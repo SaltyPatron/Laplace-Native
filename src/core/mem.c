@@ -64,3 +64,45 @@ void lp_sort(void *base, size_t n, size_t size, int (*cmp)(const void *, const v
     msort((uint8_t *)base, t, n, size, cmp);
     lp_free(t);
 }
+
+char *lp_buf_take(lp_buf *b){
+    if (!b) return NULL;
+    if (!b->b || b->n == 0) {
+        lp_free(b->b);
+        b->b = NULL; b->n = b->cap = 0;
+        char *empty = lp_alloc(1);
+        empty[0] = 0;
+        return empty;
+    }
+    *lp_buf_room(b, 1) = 0;
+    char *out = (char *)b->b;
+    b->b = NULL; b->n = b->cap = 0;
+    return out;
+}
+
+void lp_buf_u64(lp_buf *b, uint64_t v){
+    if (!b) return;
+    char rev[24];
+    size_t len = 0;
+    do { rev[len++] = (char)('0' + (v % 10u)); v /= 10u; } while (v != 0);
+    uint8_t *dst = lp_buf_room(b, len);
+    for (size_t i = 0; i < len; i++) dst[i] = (uint8_t)rev[len - 1 - i];
+}
+
+void lp_buf_i64(lp_buf *b, int64_t v){
+    if (!b) return;
+    if (v >= 0) { lp_buf_u64(b, (uint64_t)v); return; }
+    lp_buf_byte(b, '-');
+    lp_buf_u64(b, (uint64_t)0 - (uint64_t)v);
+}
+
+void lp_buf_hex(lp_buf *b, const void *bytes, size_t n){
+    if (!b || !bytes || !n) return;
+    uint8_t *dst = lp_buf_room(b, n * 2u);
+    lp_hex(bytes, n, (char *)dst);
+}
+
+void lp_buf_id_hex(lp_buf *b, const lp_id *id){
+    if (!b || !id) return;
+    lp_buf_hex(b, id->b, sizeof id->b);
+}

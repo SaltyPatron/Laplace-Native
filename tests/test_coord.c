@@ -2,7 +2,7 @@
  * and centroids are exact integer averages truncated toward zero. */
 #include "laplace/tier0.h"
 #include "check.h"
-#include "../src/internal.h"
+#include "../src/core/internal.h"
 #include <math.h>
 #include <string.h>
 

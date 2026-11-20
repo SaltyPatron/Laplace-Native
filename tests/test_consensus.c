@@ -336,5 +336,32 @@ int main(void){
     CHECK(lp_trust_class_named("AIModelProbe")->prior > lp_trust_class_named("UserPromptContent")->prior, "a model ranks above a user prompt");
     CHECK(lp_trust_class_named("ResponseContent")->prior < lp_trust_class_named("UserPromptContent")->prior, "Laplace's own output ranks below a user prompt");
     CHECK(lp_trust_class_named("academiccurated") == NULL && lp_trust_class_named("") == NULL, "an undeclared label is no class");
+
+    /* Witness-allowlist scoped consensus (#1708) & Fisher basis-point shares. */
+    {
+        lp_id w_a = {{1}}, w_b = {{2}}, w_c = {{3}};
+        lp_witness_series ws[2];
+        lp_series_attested(w_a, 100.0, 100.0, 0.9, &ws[0].entry); ws[0].witness = w_a; ws[0].trust = 0.9;
+        lp_series_attested(w_b, 100.0, 0.0, 0.9, &ws[1].entry);   ws[1].witness = w_b; ws[1].trust = 0.9;
+
+        lp_standing st_all, st_only_a, st_empty;
+        lp_authority_scope unscoped = { .scoped = false };
+        lp_authority_scope only_a = { .witnesses = &w_a, .witness_count = 1, .scoped = true, .capabilities = LP_CAP_READ, .min_trust = 0.5 };
+        lp_authority_scope deny_all = { .witnesses = NULL, .witness_count = 0, .scoped = true };
+
+        CHECK(lp_witness_allowed(&unscoped, &w_c, 0.0), "unscoped allows any witness");
+        CHECK(lp_witness_allowed(&only_a, &w_a, 0.9) && !lp_witness_allowed(&only_a, &w_b, 0.9) && !lp_witness_allowed(&only_a, &w_a, 0.2), "allowlist + trust floor");
+        CHECK(!lp_witness_allowed(&deny_all, &w_a, 1.0), "empty scoped allowlist denies all");
+
+        CHECK(lp_series_scoped(ws, 2, &unscoped, &st_all) && lp_series_scoped(ws, 2, &only_a, &st_only_a) && lp_series_scoped(ws, 2, &deny_all, &st_empty), "scoped solves");
+        CHECK(st_only_a.rating > st_all.rating && st_only_a.matches == 100 && st_empty.matches == 0, "scoped isolation filters opponent testimony");
+
+        const double weights[3] = { 1.0, 1.0, 1.0 };
+        const lp_id ids[3] = { w_c, w_a, w_b };
+        int32_t bp[3];
+        CHECK(lp_fisher_shares_bp(weights, ids, 3, bp), "fisher shares_bp");
+        CHECK(bp[0] + bp[1] + bp[2] == 10000 && bp[1] == 3334 && bp[0] == 3333 && bp[2] == 3333,
+              "fisher 10000bp conserved with lowest-id tie-break: %d %d %d", bp[0], bp[1], bp[2]);
+    }
     DONE("consensus");
 }

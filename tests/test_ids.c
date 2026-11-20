@@ -58,6 +58,22 @@ int main(void){
               "malformed/noncanonical UTF-8 %zu does not mint an entity", i);
     }
     CHECK(!lp_text_id(text, "", 0, &actual) && !lp_text_id(NULL, "a", 1, &actual), "reject missing content or context");
+    {
+        const int64_t ints[] = { 0, 5, 9, 10, 42, 255, 1000, 1111, 1212, 12341234, -1, -5, -42, -128, -1212, INT64_MAX, INT64_MIN };
+        for (size_t i = 0; i < sizeof ints / sizeof *ints; i++) {
+            char buf[32]; size_t bl = lp_decimal_i64(ints[i], buf, sizeof buf);
+            lp_id dec_id, txt_id;
+            CHECK(lp_id_i64(t0, ints[i], &dec_id) && lp_text_id(text, buf, bl, &txt_id) && lp_id_eq(&dec_id, &txt_id),
+                  "scalar i64(%s) matches UAX #29 lp_text_id", buf);
+        }
+        const uint64_t uints[] = { 0u, 255u, 1212u, UINT64_MAX };
+        for (size_t i = 0; i < sizeof uints / sizeof *uints; i++) {
+            char buf[32]; size_t bl = lp_decimal_u64(uints[i], buf, sizeof buf);
+            lp_id dec_id, txt_id;
+            CHECK(lp_id_u64(t0, uints[i], &dec_id) && lp_text_id(text, buf, bl, &txt_id) && lp_id_eq(&dec_id, &txt_id),
+                  "scalar u64(%s) matches UAX #29 lp_text_id", buf);
+        }
+    }
     lp_idmap_free(rows.entities); lp_text_free(text); lp_text_free(engine);
     DONE("ids");
 }

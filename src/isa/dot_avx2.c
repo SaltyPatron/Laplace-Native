@@ -1,6 +1,6 @@
 /* AVX2 int8 dot: each byte widened to 16 bits, pairs multiplied and added to 32 bits (vpmaddwd: exact, as no pair
  * reaches 2^31), lanes summed modulo 2^32. Compiled without VNNI: this is the path for x86-64-v3 alone. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 static inline uint32_t hsum(__m256i v){

@@ -1,6 +1,6 @@
 /* AVX2 squared distances from one 4D point to four vertices at a time: one vertex pair per lane, summed in the
  * same order as the scalar path, ((dx^2 + dy^2) + dz^2) + dm^2, with multiplies and adds kept separate. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 void lp_row_d2_avx2(const double p[4], const double *bx, const double *by, const double *bz, const double *bm,

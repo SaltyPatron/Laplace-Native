@@ -1,5 +1,5 @@
 /* BMI2 Hilbert interleave: one pdep per axis deposits its 16 bits into every fourth bit. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 uint64_t lp_hilbert4_interleave_bmi2(const uint64_t X[4]){

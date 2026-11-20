@@ -2,6 +2,7 @@
  * path (constituents, keys, holds, times, middle, continuations over long runs); tuples; PostgreSQL's binary forms;
  * text as one composition of its codepoints; the one centroid. */
 #include "laplace/tier0.h"
+#include "laplace/envelope.h"
 #include "check.h"
 #include <string.h>
 
@@ -183,6 +184,37 @@ int main(void){
         lp_ref_codepoints(t0, (const uint8_t *)"", 0, &ok); CHECK(!ok, "nothing is no composition");
         double off[4] = { 0.1, 0, 0, 0 }, far[4] = { 3.0, 0, 0, 0 }; lp_coord oc;
         CHECK(!lp_coord_of_xyzm(off, &oc) && !lp_coord_of_xyzm(far, &oc), "off the grid, or outside it, is refused");
+    }
+    /* lp_buf_* helpers */
+    {
+        lp_buf b = {0};
+        lp_buf_cstr(&b, "a"); lp_buf_byte(&b, ':'); lp_buf_i64(&b, -42);
+        lp_buf_str(&b, ",", 1); lp_buf_u64(&b, 18446744073709551615ull);
+        lp_buf_fmt(&b, ":%x", 0xABu);
+        uint8_t raw[2] = { 0x0F, 0xA0 };
+        lp_buf_byte(&b, ':'); lp_buf_hex(&b, raw, 2);
+        lp_id zero = {0}; zero.b[0] = 0x12; zero.b[15] = 0xEF;
+        lp_buf_byte(&b, ':'); lp_buf_id_hex(&b, &zero);
+        char *s = lp_buf_take(&b);
+        CHECK(s && !strcmp(s, "a:-42,18446744073709551615:ab:0fa0:120000000000000000000000000000ef")
+              && b.b == NULL && b.n == 0, "lp_buf_* builders");
+        lp_free(s);
+        lp_buf_clear(&b);
+        char *e = lp_buf_take(&b);
+        CHECK(e && e[0] == 0, "lp_buf_take empty");
+        lp_free(e);
+    }
+    /* compute envelope & work counters (#1709) */
+    {
+        lp_envelope fast = lp_envelope_preset(LP_ENVELOPE_FAST);
+        lp_work_weights w = lp_work_weights_default();
+        lp_work_counters c1 = { .wall_us = 1000, .db_probes = 3, .rows_scanned = 100, .bytes_alloc = 2048, .hops = 1, .tokens_out = 10 };
+        lp_work_counters c2 = { .wall_us = 500, .db_probes = 6, .rows_scanned = 50, .bytes_alloc = 1024, .hops = 1, .tokens_out = 5, .truncated = 1, .exhausted_reason = LP_LIMIT_DB_PROBES };
+        CHECK(lp_work_check(&fast, &c1) && lp_work_exceeded(&fast, &c1) == LP_LIMIT_NONE, "fast envelope accepts c1");
+        CHECK(lp_envelope_estimate_us(&fast, &c1, &w) > 0 && lp_work_actual_us(&c1, &w) == 1000, "envelope estimates");
+        lp_work_merge(&c1, &c2);
+        CHECK(c1.db_probes == 9 && !lp_work_check(&fast, &c1)
+              && lp_work_exceeded(&fast, &c1) == LP_LIMIT_DB_PROBES && c1.truncated == 1, "merged envelope check");
     }
     DONE("core");
 }

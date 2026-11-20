@@ -1,6 +1,6 @@
 /* AVX-512 (BW) int8 dot: vpmaddwd on 32 widened bytes per step, the tail one masked step. Compiled without VNNI: the
  * path for x86-64-v4 alone. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 static inline __m512i step(__m512i s, __m256i x, __m256i y){

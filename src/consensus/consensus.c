@@ -339,3 +339,103 @@ bool lp_series_update(const lp_rating *prior,const lp_series_entry *entries,size
 bool lp_series(const lp_series_entry *entries, size_t n, lp_standing *out){
     lp_rating prior = lp_rating_stock(); return lp_series_update(&prior, entries, n, out);
 }
+
+bool lp_witness_allowed(const lp_authority_scope *scope, const lp_id *witness, double trust){
+    if (!witness) return false;
+    if (!scope || !scope->scoped) return true;
+    if (trust < scope->min_trust) return false;
+    for (size_t i = 0; i < scope->witness_count; i++) {
+        if (lp_id_eq(&scope->witnesses[i], witness)) return true;
+    }
+    return false;
+}
+
+bool lp_attest_series_scoped(const lp_rating *prior, const lp_witness_series *entries, size_t n,
+                             const lp_authority_scope *scope, lp_standing *out,
+                             lp_series_information *information, size_t capacity, size_t *written){
+    if (!out || (n && !entries)) { errno = EINVAL; return false; }
+    lp_rating p = prior ? *prior : lp_rating_stock();
+    if (!scope || !scope->scoped) {
+        lp_series_entry *raw = n ? lp_alloc(n * sizeof *raw) : NULL;
+        for (size_t i = 0; i < n; i++) raw[i] = entries[i].entry;
+        bool ok;
+        if (written || information || capacity) {
+            size_t dummy = 0;
+            ok = lp_series_evaluate(&p, raw, n, out, information, capacity, written ? written : &dummy);
+        } else {
+            ok = lp_series_update(&p, raw, n, out);
+        }
+        lp_free(raw);
+        return ok;
+    }
+    lp_series_entry *kept = n ? lp_alloc(n * sizeof *kept) : NULL;
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (lp_witness_allowed(scope, &entries[i].witness, entries[i].trust))
+            kept[m++] = entries[i].entry;
+    }
+    bool ok;
+    if (written || information || capacity) {
+        size_t dummy = 0;
+        ok = lp_series_evaluate(&p, kept, m, out, information, capacity, written ? written : &dummy);
+    } else {
+        ok = lp_series_update(&p, kept, m, out);
+    }
+    lp_free(kept);
+    return ok;
+}
+
+bool lp_series_scoped(const lp_witness_series *entries, size_t n,
+                      const lp_authority_scope *scope, lp_standing *out){
+    lp_rating prior = lp_rating_stock();
+    return lp_attest_series_scoped(&prior, entries, n, scope, out, NULL, 0, NULL);
+}
+
+typedef struct { size_t row; double rem; lp_id id; int has_id; } FisherRem;
+static int fisher_rem_cmp(const void *a, const void *b){
+    const FisherRem *x = (const FisherRem *)a, *y = (const FisherRem *)b;
+    if (x->rem != y->rem) return x->rem > y->rem ? -1 : 1;
+    if (x->has_id) return lp_id_cmp(&x->id, &y->id);
+    return x->row < y->row ? -1 : (x->row > y->row ? 1 : 0);
+}
+
+bool lp_fisher_shares_bp(const double *weights, const lp_id *ids, size_t n, int32_t *shares_bp){
+    if (!n) return true;
+    if (!weights || !shares_bp) { errno = EINVAL; return false; }
+    double total = 0.0;
+    size_t positive = 0;
+    for (size_t i = 0; i < n; i++) {
+        shares_bp[i] = 0;
+        if (!isfinite(weights[i]) || weights[i] < 0.0) { errno = EINVAL; return false; }
+        total += weights[i];
+        if (weights[i] > 0.0) positive++;
+    }
+    if (!positive) return true;
+    if (!isfinite(total) || total <= 0.0) { errno = EINVAL; return false; }
+
+    FisherRem *rem = lp_alloc(positive * sizeof *rem);
+    size_t at = 0;
+    int32_t allocated = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (weights[i] <= 0.0) continue;
+        double exact = 10000.0 * (weights[i] / total);
+        double fl = floor(exact);
+        int32_t pts = fl > 10000.0 ? 10000 : (int32_t)fl;
+        shares_bp[i] = pts;
+        allocated += pts;
+        FisherRem r = { .row = i, .rem = exact - (double)pts, .has_id = ids != NULL };
+        if (ids) r.id = ids[i];
+        rem[at++] = r;
+    }
+    if (allocated > 10000 || (size_t)(10000 - allocated) > positive) {
+        lp_free(rem);
+        errno = ERANGE;
+        return false;
+    }
+    lp_sort(rem, positive, sizeof *rem, fisher_rem_cmp);
+    int32_t need = 10000 - allocated;
+    for (int32_t i = 0; i < need; i++) shares_bp[rem[i].row]++;
+    lp_free(rem);
+    return true;
+
+}

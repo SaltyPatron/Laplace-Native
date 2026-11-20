@@ -112,6 +112,51 @@ LP_API bool lp_series_evaluate(const lp_rating *prior, const lp_series_entry *en
  * reliability never enters only as an opponent-deviation change. */
 LP_API double lp_witness_precision(double trust, double deviation_floor);
 
+/* Authority scope capabilities and failure dispositions (#1708). */
+enum {
+    LP_CAP_NONE    = 0u,
+    LP_CAP_READ    = 1u << 0,
+    LP_CAP_ASSERT  = 1u << 1,
+    LP_CAP_ATTEST  = 1u << 2,
+    LP_CAP_CONTAIN = 1u << 3,
+    LP_CAP_EXPORT  = 1u << 4,
+    LP_CAP_INGEST  = 1u << 5,
+    LP_CAP_ALL     = 0xFFFFFFFFu
+};
+
+typedef enum {
+    LP_DISPOSE_ALLOW      = 0,
+    LP_DISPOSE_REDACT     = 1,
+    LP_DISPOSE_REFUSE     = 2,
+    LP_DISPOSE_QUARANTINE = 3
+} lp_disposition;
+
+/* Witness allowlist scope: when scoped==true and witness_count==0, zero witnesses are permitted. */
+typedef struct {
+    const lp_id *witnesses;
+    size_t       witness_count;
+    bool         scoped;
+    uint32_t     capabilities;
+    int32_t      disposition;
+    double       min_trust;
+} lp_authority_scope;
+
+typedef struct {
+    lp_series_entry entry;
+    lp_id           witness;
+    double          trust;
+} lp_witness_series;
+
+LP_API bool lp_witness_allowed(const lp_authority_scope *scope, const lp_id *witness, double trust);
+LP_API bool lp_series_scoped(const lp_witness_series *entries, size_t n,
+                             const lp_authority_scope *scope, lp_standing *out);
+LP_API bool lp_attest_series_scoped(const lp_rating *prior, const lp_witness_series *entries, size_t n,
+                                    const lp_authority_scope *scope, lp_standing *out,
+                                    lp_series_information *information, size_t capacity, size_t *written);
+
+/* Exact integer-conserved Fisher information attribution in 10000 basis points, with deterministic tie-break. */
+LP_API bool lp_fisher_shares_bp(const double *weights, const lp_id *ids, size_t n, int32_t *shares_bp);
+
 #ifdef __cplusplus
 }
 #endif

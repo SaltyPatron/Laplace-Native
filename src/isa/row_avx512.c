@@ -1,7 +1,7 @@
 /* AVX-512 squared distances from one 4D point to eight vertices at a time: one vertex pair per lane, summed in the
  * same order as the scalar path, ((dx^2 + dy^2) + dz^2) + dm^2, with multiplies and adds kept separate. The tail is
  * one masked step: lanes past the row are neither loaded nor stored. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 static inline __m512d row8(__m512d px, __m512d py, __m512d pz, __m512d pm, __m512d x, __m512d y, __m512d z, __m512d m){

@@ -7,3 +7,5 @@
 #include "laplace/perfcache.h"
 #include "laplace/json.h"
 #include "laplace/linalg.h"
+#include "laplace/tensor.h"
+#include "laplace/envelope.h"

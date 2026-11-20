@@ -20,7 +20,13 @@
     <Compile Include="$(LaplaceNativeGenerated)/LaplaceNative.g.cs" />
     <Compile Include="$(LaplaceNativeGenerated)/Abi.g.cs" />
   </ItemGroup>
-  <ItemGroup Condition="'$(LaplaceNativeRuntime)' != ''">
+  <ItemGroup Condition="'$(LaplaceNativeWinX64)' != '' And Exists('$(LaplaceNativeWinX64)')">
+    <None Include="$(LaplaceNativeWinX64)" Pack="true" PackagePath="runtimes/win-x64/native/" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LaplaceNativeLinuxX64)' != '' And Exists('$(LaplaceNativeLinuxX64)')">
+    <None Include="$(LaplaceNativeLinuxX64)" Pack="true" PackagePath="runtimes/linux-x64/native/" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LaplaceNativeRuntime)' != '' And '$(LaplaceNativeRid)' != '' And !('$(LaplaceNativeRid)' == 'win-x64' And '$(LaplaceNativeWinX64)' != '') And !('$(LaplaceNativeRid)' == 'linux-x64' And '$(LaplaceNativeLinuxX64)' != '')">
     <None Include="$(LaplaceNativeRuntime)" Pack="true" PackagePath="runtimes/$(LaplaceNativeRid)/native/" />
   </ItemGroup>
 </Project>

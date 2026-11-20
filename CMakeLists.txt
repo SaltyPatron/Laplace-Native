@@ -57,12 +57,15 @@ endforeach()
 if(LP_TRUST_CLASS_ROWS STREQUAL "")
   message(FATAL_ERROR "manifest/trust_classes.toml declares no class")
 endif()
-configure_file(src/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
+configure_file(src/consensus/trust_class_law.h.in ${LP_GENERATED}/trust_class_law.h @ONLY)
 
-set(LP_SOURCES src/platform.c src/mem.c src/map.c src/wire.c src/mapped.c src/path.c
-               src/cpu.c src/flags.c src/utf8.c src/identity.c src/sequence.c src/dag.c src/coord.c src/compose.c src/geometry.c src/follows.c src/consensus.c
-               src/tier0.c src/tier0_map.c src/geom4d.c src/s3.c src/pull.c src/highway.c src/perfcache.c src/trust.c src/dot.c src/realize.c src/bench.c src/json.c)
-set(LP_ISA_V3_SOURCES src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c src/isa/dot_avx2.c)
+set(LP_SOURCES src/core/platform.c src/core/mem.c src/core/map.c src/core/wire.c src/core/mapped.c src/geom/path.c
+               src/core/cpu.c src/text/flags.c src/text/utf8.c src/core/identity.c src/core/sequence.c src/core/dag.c
+               src/geom/coord.c src/core/compose.c src/geom/geometry.c src/geom/follows.c src/consensus/consensus.c
+               src/codecs/tier0.c src/codecs/tier0_map.c src/geom/geom4d.c src/geom/s3.c src/geom/pull.c
+               src/text/highway.c src/core/perfcache.c src/consensus/trust.c src/core/dot.c src/core/realize.c
+               src/core/bench.c src/codecs/json.c src/text/decimal.c src/codecs/tensor.c src/core/envelope.c)
+set(LP_ISA_V3_SOURCES src/isa/scan_avx2.c src/isa/row_avx2.c src/isa/s3_avx2.c src/isa/hilbert_bmi2.c src/isa/dot_avx2.c src/isa/tensor_avx2.c)
 set(LP_ISA_V4_SOURCES src/isa/scan_avx512.c src/isa/row_avx512.c src/isa/dot_avx512.c)
 set(LP_ISA_SOURCES ${LP_ISA_V3_SOURCES} ${LP_ISA_V4_SOURCES} src/isa/dot_avxvnni.c src/isa/dot_avx512vnni.c)
 set_source_files_properties(${LP_ISA_V3_SOURCES} PROPERTIES COMPILE_OPTIONS "${LP_ISA_V3}")
@@ -73,7 +76,7 @@ set_source_files_properties(src/isa/dot_avx512vnni.c PROPERTIES COMPILE_OPTIONS 
 # Both library forms use the same PIC sources, definitions and FP contract.
 # Compile them once; consumers still select the existing static/shared targets.
 add_library(laplace_objects OBJECT ${LP_SOURCES} ${LP_ISA_SOURCES})
-target_include_directories(laplace_objects PRIVATE include src ${LP_GENERATED})
+target_include_directories(laplace_objects PRIVATE include src src/core ${LP_GENERATED})
 target_compile_definitions(laplace_objects PRIVATE LP_HAVE_AVX2 LP_HAVE_AVX512 LP_HAVE_AVXVNNI LP_HAVE_AVX512VNNI LP_TIER0_DEFAULT="${LAPLACE_TIER0}")
 target_compile_options(laplace_objects PRIVATE ${LP_C_FLAGS})
 target_link_libraries(laplace_objects PRIVATE BLAKE3::blake3 ${LP_SYSLIBS})
@@ -105,7 +108,7 @@ endif()
 # laplace_text: the one decomposition of text (UAX #29), which needs ICU for the Unicode version tier 0 was built from.
 # ICU's symbols carry its version, so it loads beside the ICU a PostgreSQL server was built with.
 if(EXISTS "${LAPLACE_ICU_DIR}/include/unicode/ubrk.h")
-  add_library(laplace_text STATIC src/text.c src/ids.c)
+  add_library(laplace_text STATIC src/text/text.c src/text/ids.c)
   target_include_directories(laplace_text PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
                                           PRIVATE ${LAPLACE_ICU_DIR}/include)
   target_compile_options(laplace_text PRIVATE ${LP_C_FLAGS})
@@ -129,7 +132,7 @@ find_package(OpenMP)
 set(MKL_LINK sdl)
 find_package(MKL CONFIG QUIET)
 if(MKL_FOUND AND OpenMP_C_FOUND)
-  add_library(laplace_model STATIC src/rowsig.c src/knn.c)
+  add_library(laplace_model STATIC src/linalg/rowsig.c src/linalg/knn.c)
   target_include_directories(laplace_model PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_compile_options(laplace_model PRIVATE ${LP_C_FLAGS})
   target_link_libraries(laplace_model PUBLIC MKL::MKL OpenMP::OpenMP_C ${LP_SYSLIBS})
@@ -145,7 +148,7 @@ laplace_path(LAPLACE_SPECTRA_DIR "" "Spectra 1.x checkout")
 file(TO_CMAKE_PATH "${LAPLACE_EIGEN_DIR}" LP_EIGEN)
 file(TO_CMAKE_PATH "${LAPLACE_SPECTRA_DIR}" LP_SPECTRA)
 function(lp_linalg_library name)                    # extra arguments: compile options after the contract's
-  add_library(${name} STATIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src/linalg.cpp)
+  add_library(${name} STATIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src/linalg/linalg.cpp)
   set_target_properties(${name} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_VISIBILITY_PRESET hidden)
   target_include_directories(${name} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_FUNCTION_LIST_DIR}/include> $<INSTALL_INTERFACE:include>)
   target_include_directories(${name} SYSTEM PRIVATE ${LP_EIGEN} ${LP_SPECTRA}/include)
@@ -160,10 +163,51 @@ else()
 endif()
 
 # The package's names, the same in a build that includes Native and in one that finds it installed.
+# Laplace::os: isolated OS/POSIX compatibility layer (Windows POSIX shims + musl regex live strictly on this
+# target and NEVER pollute laplace_static / Laplace-postgres).
+set(LP_OS_OBJECTS "")
+if(WIN32)
+  set(_lp_musl_default "")
+  if(DEFINED ENV{LAPLACE_MUSL} AND EXISTS "$ENV{LAPLACE_MUSL}/src/regex/regcomp.c")
+    set(_lp_musl_default "$ENV{LAPLACE_MUSL}")
+  elseif(DEFINED ENV{LAPLACE_DEPSRC} AND EXISTS "$ENV{LAPLACE_DEPSRC}/musl/src/regex/regcomp.c")
+    set(_lp_musl_default "$ENV{LAPLACE_DEPSRC}/musl")
+  elseif(EXISTS "D:/Libraries/src/musl/src/regex/regcomp.c")
+    set(_lp_musl_default "D:/Libraries/src/musl")
+  endif()
+  set(LAPLACE_MUSL "${_lp_musl_default}" CACHE PATH "musl sources (POSIX regex on Windows)")
+  if(NOT EXISTS "${LAPLACE_MUSL}/src/regex/regcomp.c")
+    message(FATAL_ERROR "LAPLACE_MUSL: no musl sources at '${LAPLACE_MUSL}'")
+  endif()
+  add_library(lp_posix_regex OBJECT
+    ${LAPLACE_MUSL}/src/regex/regcomp.c
+    ${LAPLACE_MUSL}/src/regex/regexec.c
+    ${LAPLACE_MUSL}/src/regex/tre-mem.c
+    ${LAPLACE_MUSL}/src/regex/regerror.c)
+  target_include_directories(lp_posix_regex BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/laplace/win
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/laplace/win/musl)
+  target_compile_options(lp_posix_regex PRIVATE ${LP_C_FLAGS} /w)
+  target_compile_definitions(lp_posix_regex PRIVATE restrict=__restrict hidden= RE_DUP_MAX=255 CHARCLASS_NAME_MAX=14)
+  list(APPEND LP_OS_OBJECTS $<TARGET_OBJECTS:lp_posix_regex>)
+endif()
+
+add_library(laplace_os STATIC src/os/os.c ${LP_OS_OBJECTS})
+target_include_directories(laplace_os PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  $<$<PLATFORM_ID:Windows>:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/laplace/win>>
+  $<$<PLATFORM_ID:Windows>:$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/laplace/win>>)
+target_compile_options(laplace_os PRIVATE ${LP_C_FLAGS})
+if(WIN32)
+  target_compile_definitions(laplace_os PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+target_link_libraries(laplace_os PUBLIC ${LP_SYSLIBS} $<$<NOT:$<PLATFORM_ID:Windows>>:${CMAKE_DL_LIBS}>)
+
 add_library(Laplace::laplace ALIAS laplace)
 add_library(Laplace::laplace_static ALIAS laplace_static)
 set(LP_EXPORTED laplace laplace_static)
-foreach(t text model linalg)
+foreach(t text model linalg os)
   if(TARGET laplace_${t})
     add_library(Laplace::${t} ALIAS laplace_${t})
     set_target_properties(laplace_${t} PROPERTIES EXPORT_NAME ${t})

@@ -14,6 +14,10 @@
 #define LAPLACE_JSON_H
 #include "laplace/laplace.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define LP_JSON_ROOT  0u
 #define LP_JSON_NONE  UINT32_MAX
 #define LP_JSON_DEPTH 256
@@ -43,4 +47,30 @@ LP_API const char  *lp_json_text(const lp_json *, uint32_t node, size_t *len);
  * character as \u00XX; every other byte as it is. */
 LP_API void lp_json_str(lp_buf *b, const char *s, size_t len);
 
+/* JSON escaping without surrounding quotes, into lp_buf or caller buffer (returns needed bytes excl. NUL). */
+LP_API void   lp_json_escape(lp_buf *b, const char *s, size_t len);
+LP_API size_t lp_json_escape_buf(char *out, size_t cap, const char *s, size_t len);
+
+/* Object and array accessor helpers over parsed lp_json trees. */
+LP_API const char *lp_json_get_str(const lp_json *j, uint32_t object, const char *key, size_t *len);
+LP_API bool        lp_json_copy_str(const lp_json *j, uint32_t object, const char *key, char *out, size_t cap);
+LP_API bool        lp_json_get_num(const lp_json *j, uint32_t object, const char *key, double *out);
+LP_API bool        lp_json_get_i64(const lp_json *j, uint32_t object, const char *key, int64_t *out);
+LP_API int64_t     lp_json_try_i64(const lp_json *j, uint32_t object, const char *key, int64_t fallback);
+LP_API bool        lp_json_get_bool(const lp_json *j, uint32_t object, const char *key, bool *out);
+LP_API bool        lp_json_get_flag(const lp_json *j, uint32_t object, const char *key, bool fallback);
+LP_API bool        lp_json_at_num(const lp_json *j, uint32_t arr, uint32_t index, double *out);
+LP_API bool        lp_json_at_i64(const lp_json *j, uint32_t arr, uint32_t index, int64_t *out);
+
+/* Scalar and key writers onto lp_buf. */
+LP_API void lp_json_cstr(lp_buf *b, const char *s);
+LP_API void lp_json_key_out(lp_buf *b, const char *key, bool *first);
+LP_API void lp_json_i64(lp_buf *b, int64_t v);
+LP_API void lp_json_u64(lp_buf *b, uint64_t v);
+LP_API void lp_json_f64(lp_buf *b, double v);
+LP_API void lp_json_id(lp_buf *b, const lp_id *id);
+
+#ifdef __cplusplus
+}
+#endif
 #endif

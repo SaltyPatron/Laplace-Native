@@ -1,7 +1,7 @@
 /* AVX-VNNI int8 dot (vpdpbusd, VEX encoding). vpdpbusd multiplies unsigned bytes by signed ones, so a is taken as
  * a ^ 0x80 = a + 128, unsigned, and 128 * sum(b) is taken off again: a vpdpbusd of 0x80 bytes with b, or for a batch
  * 128 * sum(q) once. Every sum wraps modulo 2^32 alike, so the difference is the scalar path's value. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 static inline uint32_t hsum(__m256i v){

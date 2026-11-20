@@ -1,7 +1,8 @@
 # LaplaceNative: the installed Laplace-Native package.
 #   find_package(LaplaceNative CONFIG REQUIRED)    from a project that has enabled C (the flags are per compiler)
 # Targets: Laplace::laplace (shared), Laplace::laplace_static, Laplace::math (laplace-math ahead of every libm),
-#   Laplace::text (ICU), Laplace::model (MKL, OpenMP), Laplace::linalg (Eigen, Spectra), Laplace::tier0 (tool),
+#   Laplace::os (cross-platform filesystem/process/VM + Win32 POSIX shims), Laplace::text (ICU),
+#   Laplace::model (MKL, OpenMP), Laplace::linalg (Eigen, Spectra), Laplace::tier0 (tool),
 #   each present when Native was built with it.
 # Also defines what a build under the same contract needs: LP_C_FLAGS, LP_ISA_*, LP_SYSLIBS (LaplaceFlags), the
 # laplace_path() locations (LaplacePaths), laplace_utf8_executable() (LaplaceWindowsUtf8), and

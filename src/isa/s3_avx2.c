@@ -1,7 +1,7 @@
 /* AVX2 half chords from one direction u to the directions of four points at a time: one point per lane (the four
  * rows transposed), each step in the scalar path's order, with divides and square roots (correctly rounded, like the
  * scalar ones) and multiplies and adds kept separate. */
-#include "../internal.h"
+#include "../core/internal.h"
 #include <immintrin.h>
 
 void lp_half_chord_avx2(const double u[4], const double *pts, size_t i0, size_t n, double *out){

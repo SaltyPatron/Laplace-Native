@@ -1,6 +1,9 @@
 /* JSON (laplace/json.h): a strict reader into a flat node array, and the one string writer. Every read is bounded by
  * the text's length; nothing reads past it, and anything RFC 8259 does not allow is refused. */
 #include "laplace/json.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -235,16 +238,145 @@ LP_API const char *lp_json_text(const lp_json *j, uint32_t k, size_t *len){
     const Node *n = at(j, k); if (!n) return NULL; if (len) *len = n->span; return j->text + n->at;
 }
 
-LP_API void lp_json_str(lp_buf *b, const char *s, size_t len){
+LP_API void lp_json_escape(lp_buf *b, const char *s, size_t len){
     static const char hex[] = "0123456789abcdef";
-    *lp_buf_room(b, 1) = '"';
+    if (!b || !s || !len) return;
     for (size_t i = 0; i < len; i++) {
         unsigned char c = (unsigned char)s[i];
         const char *named = c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\n' ? "\\n" : c == '\r' ? "\\r"
                           : c == '\t' ? "\\t" : c == '\b' ? "\\b" : c == '\f' ? "\\f" : NULL;
         if (named) lp_buf_put(b, named, 2);
-        else if (c < 0x20) { uint8_t *o = lp_buf_room(b, 6); memcpy(o, "\\u00", 4); o[4] = (uint8_t)hex[c >> 4]; o[5] = (uint8_t)hex[c & 15]; }
-        else *lp_buf_room(b, 1) = c;
+        else if (c < 0x20) {
+            uint8_t *o = lp_buf_room(b, 6);
+            memcpy(o, "\\u00", 4);
+            o[4] = (uint8_t)hex[c >> 4];
+            o[5] = (uint8_t)hex[c & 15];
+        } else {
+            *lp_buf_room(b, 1) = c;
+        }
     }
+}
+
+LP_API size_t lp_json_escape_buf(char *out, size_t cap, const char *s, size_t len){
+    static const char hex[] = "0123456789abcdef";
+    size_t need = 0;
+    if (!s) len = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        const char *named = c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\n' ? "\\n" : c == '\r' ? "\\r"
+                          : c == '\t' ? "\\t" : c == '\b' ? "\\b" : c == '\f' ? "\\f" : NULL;
+        if (named) {
+            if (out && need + 2 < cap) { out[need] = named[0]; out[need + 1] = named[1]; }
+            else if (out && need + 1 < cap) out[need] = named[0];
+            need += 2;
+        } else if (c < 0x20) {
+            char u[6] = { '\\', 'u', '0', '0', hex[c >> 4], hex[c & 15] };
+            for (int k = 0; k < 6; k++) {
+                if (out && need + 1 < cap) out[need] = u[k];
+                need++;
+            }
+        } else {
+            if (out && need + 1 < cap) out[need] = (char)c;
+            need++;
+        }
+    }
+    if (out && cap > 0) out[need < cap ? need : cap - 1] = 0;
+    return need;
+}
+
+LP_API void lp_json_str(lp_buf *b, const char *s, size_t len){
+    if (!b) return;
+    if (!s && !len) { lp_buf_put(b, "\"\"", 2); return; }
     *lp_buf_room(b, 1) = '"';
+    lp_json_escape(b, s, len);
+    *lp_buf_room(b, 1) = '"';
+}
+
+LP_API const char *lp_json_get_str(const lp_json *j, uint32_t object, const char *key, size_t *len){
+    uint32_t node = lp_json_get(j, object, key);
+    if (!node) { if (len) *len = 0; return NULL; }
+    return lp_json_string(j, node, len);
+}
+
+LP_API bool lp_json_copy_str(const lp_json *j, uint32_t object, const char *key, char *out, size_t cap){
+    if (!out || cap == 0) return false;
+    size_t len = 0;
+    const char *s = lp_json_get_str(j, object, key, &len);
+    if (!s || len + 1 > cap) return false;
+    memcpy(out, s, len);
+    out[len] = 0;
+    return true;
+}
+
+LP_API bool lp_json_get_num(const lp_json *j, uint32_t object, const char *key, double *out){
+    uint32_t node = lp_json_get(j, object, key);
+    return node ? lp_json_number(j, node, out) : false;
+}
+
+LP_API bool lp_json_get_i64(const lp_json *j, uint32_t object, const char *key, int64_t *out){
+    uint32_t node = lp_json_get(j, object, key);
+    return node ? lp_json_integer(j, node, out) : false;
+}
+
+LP_API int64_t lp_json_try_i64(const lp_json *j, uint32_t object, const char *key, int64_t fallback){
+    int64_t v = fallback;
+    return lp_json_get_i64(j, object, key, &v) ? v : fallback;
+}
+
+LP_API bool lp_json_get_bool(const lp_json *j, uint32_t object, const char *key, bool *out){
+    uint32_t node = lp_json_get(j, object, key);
+    return node ? lp_json_bool(j, node, out) : false;
+}
+
+LP_API bool lp_json_get_flag(const lp_json *j, uint32_t object, const char *key, bool fallback){
+    bool v = fallback;
+    return lp_json_get_bool(j, object, key, &v) ? v : fallback;
+}
+
+LP_API bool lp_json_at_num(const lp_json *j, uint32_t arr, uint32_t index, double *out){
+    uint32_t item = lp_json_item(j, arr, index);
+    return item ? lp_json_number(j, item, out) : false;
+}
+
+LP_API bool lp_json_at_i64(const lp_json *j, uint32_t arr, uint32_t index, int64_t *out){
+    uint32_t item = lp_json_item(j, arr, index);
+    return item ? lp_json_integer(j, item, out) : false;
+}
+
+LP_API void lp_json_cstr(lp_buf *b, const char *s){
+    if (!b) return;
+    if (!s) { lp_buf_put(b, "null", 4); return; }
+    lp_json_str(b, s, strlen(s));
+}
+
+LP_API void lp_json_key_out(lp_buf *b, const char *key, bool *first){
+    if (!b || !key) return;
+    if (first) {
+        if (!*first) lp_buf_byte(b, ',');
+        else *first = false;
+    }
+    lp_json_str(b, key, strlen(key));
+    lp_buf_byte(b, ':');
+}
+
+LP_API void lp_json_i64(lp_buf *b, int64_t v){ lp_buf_i64(b, v); }
+LP_API void lp_json_u64(lp_buf *b, uint64_t v){ lp_buf_u64(b, v); }
+
+LP_API void lp_json_f64(lp_buf *b, double v){
+    if (!b) return;
+    if (!isfinite(v)) { lp_buf_put(b, "null", 4); return; }
+    if (v == 0.0) { lp_buf_put(b, "0", 1); return; }
+    char buf[64];
+    int n = snprintf(buf, sizeof buf, "%.17g", v);
+    if (n <= 0 || n >= (int)sizeof buf) { lp_buf_put(b, "null", 4); return; }
+    for (int i = 0; i < n; i++) if (buf[i] == ',') buf[i] = '.';
+    lp_buf_put(b, buf, (size_t)n);
+}
+
+LP_API void lp_json_id(lp_buf *b, const lp_id *id){
+    if (!b) return;
+    if (!id) { lp_buf_put(b, "null", 4); return; }
+    lp_buf_byte(b, '"');
+    lp_buf_id_hex(b, id);
+    lp_buf_byte(b, '"');
 }
