@@ -17,3 +17,5 @@ AdversarialUntrusted         = 0.00
 DerivedCalculation           = 0.70
 AgentTranscript              = 0.40
 ToolResultContent            = 0.40
+ToolchainVerification        = 0.90   # deterministic compiler, typechecker, linter, or test runner verification outcomes
+InternalMonologue            = 0.10   # Laplace's internal deliberation and working hypotheses: non-self-corroborating

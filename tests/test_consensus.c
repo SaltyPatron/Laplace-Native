@@ -328,13 +328,17 @@ int main(void){
     CHECK(m.deviation == before && m.rating < 2136.42, "a low-trust refutation moves the rating (%.2f), not the certainty", m.rating);
     /* volatility is left as it was; lp_attest still plays one matchup */
     CHECK(s1m.volatility == LP_GLICKO_VOLATILITY, "volatility unchanged");
-    /* The trust classes: the registry's fourteen, in its order; an undeclared label is no class. */
-    CHECK(lp_trust_class_count() == 14, "%zu classes", lp_trust_class_count());
+    /* The trust classes: the registry's sixteen, in its order; an undeclared label is no class. */
+    CHECK(lp_trust_class_count() == 16, "%zu classes", lp_trust_class_count());
     CHECK(!strcmp(lp_trust_class_at(0)->label, "SubstrateMandate") && lp_trust_class_at(0)->prior == 1.0, "the first class is the mandate at 1");
     CHECK(lp_trust_class_named("StandardsDerived") && lp_trust_class_named("StandardsDerived")->prior == 0.95, "StandardsDerived plays at 0.95");
+    CHECK(lp_trust_class_named("ToolchainVerification") && lp_trust_class_named("ToolchainVerification")->prior == 0.90, "ToolchainVerification plays at 0.90");
     CHECK(lp_trust_class_named("AcademicCurated")->prior > lp_trust_class_named("UserCuratedResource")->prior, "an academic curation ranks above a user-curated wiki");
     CHECK(lp_trust_class_named("AIModelProbe")->prior > lp_trust_class_named("UserPromptContent")->prior, "a model ranks above a user prompt");
     CHECK(lp_trust_class_named("ResponseContent")->prior < lp_trust_class_named("UserPromptContent")->prior, "Laplace's own output ranks below a user prompt");
+    CHECK(lp_trust_class_named("InternalMonologue") && lp_trust_class_named("InternalMonologue")->prior == 0.10
+          && lp_trust_class_named("InternalMonologue")->prior < lp_trust_class_named("ResponseContent")->prior,
+          "InternalMonologue plays at 0.10, below ResponseContent");
     CHECK(lp_trust_class_named("academiccurated") == NULL && lp_trust_class_named("") == NULL, "an undeclared label is no class");
 
     /* Witness-allowlist scoped consensus (#1708) & Fisher basis-point shares. */
