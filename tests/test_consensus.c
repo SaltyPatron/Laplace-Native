@@ -205,6 +205,14 @@ static void rooted_series(void){
             b2[0].wins = 0.0;
             CHECK(lp_series(b2, 2, &out) && isfinite(out.rating) && out.rating < LP_GLICKO_RATING,
                   "decisive + balanced two-root series n=%llu t=%g converges", (unsigned long long)ng, bal_trusts[bt]);
+            /* Three-witness chess transition profile (SubstrateMandate 1.0 + Openings 0.85 + Chess.com 0.70 at 23,500 games) */
+            lp_series_entry b3[3] = {
+                observation('a', 21, 10.5, 1.0),
+                observation('b', 3500, 1750.0, 0.85),
+                observation('c', ng + 12000, 0.52137 * (double)(ng + 12000), bal_trusts[bt])
+            };
+            CHECK(lp_series(b3, 3, &out) && isfinite(out.rating) && isfinite(out.deviation) && isfinite(out.volatility),
+                  "three-witness high-precision + high-volume series n=%llu t=%g converges", (unsigned long long)ng, bal_trusts[bt]);
         }
     }
 }
