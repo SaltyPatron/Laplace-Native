@@ -45,15 +45,12 @@ jobs:
           . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true
           export LAPLACE_NATIVE="$GITHUB_WORKSPACE" LAPLACE_MANIFEST="$GITHUB_WORKSPACE/manifest"
           native_pkg=$(bash .operations/Laplace-Operations/native-package.sh "$GITHUB_WORKSPACE")/lib/cmake/LaplaceNative
-          cmake -S .engine/Laplace-Engine -B "$LAPLACE_BUILD/Laplace-Engine/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release -DLaplaceNative_DIR:PATH="$native_pkg" -DLAPLACE_OPERATIONS:PATH="$LAPLACE_OPERATIONS" -DLAPLACE_TIER0:FILEPATH="$RUNNER_TEMP/native-generated-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/tier0.bin"
+          stage_dir="$LAPLACE_BUILD/Laplace-Native/run-inputs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -rf "$stage_dir" && mkdir -p "$(dirname "$stage_dir")"
+          cmake -S .engine/Laplace-Engine -B "$LAPLACE_BUILD/Laplace-Engine/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release -DLaplaceNative_DIR:PATH="$native_pkg" -DLAPLACE_OPERATIONS:PATH="$LAPLACE_OPERATIONS" -DLAPLACE_TIER0:FILEPATH="$stage_dir/tier0.bin"
           cmake --build "$LAPLACE_BUILD/Laplace-Engine/icx-release" --target laplace_engine
-          python3 scripts/ci-inputs.py prepare "$RUNNER_TEMP/native-generated-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --engine "$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace" --ucd "${LAPLACE_UCD:-/vault/Data/UCD}/Public/UCD/latest"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native-generated-inputs
-          path: ${{ runner.temp }}/native-generated-inputs-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
-          retention-days: 7
+          python3 scripts/ci-inputs.py prepare "$stage_dir" --engine "$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace" --ucd "${LAPLACE_UCD:-/vault/Data/UCD}/Public/UCD/latest"
+          chmod -R a+rX "$stage_dir"
   native:
     needs: inputs
     runs-on: [self-hosted, laplace, Laplace-Native, staging]
@@ -73,11 +70,13 @@ jobs:
           path: .operations/Laplace-Operations
           token: ${{ secrets.LAPLACE_CHECKOUT }}
           persist-credentials: false
-      - name: Download this run's generated canonical inputs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: native-generated-inputs
-          path: ${{ runner.temp }}/native-inputs-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.preset }}
+      - name: Stage this run's generated canonical inputs
+        env:
+          PRESET: ${{ matrix.preset }}
+        run: |
+          dest="$RUNNER_TEMP/native-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$PRESET"
+          rm -rf "$dest" && mkdir -p "$dest"
+          cp -a --reflink=auto --no-preserve=ownership "$LAPLACE_BUILD/Laplace-Native/run-inputs/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT/." "$dest/"
       - name: Verify and select the exact input closure
         env:
           PRESET: ${{ matrix.preset }}
@@ -92,18 +91,31 @@ jobs:
         run: ctest --test-dir "$LAPLACE_BUILD/Laplace-Native/$PRESET" --output-on-failure --output-junit "$RUNNER_TEMP/native-$PRESET.xml"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
+        continue-on-error: true
         with:
           name: native-${{ matrix.preset }}-${{ github.sha }}
           path: ${{ runner.temp }}/native-${{ matrix.preset }}.xml
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Publish the inputs that passed local verification to shared runner cache
+        if: matrix.preset == 'icx-release'
+        run: |
+          shared_root="${LAPLACE_BUILD%/agents/*}/native-prepared-inputs"
+          mkdir -p "$shared_root"
+          tmp_dir=$(mktemp -d "$shared_root/.stage.XXXXXXXX")
+          cp -a --reflink=auto --no-preserve=ownership "$RUNNER_TEMP/native-inputs-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-icx-release/." "$tmp_dir/"
+          chmod -R a+rX "$tmp_dir"
+          rm -rf "$shared_root/$GITHUB_SHA"
+          mv -T "$tmp_dir" "$shared_root/$GITHUB_SHA"
       - name: Publish the inputs that passed local verification
         if: matrix.preset == 'icx-release'
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-prepared-inputs
           path: ${{ runner.temp }}/native-inputs-${{ github.run_id }}-${{ github.run_attempt }}-icx-release
-          if-no-files-found: error
-          retention-days: 7
+          if-no-files-found: warn
+          retention-days: 1
   deploy:
     needs: native
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
