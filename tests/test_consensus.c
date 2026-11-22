@@ -191,6 +191,22 @@ static void rooted_series(void){
     CHECK(lp_witness_precision(0,30) == 0 && lp_witness_precision(.1,30) < lp_witness_precision(.5,30)
           && lp_witness_precision(.5,30) < lp_witness_precision(.85,30) && isfinite(lp_witness_precision(1,30)),
           "source certainty increases with trust and always has a nonzero deviation floor");
+    /* Large exact-50% and near-50% series (e.g. 500..11827 chess transitions with equal wins and losses) must
+     * converge cleanly without stalling on sub-ULP slope quantization plateaus during bracket probing. */
+    const uint64_t bal_counts[] = {500, 1000, 5000, 11827};
+    const double bal_trusts[] = {0.5, 0.7, 0.85, 1.0};
+    for (size_t bc = 0; bc < 4; bc++) {
+        for (size_t bt = 0; bt < 4; bt++) {
+            uint64_t ng = bal_counts[bc];
+            lp_series_entry b1 = observation('a', ng, 0.5 * (double)ng, bal_trusts[bt]);
+            CHECK(lp_series(&b1, 1, &out) && fabs(out.rating - LP_GLICKO_RATING) < 1e-9 && out.deviation < LP_GLICKO_DEVIATION,
+                  "balanced series n=%llu t=%g converges", (unsigned long long)ng, bal_trusts[bt]);
+            lp_series_entry b2[2] = {b1, observation('b', 500, 250.0, 0.85)};
+            b2[0].wins = 0.0;
+            CHECK(lp_series(b2, 2, &out) && isfinite(out.rating) && out.rating < LP_GLICKO_RATING,
+                  "decisive + balanced two-root series n=%llu t=%g converges", (unsigned long long)ng, bal_trusts[bt]);
+        }
+    }
 }
 
 /* A stock claim (1500/350) after one witness's series. */

@@ -152,7 +152,10 @@ static int series_order(const void *a, const void *b){
 }
 
 /* Solve one source's latent performance at a fixed claim rating. The slope is
- * strictly decreasing; safeguarded Newton stays in the analytical bracket. */
+ * strictly decreasing and |f''(x)| <= w * j(x) <= |f'(x)| everywhere (w <= 1),
+ * so an interior Newton step |step| <= 1e-14*(1+|x|) guarantees |x - x*| <=
+ * ~1e-14*(1+|x|) even when one-sided monotone convergence leaves the opposite
+ * bracket end unmoved across sub-ULP slope quantization plateaus. */
 static bool source_mode(SeriesRoot *r, double mu, double *score, double *information){
     double p = r->precision, n = r->games, w = r->weight, lo, hi;
     if (p == 0 || w == 0) { *score = *information = 0; return true; }
@@ -170,14 +173,18 @@ static bool source_mode(SeriesRoot *r, double mu, double *score, double *informa
     double x = r->performance;
     if (!(x >= lo && x <= hi)) x = mu;
     bool converged = lo == hi;
-    for (unsigned i = 0; !converged && i < 64; i++) {
+    for (unsigned i = 0; !converged && i < 128; i++) {
         double data_score, j; series_likelihood(r, x, &data_score, &j);
         double slope = p * (mu - x) + data_score;
         if (slope > 0) lo = x; else if (slope < 0) hi = x; else { converged = true; break; }
-        double next = x + slope / (p + j);
+        double step = slope / (p + j);
+        double next = x + step;
         if (next == x) { converged = true; break; }
-        if (!(next > lo && next < hi)) next = lo + (hi - lo) * 0.5;
-        if (hi - lo <= 1e-13 || next == x || next == lo || next == hi) { x = next; converged = true; break; }
+        bool in_bracket = (next > lo && next < hi);
+        if (in_bracket && fabs(step) <= 1e-14 * (1.0 + fabs(x))) { x = next; converged = true; break; }
+        if (!in_bracket || (i >= 16 && (i & 3u) == 3u)) next = lo + (hi - lo) * 0.5;
+        double tol = 1e-13 * (1.0 + fabs(lo) + fabs(hi));
+        if (hi - lo <= tol || next == x || next == lo || next == hi) { x = next; converged = true; break; }
         x = next;
     }
     if (!converged) return false;
@@ -209,16 +216,19 @@ static bool series_volatility(double sigma, double phi2, double v, double delta,
     if (delta * delta > phi2 + v) B = log(delta * delta - phi2 - v);
     else {
         unsigned k;
-        for (k = 1; k <= 64; k++) if (volatility_slope(a - k * tau, a, phi2, v, delta, tau) >= 0) break;
-        if (k > 64) return false;
+        for (k = 1; k <= 128; k++) if (volatility_slope(a - k * tau, a, phi2, v, delta, tau) >= 0) break;
+        if (k > 128) return false;
         B = a - k * tau;
     }
     double fA = volatility_slope(A, a, phi2, v, delta, tau), fB = volatility_slope(B, a, phi2, v, delta, tau);
     if (!isfinite(fA) || !isfinite(fB)) return false;
-    for (unsigned i = 0; i < 64; i++) {
-        if (fabs(B - A) <= 1e-12) { *out = exp(A * 0.5); return isfinite(*out) && *out > 0; }
+    for (unsigned i = 0; i < 256; i++) {
+        double tol = 1e-12 * (1.0 + fabs(A) + fabs(B));
+        if (fabs(B - A) <= tol) { *out = exp(A * 0.5); return isfinite(*out) && *out > 0; }
         double C = A + (A - B) * fA / (fB - fA);
-        if (!isfinite(C) || C <= fmin(A, B) || C >= fmax(A, B)) C = A + (B - A) * 0.5;
+        if (!isfinite(C) || C <= fmin(A, B) || C >= fmax(A, B) || (i >= 16 && (i & 7u) == 7u))
+            C = A + (B - A) * 0.5;
+        if (C == A || C == B) { *out = exp(C * 0.5); return isfinite(*out) && *out > 0; }
         double fC = volatility_slope(C, a, phi2, v, delta, tau);
         if (!isfinite(fC)) return false;
         if (fC == 0) { *out = exp(C * 0.5); return isfinite(*out) && *out > 0; }
@@ -281,28 +291,32 @@ static bool series_evaluate(const lp_rating *prior, const lp_series_entry *entri
     double phi = prior->deviation / LP_GLICKO_SCALE, phi2 = phi * phi, pp = 1 / phi2;
     double lo = mu0 - 1, hi = mu0 + 1, slope, info, score;
     unsigned k;
-    for (k = 0; k < 64; k++) {
+    for (k = 0; k < 128; k++) {
         if (!posterior(roots, nr, lo, mu0, pp, &slope, &info, &score)) goto done;
         if (slope >= 0) break;
         lo = mu0 - 2 * (mu0 - lo);
     }
-    if (k == 64) goto done;
-    for (k = 0; k < 64; k++) {
+    if (k == 128) goto done;
+    for (k = 0; k < 128; k++) {
         if (!posterior(roots, nr, hi, mu0, pp, &slope, &info, &score)) goto done;
         if (slope <= 0) break;
         hi = mu0 + 2 * (hi - mu0);
     }
-    if (k == 64) goto done;
+    if (k == 128) goto done;
     double mu = mu0;
     for (k = 0; k < 64; k++) {
         if (!posterior(roots, nr, mu, mu0, pp, &slope, &info, &score)) goto done;
         result.iterations = k + 1;
         if (slope == 0) break;
         if (slope > 0) lo = mu; else hi = mu;
-        double next = mu + slope / (pp + info);
+        double step = slope / (pp + info);
+        double next = mu + step;
         if (next == mu) break;
-        if (!(next > lo && next < hi)) next = lo + (hi - lo) * 0.5;
-        if (hi - lo <= 1e-12 || next == mu || next == lo || next == hi) { mu = next; break; }
+        bool in_bracket = (next > lo && next < hi);
+        if (in_bracket && fabs(step) <= 1e-13 * (1.0 + fabs(mu))) { mu = next; break; }
+        if (!in_bracket || (k >= 16 && (k & 3u) == 3u)) next = lo + (hi - lo) * 0.5;
+        double tol = 1e-12 * (1.0 + fabs(lo) + fabs(hi));
+        if (hi - lo <= tol || next == mu || next == lo || next == hi) { mu = next; break; }
         mu = next;
     }
     if (k == 64 || !posterior(roots, nr, mu, mu0, pp, &slope, &info, &score) || info <= 0) goto done;
@@ -437,5 +451,4 @@ bool lp_fisher_shares_bp(const double *weights, const lp_id *ids, size_t n, int3
     for (int32_t i = 0; i < need; i++) shares_bp[rem[i].row]++;
     lp_free(rem);
     return true;
-
 }
