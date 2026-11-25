@@ -23,7 +23,7 @@ lp_envelope lp_envelope_preset(int32_t preset){
         };
     case LP_ENVELOPE_STANDARD:
         return (lp_envelope){
-            .max_wall_us = 250000ull,
+            .max_wall_us = 1000000ull,
             .max_db_probes = 32ull,
             .max_rows_scanned = 65536ull,
             .max_bytes_alloc = 64ull * 1024ull * 1024ull,
