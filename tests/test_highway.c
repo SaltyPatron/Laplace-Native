@@ -226,11 +226,17 @@ static void banks_check(const lp_highway *h, const lp_tier0_record *t0){
     }
     lp_mask merged = UINT64_C(0xaaaaaaaaaaaaaaaa), before = merged;
     CHECK(lp_mask_merge(h, base, base, &merged) && merged == base, "merging identical carriers is idempotent");
-    const lp_bank *upos = lp_highway_bank(h, "upos"), *kind = lp_highway_bank(h, "kind");
-    if (upos && kind) {
-        lp_mask a = 0, b = 0; lp_mask_put(&a, upos, 0); lp_mask_put(&b, upos, 1);
+    const lp_bank *upos = lp_highway_bank(h, "upos"), *kind = lp_highway_bank(h, "kind"), *lexfile = lp_highway_bank(h, "lexfile");
+    if (upos && kind && lexfile) {
+        lp_mask a = 0, b = 0; lp_mask_put(&a, upos, 7); lp_mask_put(&b, upos, 15);
+        CHECK(lp_mask_merge(h, a, b, &merged) && lp_mask_has(merged, upos, 7)
+              && lp_mask_has(merged, upos, 15) && lp_mask_get(merged, upos) == -2, "upos flags union polysemous NOUN|VERB without conflict");
+        const lp_tier0_record *verb = lp_highway_at(h, upos->list, 15);
+        CHECK(verb && lp_mask_add_id(h, &a, &verb->id) && lp_mask_has(a, upos, 7) && lp_mask_has(a, upos, 15),
+              "adding a second upos identifier sets both flags");
+        a = b = 0; lp_mask_put(&a, lexfile, 0); lp_mask_put(&b, lexfile, 1);
         merged = before; CHECK(!lp_mask_merge(h, a, b, &merged) && merged == before, "conflicting enum values cannot be ORed into a third value");
-        const lp_tier0_record *other = lp_highway_at(h, upos->list, 1); lp_mask original = a;
+        const lp_tier0_record *other = lp_highway_at(h, lexfile->list, 1); lp_mask original = a;
         CHECK(other && !lp_mask_add_id(h, &a, &other->id) && a == original, "adding a conflicting identifier preserves the original enum");
         a = b = 0; lp_mask_put(&a, kind, LP_KIND_CLAIM); lp_mask_put(&b, kind, LP_KIND_RECORD);
         CHECK(lp_mask_merge(h, a, b, &merged) && lp_mask_has(merged, kind, LP_KIND_CLAIM)
@@ -320,7 +326,7 @@ int main(void){
     (void)n;
     const lp_bank *kb = lp_highway_bank(h, "kind"), *ub = lp_highway_bank(h, "upos"), *db = lp_highway_bank(h, "deprel");
     CHECK(kb && kb->list && kb->list->count == 4 && kb->flags && !strcmp(kb->carrier, "row") && kb->width == 8, "kind: four named row roles in the flag field");
-    CHECK(ub && ub->list == upos && !strcmp(ub->group, "lexical") && !strcmp(ub->carrier, "entity"), "upos: a lexical bank on the entity");
+    CHECK(ub && ub->list == upos && ub->flags && ub->width == 17 && ub->offset == 8 && !strcmp(ub->group, "lexical") && !strcmp(ub->carrier, "entity"), "upos: 17-bit lexical flag bank on the entity");
     CHECK(db && !strcmp(db->group, "structural") && !strcmp(db->carrier, "occurrence"), "deprel: a structural bank on the occurrence");
     const lp_bank *fb = lp_highway_bank(h, "wnframe"); const lp_list *wnframe = lp_highway_list(h, "wnframe");     /* WordNet's verb frames: what a verb sense is used in */
     CHECK(fb && !strcmp(fb->group, "lexical") && !strcmp(fb->carrier, "entity") && fb->width == 6, "wnframe: a lexical enum field on the entity");

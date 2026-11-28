@@ -1,12 +1,12 @@
 # Disjoint fields in the single uint64 carrier on entity and physicality.
-# Offsets are frozen. An enum stores slot+1 (zero means absent); it is not a
-# one-hot bitmap. Kind is a set of row roles, with bit=slot inside its field.
+# Flag banks store one true/false bit per slot (bit = offset + slot), OR-combinable
+# and GIN-indexed via laplace_mask_ops. Enum banks store slot+1 (zero means absent).
 # Slot identities are compositions of the key text in slots/LIST.tsv.
 # The Unicode property cache is separate and retains its 256-bit UCD records.
 bank	list	group	carrier	width	offset	encoding
 kind	kind	kind	row	8	0	flags
-upos	upos	lexical	entity	5	8	enum
-lexfile	lexfile	lexical	entity	6	13	enum
-deprel	deprel	structural	occurrence	6	19	enum
-vnrole	vnrole	structural	occurrence	6	25	enum
-wnframe	wnframe	lexical	entity	6	31	enum
+upos	upos	lexical	entity	17	8	flags
+lexfile	lexfile	lexical	entity	6	25	enum
+deprel	deprel	structural	occurrence	6	31	enum
+vnrole	vnrole	structural	occurrence	6	37	enum
+wnframe	wnframe	lexical	entity	6	43	enum

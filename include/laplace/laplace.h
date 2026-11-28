@@ -626,8 +626,8 @@ typedef struct { char name[32], group[16], carrier[16]; uint16_t width; const lp
                  uint16_t offset; bool flags; } lp_bank;
 typedef struct { const lp_tier0_record *rec; size_t nrec; lp_list *list; size_t nlists; const lp_edge *edge; size_t nedges; lp_edges *edges; size_t nedgelists;
                  lp_bank *bank; size_t nbanks; lp_idindex *by_id; char path[4096]; lp_strmap *keys; } lp_highway;
-/* manifest/banks.tsv assigns disjoint fields in one 64-bit carrier. Kind's field holds row-role flags;
- * closed enums encode slot+1, reserving zero for absence. Unicode property records remain 256 bits. */
+/* manifest/banks.tsv assigns disjoint fields in one 64-bit carrier. Flag banks (kind, upos) store one
+ * true/false bit per slot (OR-combinable, GIN-indexed); closed enums encode slot+1, reserving zero for absence. */
 #define LP_KIND_CLAIM    0
 #define LP_KIND_RECORD   1
 #define LP_KIND_TUPLE    2
